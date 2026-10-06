@@ -30,12 +30,12 @@ default:
   before_script:
     - scripts/ci/link-cache.sh
     - scripts/toolchain.sh $TOOLCHAIN
-  # Infrastructure hiccups only: a failing script is never retried.
+  # Runner infrastructure failures only: a failing script is never retried.
   retry:
     max: 2
     when:
       - runner_system_failure
-      - stuck_or_timeout_failure
+      - runner_interrupted
 
 # ---- caches -------------------------------------------------------------------------------
 # Installed tools (~/.cargo/bin, ~/.avm, Agave CLI, SBF platform tools): rebuilt only when the
@@ -179,10 +179,14 @@ coverage:
     - make coverage
 
 # ---- e2e ----------------------------------------------------------------------------------
-# Runs after `test` and shares its caches, so the program's dependencies are already compiled.
+# Tagged `heavy`: end-to-end jobs run one at a time on the shared runner; every other job is
+# untagged and runs on the dedicated Meridian runner. Runner caches are local, so this job keeps
+# its own copy of the `sbf` caches there.
 e2e:
   stage: e2e
   extends: .on-mr-and-main
+  tags:
+    - heavy
   variables:
     TOOLCHAIN: apt rust solana anchor node
     CACHE_GROUP: sbf
