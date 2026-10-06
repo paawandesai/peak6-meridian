@@ -78,7 +78,9 @@ install_platform_tools() {
     return
   fi
   log "installing sbf platform tools"
-  rm -rf "$HOME/.cache/solana"
+  # Clear through the directory (in CI it is a symlink into the cache; keep it) rather than rm it.
+  mkdir -p "$HOME/.cache/solana"
+  find "$HOME/.cache/solana/" -mindepth 1 -delete
   local probe
   probe="$(mktemp -d)"
   mkdir -p "$probe/src"
