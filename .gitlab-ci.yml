@@ -30,6 +30,12 @@ default:
   before_script:
     - scripts/ci/link-cache.sh
     - scripts/toolchain.sh $TOOLCHAIN
+  # Infrastructure hiccups only: a failing script is never retried.
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
 
 # ---- caches -------------------------------------------------------------------------------
 # Installed tools (~/.cargo/bin, ~/.avm, Agave CLI, SBF platform tools): rebuilt only when the
