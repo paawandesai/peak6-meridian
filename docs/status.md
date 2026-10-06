@@ -27,6 +27,8 @@ _None._
 | OQ-4 | Switchboard spike: can the feed job itself verify the bar date, and can API keys stay out of public feed definitions? (domain.md § Settlement rules) | M1-09 | M2 settlement |
 | OQ-5 | Custody of the devnet program keypair, upgrade authority and admin keypair (generated where, backed up by whom). | human | M2 devnet deploy |
 | OQ-6 | Any `cargo audit` advisories from upstream Solana/Anchor crates with no fix: accept (human) or replace. | human | M1-01 `audit:deps` |
+| OQ-7 | M1-01 `cargo audit` result (answers part of OQ-6): 0 vulnerabilities, so `audit:deps` passes. It prints 3 informational warnings, all from upstream Solana 2.1 / Anchor 0.31.1 crates with no fixed version on that line: RUSTSEC-2025-0141 (`bincode` 1.3.3 unmaintained), RUSTSEC-2025-0161 (`libsecp256k1` 0.6.0 unmaintained), RUSTSEC-2026-0097 (`rand` 0.7.3 unsound with a custom logger). Nothing is silenced. Accept these warnings, or make warnings fail the job? | human | none (job is green) |
+| OQ-8 | The only CI runner (#235) has 1 vCPU / 2 GB RAM. Job limit was raised to 60 min on 2026-10-06, but NFR-18 "CI pipeline ≤ 20 min" holds only with warm caches and is at risk once later tickets add heavier crates (LiteSVM, Switchboard). Options: a larger runner (4+ vCPU / 8 GB), or a prebuilt CI image (ticket M1-01 defers it). Timings: MR for M1-01. | human | NFR-18 |
 
 ## Requirements coverage
 | ID | Status |

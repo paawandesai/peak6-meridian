@@ -25,3 +25,10 @@ anchor-lang = "=0.31.1"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("anchor-debug", "custom-heap", "custom-panic"))'] }
+
+# Program rules (CLAUDE.md § Conventions): no unwrap/expect/panic, checked arithmetic only.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+arithmetic_side_effects = "deny"
