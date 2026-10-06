@@ -1,0 +1,14 @@
+# Docs and other Markdown are prose owned by people; Prettier checks code and config only.
+*.md
+pnpm-lock.yaml
+uv.lock
+Cargo.lock
+node_modules/
+.next/
+coverage/
+target/
+test-ledger/
+.venv/
+.ci-cache/
+.anchor/
+next-env.d.ts

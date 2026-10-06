@@ -1,0 +1,13 @@
+{
+  "name": "switchboard-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Switchboard On-Demand feed scripts",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  }
+}

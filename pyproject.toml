@@ -1,0 +1,43 @@
+# uv workspace root (not itself a package): Python services plus the dev tooling shared by all.
+[tool.uv.workspace]
+members = ["services/quant", "services/ops-agent"]
+
+[tool.uv.sources]
+meridian_quant = { workspace = true }
+meridian_ops_agent = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "meridian_quant",
+  "meridian_ops_agent",
+  "mypy==2.4.0",
+  "pytest==9.1.1",
+  "pytest-cov==7.1.0",
+  "ruff==0.16.10",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [".ci-cache", "target", "node_modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = [
+  "services/quant/src",
+  "services/quant/tests",
+  "services/ops-agent/src",
+  "services/ops-agent/tests",
+  "tests/security/py",
+]
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib --strict-markers --strict-config -ra"
+testpaths = ["services/quant/tests", "services/ops-agent/tests", "tests/security/py"]
+
+[tool.coverage.report]
+show_missing = true

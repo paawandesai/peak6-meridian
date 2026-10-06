@@ -1,0 +1,13 @@
+{
+  "name": "automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Meridian automation service (strikes, morning and settlement jobs)",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  }
+}

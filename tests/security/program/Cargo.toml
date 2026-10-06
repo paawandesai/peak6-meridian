@@ -1,0 +1,9 @@
+[package]
+name = "security-tests"
+description = "Abuse-case tests for the Meridian program (one file per AB ID)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]

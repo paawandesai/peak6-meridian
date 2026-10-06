@@ -1,0 +1,19 @@
+{
+  "name": "e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end smoke against a local validator",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "version": "tsx version.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.31.1",
+    "@solana/web3.js": "1.99.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15"
+  }
+}

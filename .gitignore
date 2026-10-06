@@ -1,3 +1,25 @@
+# Secrets: never committed (CLAUDE.md § Never, AB-17).
 .env
 *.env
 !.env.example
+keys/*.json
+keys/
+
+# Build output and local state
+target/
+node_modules/
+.venv/
+test-ledger/
+.anchor/
+.next/
+next-env.d.ts
+coverage/
+.coverage
+*.tsbuildinfo
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# CI cache directory (see scripts/ci/link-cache.sh)
+.ci-cache/
