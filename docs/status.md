@@ -1,16 +1,19 @@
 <!-- OWNER: operator. -->
 # Status
 
-_Last updated: 2026-10-06 14:30 ET by kickoff._
+_Last updated: 2026-10-06 19:20 ET by operator (post-M1-01)._
 
 ## Current milestone
 **M1: Core lifecycle, local** (ends Wed Oct 7 23:59 ET). Tickets: [tickets/M1.md](tickets/M1.md). Next anchor: Thu Oct 8 16:05 ET devnet rehearsal settlement.
 
 ## Done
 - Kickoff pack.
+- M1-01 · Scaffold the monorepo and GitLab CI (MR !2, merged 2026-10-06 as `52dcb6d`).
 
 ## In progress
-_None yet._
+- M1-02 · Program skeleton (dispatched).
+- M1-03 · Matching engine crate (dispatched).
+- Queued: M1-08, M1-09, M1-11.
 
 ## Blocked
 _None yet._
@@ -62,7 +65,7 @@ _None._
 | FR-27 | not started |
 | FR-28 | not started |
 | FR-29 | not started |
-| FR-30 | not started |
+| FR-30 | partial (M1-01: `make e2e` placeholder, `make dev` stub; lifecycle scripts from M1-10) |
 | FR-31 | not started |
 | FR-32 | not started |
 | FR-33 | not started |
@@ -75,17 +78,17 @@ _None._
 | NFR-07 | not started |
 | NFR-08 | not started |
 | NFR-09 | not started |
-| NFR-10 | not started |
+| NFR-10 | partial (M1-01: gitleaks + self-test, `audit:deps`; AB-16/AB-17 abuse tests in `tests/security`) |
 | NFR-11 | not started |
 | NFR-12 | not started |
 | NFR-13 | not started |
 | NFR-14 | not started |
 | NFR-15 | not started |
 | NFR-16 | not started |
-| NFR-17 | not started |
-| NFR-18 | not started |
+| NFR-17 | partial (M1-01: fresh clone + `make toolchain install … e2e` verified; `make dev` from M1-10) |
+| NFR-18 | partial (M1-01: 80 % coverage gates active; CI ≤ 20 min only with warm caches, see OQ-8) |
 
 ## Security findings
 | ID | Severity | Status | Ticket |
 |---|---|---|---|
-| _none yet_ | | | |
+| _none_ | | | M1-01 added AB-16, AB-17 and AB-22 abuse tests; no findings |
