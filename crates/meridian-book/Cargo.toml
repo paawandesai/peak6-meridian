@@ -7,3 +7,14 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+
+[dev-dependencies]
+proptest = "1"
+
+# Program rules (CLAUDE.md § Conventions) apply: this crate runs inside the program.
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+arithmetic_side_effects = "deny"
+indexing_slicing = "deny"
