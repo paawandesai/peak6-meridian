@@ -6,6 +6,13 @@ Append-only. Newest entry at the bottom. Format: `## YYYY-MM-DD HH:MM ET · <who
 ## 2026-10-06 14:30 ET · kickoff
 Kickoff pack created.
 
+## 2026-10-06 — CI runner maintenance / tagging (operator)
+
+- ~15:30 CT: shared CI runner maintenance window. Pipelines that **failed or were canceled** in that window are **retried** and **do not count** toward any ticket's 3-attempt limit.
+- Runner setup (current): **untagged** jobs run on the dedicated Meridian project runner; jobs tagged `heavy` (E2E, red-team, browser tests) run on the shared runner, one at a time.
+- If any job sits **pending > 10 minutes**, escalate to the human with job name + project — do not keep retrying (likely missing/mis-tagged runner).
+- Applied: retried canceled MR !2 pipelines from the window; current focus remains pipeline on draft MR !2 (M1-01).
+
 ## 2026-10-06 19:20 ET · operator (via M1-01 worker)
 - M1-01 "Scaffold the monorepo and GitLab CI" merged: MR !2, merge commit `52dcb6d`. Pipelines 39177 (168019e) and 39300 (6c32d0b) green on all 8 jobs.
 - Human decision: runner #235 `maximum_timeout` raised 600 s → 3 600 s. Runner rules: untagged jobs → dedicated Meridian runner #291; jobs tagged `heavy` (e2e, red-team, browser) → shared runner #235, one at a time; any job pending > 10 min is escalated to the human, not retried.
