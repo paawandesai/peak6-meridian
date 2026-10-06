@@ -1,0 +1,4 @@
+# Program rule (CLAUDE.md): no unwrap/expect/panic outside tests.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

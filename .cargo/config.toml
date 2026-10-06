@@ -1,0 +1,4 @@
+# Prefer dependency versions whose `rust-version` the toolchain supports when the lockfile
+# changes (ignored by cargo versions that predate the setting).
+[resolver]
+incompatible-rust-versions = "fallback"

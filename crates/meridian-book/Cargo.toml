@@ -1,0 +1,9 @@
+[package]
+name = "meridian-book"
+description = "Meridian matching engine (pure Rust, no Solana types)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]

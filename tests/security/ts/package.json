@@ -1,0 +1,11 @@
+{
+  "name": "security-tests-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Abuse-case tests in TypeScript (one file per AB ID)",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}

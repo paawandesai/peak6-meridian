@@ -1,0 +1,7 @@
+packages:
+  - app
+  - services/automation
+  - packages/client
+  - scripts/switchboard
+  - tests/security/ts
+  - tests/e2e

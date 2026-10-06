@@ -1,0 +1,13 @@
+{
+  "name": "@meridian/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Meridian TypeScript client (generated Anchor client, PDA helpers, units)",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  }
+}

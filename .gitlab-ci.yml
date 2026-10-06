@@ -1,0 +1,202 @@
+# Meridian CI (M1-01). Every job goes through the Makefile, like a developer would.
+#
+# The runner is small (1 vCPU, 2 GB RAM), so each job installs only the toolchain components it
+# needs (TOOLCHAIN) and caches what is slow to rebuild. GitLab caches only paths inside the
+# project, so scripts/ci/link-cache.sh symlinks the tool directories under $HOME into .ci-cache/.
+
+stages:
+  - check
+  - test
+  - e2e
+
+# Merge-request pipelines, pushes to main and schedules; no duplicate branch pipelines.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+variables:
+  FF_USE_FASTZIP: "true"
+  CACHE_COMPRESSION_LEVEL: fastest
+  CARGO_TERM_COLOR: always
+  # Smaller target/ (and cache): no incremental state or debug info in CI builds.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+
+default:
+  image: ubuntu:24.04
+  before_script:
+    - scripts/ci/link-cache.sh
+    - scripts/toolchain.sh $TOOLCHAIN
+
+# ---- caches -------------------------------------------------------------------------------
+# Installed tools (~/.cargo/bin, ~/.avm, Agave CLI, SBF platform tools): rebuilt only when the
+# toolchain pins change. One cache per group of jobs with the same components.
+.cache-toolchain: &cache-toolchain
+  key:
+    files: [scripts/toolchain.sh, rust-toolchain.toml]
+    prefix: toolchain-$CACHE_GROUP
+  paths:
+    - .ci-cache/.cargo/bin
+    - .ci-cache/.avm
+    - .ci-cache/.local/share/solana
+    - .ci-cache/.cache/solana
+
+# Downloaded crates and compiled artifacts.
+.cache-cargo: &cache-cargo
+  key:
+    files: [rust-toolchain.toml, Cargo.lock]
+    prefix: cargo-$CACHE_GROUP
+  paths:
+    - .ci-cache/.cargo/registry
+    - .ci-cache/.cargo/git
+    - target
+
+# The pnpm store and uv cache are the same for every job: `typecheck` writes them, others read.
+.cache-pnpm: &cache-pnpm
+  key:
+    files: [pnpm-lock.yaml]
+    prefix: pnpm
+  paths:
+    - .ci-cache/.local/share/pnpm/store
+  policy: pull
+
+.cache-uv: &cache-uv
+  key:
+    files: [uv.lock]
+    prefix: uv
+  paths:
+    - .ci-cache/.cache/uv
+  policy: pull
+
+.on-mr-and-main:
+  rules:
+    - if: $CI_PIPELINE_SOURCE != "schedule"
+
+# ---- check --------------------------------------------------------------------------------
+# Human-owned files change only with the `human-approved` label. Adding the label does not
+# re-run a pipeline: re-run this job after labelling.
+guard:human-files:
+  stage: check
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    TOOLCHAIN: apt
+    GIT_DEPTH: "0"
+  script:
+    - scripts/ci/guard-human-files.sh
+
+lint:
+  stage: check
+  extends: .on-mr-and-main
+  variables:
+    TOOLCHAIN: apt rust node uv
+    CACHE_GROUP: lint
+  cache:
+    - *cache-cargo
+    - *cache-pnpm
+    - *cache-uv
+  script:
+    - make install
+    - make lint
+
+typecheck:
+  stage: check
+  extends: .on-mr-and-main
+  variables:
+    TOOLCHAIN: apt node uv
+  cache:
+    - <<: *cache-pnpm
+      policy: pull-push
+    - <<: *cache-uv
+      policy: pull-push
+  script:
+    - make install-js install-py
+    - make typecheck
+
+secrets:gitleaks:
+  stage: check
+  extends: .on-mr-and-main
+  image:
+    name: zricethezav/gitleaks:v8.30.1
+    entrypoint: [""]
+  variables:
+    GIT_DEPTH: "0"
+  before_script: []
+  script:
+    - scripts/ci/gitleaks-selftest.sh
+    - gitleaks git --redact --config .gitleaks.toml .
+
+# Fails on any high or critical finding (cargo-audit and pip-audit fail on any advisory).
+audit:deps:
+  stage: check
+  extends: .on-mr-and-main
+  variables:
+    TOOLCHAIN: apt rust cargo-audit node uv
+    CACHE_GROUP: audit
+  cache:
+    - *cache-toolchain
+  script:
+    - make audit
+
+# ---- test ---------------------------------------------------------------------------------
+test:
+  stage: test
+  extends: .on-mr-and-main
+  variables:
+    TOOLCHAIN: apt rust solana anchor node uv
+    CACHE_GROUP: sbf
+  cache:
+    - *cache-toolchain
+    - *cache-cargo
+    - *cache-pnpm
+    - *cache-uv
+  script:
+    - make install
+    - make test test-security
+
+coverage:
+  stage: test
+  extends: .on-mr-and-main
+  variables:
+    TOOLCHAIN: apt rust cargo-llvm-cov node uv
+    CACHE_GROUP: coverage
+  cache:
+    - *cache-toolchain
+    - *cache-cargo
+    - *cache-pnpm
+    - *cache-uv
+  script:
+    - make install
+    - make coverage
+
+# ---- e2e ----------------------------------------------------------------------------------
+# Runs after `test` and shares its caches, so the program's dependencies are already compiled.
+e2e:
+  stage: e2e
+  extends: .on-mr-and-main
+  variables:
+    TOOLCHAIN: apt rust solana anchor node
+    CACHE_GROUP: sbf
+  cache:
+    - *cache-toolchain
+    - *cache-cargo
+    - *cache-pnpm
+  script:
+    - make install-rust install-js
+    - make e2e
+
+# ---- schedules ----------------------------------------------------------------------------
+# Fails when docs/log.md has not changed for 24 hours. The operator creates the schedule with
+# the variable HEARTBEAT=1.
+heartbeat:
+  stage: check
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $HEARTBEAT == "1"
+  variables:
+    TOOLCHAIN: apt
+    GIT_DEPTH: "0"
+  script:
+    - scripts/ci/heartbeat.sh
