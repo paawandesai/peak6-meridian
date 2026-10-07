@@ -9,5 +9,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.31.1",
+    "@solana/web3.js": "1.99.0"
+  },
+  "devDependencies": {
+    "fast-check": "4.10.2"
   }
 }

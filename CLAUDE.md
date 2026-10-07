@@ -16,6 +16,7 @@ Solana devnet, Anchor 0.31.1 (Rust), Next.js 15 / React 19 / TS, Node 22, Python
 | Install | `make install` |
 | Build program (local, with test oracle) | `make build-local` |
 | Build program (devnet, no test oracle) | `make build-devnet` |
+| Regenerate IDL + TS client after an interface change | `make client` (commit `packages/client/src/idl`) |
 | Lint | `make lint` |
 | Typecheck | `make typecheck` |
 | Unit + integration tests | `make test` |

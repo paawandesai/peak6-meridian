@@ -13,10 +13,10 @@ export NEXT_TELEMETRY_DISABLED := 1
 PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
-	lint typecheck test test-security coverage audit eval-live e2e dev
+	client lint typecheck test test-security coverage audit eval-live e2e dev
 
 help:
-	@echo "Targets: toolchain install build-local build-devnet lint typecheck test test-security coverage eval-live e2e dev"
+	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e dev"
 
 ## Toolchain (once per machine): pinned Rust, Agave CLI, Anchor, Node, pnpm, uv, cargo tools.
 toolchain:
@@ -41,6 +41,14 @@ build-local:
 build-devnet:
 	anchor build
 
+## Regenerate the IDL and the typed TS client (packages/client/src/idl) from the local build.
+## Run after any change to the program's interface and commit the result.
+client: build-local
+	mkdir -p packages/client/src/idl
+	cp target/idl/meridian.json packages/client/src/idl/meridian.json
+	cp target/types/meridian.ts packages/client/src/idl/meridian.ts
+	pnpm exec prettier --write packages/client/src/idl
+
 lint:
 	cargo fmt --all -- --check
 	cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -60,8 +68,8 @@ test: build-local
 	pnpm --filter app run build
 	uv run --locked pytest services
 
-## Abuse-case tests (tests/security, one file per AB ID).
-test-security:
+## Abuse-case tests (tests/security, one file per AB ID). The Rust ones run the local build.
+test-security: build-local
 	cargo test --package security-tests --locked
 	pnpm --filter security-tests-ts run test
 	uv run --locked pytest tests/security/py
