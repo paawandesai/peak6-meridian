@@ -3,7 +3,12 @@ name = "meridian_ops_agent"
 version = "0.1.0"
 description = "Meridian ops agent: settlement-failure investigation and override drafts"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+# Read-only investigation only: nothing here can sign or submit a Solana transaction (NFR-11,
+# AB-20). tests/security/py/ab_20_jailbreak.py checks this closure against uv.lock.
+dependencies = [
+  "anthropic>=1.0,<2",
+  "pydantic>=2.11,<3",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13"]

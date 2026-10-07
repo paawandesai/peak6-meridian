@@ -13,10 +13,10 @@ export NEXT_TELEMETRY_DISABLED := 1
 PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
-	lint typecheck test test-security coverage audit e2e dev
+	lint typecheck test test-security coverage audit eval-live e2e dev
 
 help:
-	@echo "Targets: toolchain install build-local build-devnet lint typecheck test test-security coverage e2e dev"
+	@echo "Targets: toolchain install build-local build-devnet lint typecheck test test-security coverage eval-live e2e dev"
 
 ## Toolchain (once per machine): pinned Rust, Agave CLI, Anchor, Node, pnpm, uv, cargo tools.
 toolchain:
@@ -78,6 +78,11 @@ audit:
 	pnpm audit --audit-level high
 	cargo audit
 	uv export --frozen --no-hashes --no-emit-workspace > /tmp/req.txt && uvx pip-audit@$(PIP_AUDIT_VERSION) -r /tmp/req.txt
+
+## Ops-agent evals against the real Anthropic API, capped by OPS_AGENT_BUDGET_USD (M1-11).
+## Not part of CI: CI runs the same cases with the scripted fake (`make test`).
+eval-live:
+	uv run --locked python services/ops-agent/evals/run_live.py
 
 ## End-to-end smoke on a local validator.
 e2e:
