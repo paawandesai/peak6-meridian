@@ -200,3 +200,12 @@ Append-only. The operator appends entries and never edits or deletes human entri
 **Alternatives rejected:** (a) `pnpm.auditConfig.ignoreGhsas` for GHSA-3gc7-fjrx-p6mg (leaves native code installed); (c) third-party forks (AB-16 supply-chain risk; `@trufflesuite/bigint-buffer` still ships native code); (d) hand-writing Switchboard instructions without the SDK.
 **How to reverse:** Drop the override and `packages/bigint-buffer-js`, restore stock `bigint-buffer@1.1.5`, and either accept the advisory (a) or find another remediation; re-run `pnpm install` + `make audit`.
 
+
+### D-047 · By: human · 2026-10-07
+**Decision:** Accept the six `.cargo/audit.toml` ignores for LiteSVM **dev-deps only** (OQ-10): RUSTSEC-2022-0093, RUSTSEC-2024-0344, RUSTSEC-2026-0258, RUSTSEC-2026-0098, RUSTSEC-2026-0099, RUSTSEC-2026-0104. Confirmed by Paawan 2026-10-07 ~10:17 CT.
+**Constraints (PRD / security goals unchanged):**
+- NFR-10 / AB-16 still enforced: `make audit` / CI `audit:deps` continues to run; new high/critical advisories still fail the job.
+- Advisories are reachable only via the LiteSVM test harness (D-017), not the on-chain program, scripts, or services.
+- Same family as OQ-6 / OQ-7 Solana 2.1 pin warnings; remove these ignores when the workspace moves to Agave ≥ 2.2.
+- Product and PRD security goals are unchanged by this acceptance.
+**Why:** Upstream Solana 2.1.21 / Anchor 0.31.1 line has no fixed versions; silencing is limited to the test harness path already documented in `.cargo/audit.toml`. **Alternatives rejected:** fail CI until Agave ≥ 2.2; replace LiteSVM. **How to reverse:** Drop the six entries from `.cargo/audit.toml` once Agave ≥ 2.2 (or another fixed line) is adopted, and re-run `make audit`.
