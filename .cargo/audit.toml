@@ -1,12 +1,11 @@
 # cargo-audit configuration (AB-16, NFR-10). Read by `make audit` / CI job `audit:deps`.
 #
-# Every entry below is a risk acceptance that still needs the human's confirmation
-# (docs/status.md OQ-10; added on the operator's instruction on 2026-10-06 for M1-02 so CI can
-# run; log the decision in docs/decisions.md once confirmed). All six advisories are reached
-# only through the `litesvm` dev-dependency (LiteSVM test harness, D-017): upstream Solana
-# 2.1.21 crates with no fixed version on the 2.1 line that Anchor 0.31.1 / Agave CLI 2.1.21
-# pin. Nothing here is compiled into the program, the scripts or any service. Remove these
-# ignores when the workspace moves to Agave >= 2.2.
+# Human confirmed 2026-10-07 (~10:17 CT, Paawan): OQ-10 accepted as D-047.
+# All six advisories are reached only through the `litesvm` dev-dependency (LiteSVM test
+# harness, D-017): upstream Solana 2.1.21 crates with no fixed version on the 2.1 line that
+# Anchor 0.31.1 / Agave CLI 2.1.21 pin. Nothing here is compiled into the program, the
+# scripts or any service. NFR-10 / AB-16 still enforced (new high/critical fail CI).
+# Remove these ignores when the workspace moves to Agave >= 2.2.
 [advisories]
 ignore = [
   "RUSTSEC-2022-0093", # ed25519-dalek 1.0.1 (solana-sdk): double public key signing oracle; test-only

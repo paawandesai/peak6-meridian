@@ -1,7 +1,7 @@
 <!-- OWNER: operator. -->
 # Status
 
-_Last updated: 2026-10-06 21:55 CT by operator (post M1-03 / M1-08; PRD/docs verification)._
+_Last updated: 2026-10-07 10:18 CT by operator (OQ-10 / D-047; post M1-02 / M1-11)._
 
 ## Current milestone
 **M1: Core lifecycle, local** (ends Wed Oct 7 23:59 ET). Tickets: [tickets/M1.md](tickets/M1.md). Next anchor: Thu Oct 8 16:05 ET devnet rehearsal settlement.
@@ -9,21 +9,21 @@ _Last updated: 2026-10-06 21:55 CT by operator (post M1-03 / M1-08; PRD/docs ver
 ## Done
 - Kickoff pack.
 - M1-01 · Scaffold the monorepo and GitLab CI (MR !2, merged 2026-10-06 as `52dcb6d`).
-- Post-M1-01 gates: Pipelines-must-succeed **on**; daily `HEARTBEAT=1` schedule **id 20**; main post-merge pipelines green (incl. #39660 on `eb5fe77`).
-- Ops docs: runbook (!1), runner-maintenance log (!3), D-045 (!6), post-M1-01 docs (!4).
+- Post-M1-01 gates: Pipelines-must-succeed **on**; daily `HEARTBEAT=1` schedule **id 20**; main post-merge pipelines green.
+- Ops docs: runbook (!1), runner-maintenance log (!3), D-045 (!6), post-M1-01 docs (!4), status after M1-03/M1-08 (!11).
 - M1-03 · Matching engine crate (MR !5, merged as `b91e208`).
 - M1-08 · Strike calculator and NYSE calendar (MR !7, merged as `eb5fe77`).
+- M1-11 · Ops-agent safety layer + evals (MR !10, merged as `a1c486a`).
+- M1-02 · Program skeleton (MR !8, merged 2026-10-07 as `ecf72eb` / squash `a3840c1`).
 
 ## In progress
-- M1-02 · Program skeleton (MR !8; BookOrder layout fix pushed; CI #39748 running; awaiting green + Cursor re-approve — D-045 does **not** apply).
-- M1-09 · Switchboard feed definitions and spike (draft MR !9; CI #39724 failed `audit:deps` on `bigint-buffer` high — worker fixing / escalate if unpatched).
-- M1-11 · Ops-agent safety layer + evals (MR !10; CI #39755 running after review fixes; awaiting green + Cursor approve).
+- M1-09 · Switchboard feed definitions and spike (MR !9; OQ-12(b) / D-046 on branch — in-repo `bigint-buffer-js` override; awaiting green CI + Cursor approve).
 
 ## Queued / blocked on deps
 - M1-04 (after M1-02), then M1-05 (needs M1-03+M1-04), M1-07 (after M1-04), M1-06 (after M1-05), M1-12 (after M1-04), M1-10 (after M1-06/07/08).
 
 ## Blocked
-- M1-09 live spike / feed create on devnet: needs keys usable outside sandbox (see OQ-2 / MR !9 OQ-11 when merged). Offline `--dry-run` is the CI path.
+- M1-09 live spike / feed create on devnet: needs keys usable outside sandbox (see OQ-2 / OQ-11). Offline `--dry-run` is the CI path.
 
 ## Awaiting human veto
 _None._
@@ -36,17 +36,18 @@ _None._
 | OQ-3 | Pyth inquiry outcome; if Pyth grants equities on devnet, decide whether to switch adapters (D-005). | human | none (Switchboard is default) |
 | OQ-4 | Switchboard spike: can the feed job itself verify the bar date, and can API keys stay out of public feed definitions? (domain.md § Settlement rules) | M1-09 | M2 settlement |
 | OQ-5 | Custody of the devnet program keypair, upgrade authority and admin keypair (generated where, backed up by whom). | human | M2 devnet deploy |
-| OQ-6 | Any `cargo audit` advisories from upstream Solana/Anchor crates with no fix: accept (human) or replace. | human | none (see OQ-7; `audit:deps` green with 0 vulns on main pre-LiteSVM) |
+| OQ-6 | Any `cargo audit` advisories from upstream Solana/Anchor crates with no fix: accept (human) or replace. | human | none (see OQ-7; OQ-10 accepted as D-047 for LiteSVM dev-deps) |
 | OQ-7 | M1-01 `cargo audit` result (answers part of OQ-6): 0 vulnerabilities, so `audit:deps` passes. It prints 3 informational warnings, all from upstream Solana 2.1 / Anchor 0.31.1 crates with no fixed version on that line: RUSTSEC-2025-0141 (`bincode` 1.3.3 unmaintained), RUSTSEC-2025-0161 (`libsecp256k1` 0.6.0 unmaintained), RUSTSEC-2026-0097 (`rand` 0.7.3 unsound with a custom logger). Nothing is silenced. Accept these warnings, or make warnings fail the job? | human | none (job is green) |
 | OQ-8 | NFR-18 "CI pipeline ≤ 20 min" is at risk. CI runs on one 1 vCPU / 2 GB host (`w2-ci-runner`) that serves both runners: #291 `meridian` (untagged jobs) and #235 (jobs tagged `heavy`, i.e. `e2e`; job limit raised to 60 min by the human on 2026-10-06). Measured on the first M1-01 pipeline (39093, cold caches): `guard:human-files` 39 s, `secrets:gitleaks` 6 s, `typecheck` 161 s, `lint` 388 s, `audit:deps` 1,799 s (of which 1,647 s is the one-off `cargo install cargo-audit`; the audit itself takes 49 s). Tool builds are cached per runner afterwards, so only the first pipeline on a runner, or one that changes `scripts/toolchain.sh` / `rust-toolchain.toml`, pays them. Warm timings and the remaining jobs: MR !2. Later tickets add heavier crates (LiteSVM, Switchboard). Options: a larger runner (4+ vCPU / 8 GB), or a prebuilt CI image (M1-01 defers it). | human | NFR-18 |
-| OQ-9 | M1-02 config tickers written in ≤6 slots per call (packet/IDL limits). Confirm when !8 merges. | operator→human | none |
-| OQ-10 | M1-02 ignores six `cargo audit` advisories reachable only via `litesvm` **dev-deps** (Solana 2.1.21 line; no fix). Same family as OQ-6. Confirm accept when !8 merges. | human | M1-02 CI |
+| OQ-9 | M1-02 config tickers written in ≤6 slots per call (packet/IDL limits). Confirm when !8 merges. | operator→human | none (!8 merged; confirm still open) |
+| OQ-10 | **RESOLVED / accepted 2026-10-07 ~10:17 CT (Paawan) → [D-047](decisions.md).** Six `.cargo/audit.toml` ignores for LiteSVM **dev-deps only** (RUSTSEC-2022-0093, 2024-0344, 2026-0258, 2026-0098, 2026-0099, 2026-0104). NFR-10 / AB-16 still enforced; advisories only via LiteSVM (D-017); same family as OQ-6/OQ-7; remove when Agave ≥ 2.2; PRD security goals unchanged. | human | — |
 | OQ-11 | M1-09 live Switchboard spike blocked pending usable API keys / non-sandbox egress (MR !9). Offline dry-run covered in CI. | human | M1-09 AC3 live |
+| OQ-12 | M1-09 `bigint-buffer` GHSA-3gc7-fjrx-p6mg (high). Human chose **(b)** isolate via in-repo pure-JS override (D-046 on MR !9 branch; not yet on main). | human | M1-09 `audit:deps` |
 
 ## Requirements coverage
 | ID | Status |
 |---|---|
-| FR-01 | in progress (M1-02 !8) |
+| FR-01 | met (M1-02 `initialize_config` + client config on main via !8 / `ecf72eb`) |
 | FR-02 | not started |
 | FR-03 | not started |
 | FR-04 | not started |
@@ -56,7 +57,7 @@ _None._
 | FR-08 | in progress (M1-09 feeds !9; on-chain settle = M1-07) |
 | FR-09 | not started |
 | FR-10 | not started |
-| FR-11 | not started (state stubs on !8) |
+| FR-11 | partial (M1-02 pause/unpause stubs + AB-06 path on main; full behavior with instruction tickets) |
 | FR-12 | not started |
 | FR-13 | partial (M1-08 strike + prevCloses library; morning CLI/job = M1-10 / M2) |
 | FR-14 | not started (M2) |
@@ -72,13 +73,13 @@ _None._
 | FR-24 | not started |
 | FR-25 | not started |
 | FR-26 | not started |
-| FR-27 | in progress (M1-11 safety !10; live agent = M3) |
+| FR-27 | partial (M1-11 safety layer + evals on main via !10; live agent = M3) |
 | FR-28 | not started |
 | FR-29 | not started |
 | FR-30 | partial (M1-01: `make e2e` placeholder, `make dev` stub; lifecycle scripts from M1-10) |
 | FR-31 | not started |
 | FR-32 | not started |
-| FR-33 | in progress (events declared on !8; emitters with instruction tickets) |
+| FR-33 | partial (M1-02 events declared on main; emitters with instruction tickets) |
 | NFR-01 | not started |
 | NFR-02 | partial (M1-03 max-8 fills; CU assert in M1-05) |
 | NFR-03 | not started |
@@ -86,10 +87,10 @@ _None._
 | NFR-05 | partial (M1-08 libs; idempotent create-markets = M1-10) |
 | NFR-06 | in progress (M1-09 offline spike; live + on-chain = later) |
 | NFR-07 | partial (M1-03 book properties ≥1k; program invariants later) |
-| NFR-08 | in progress (AB-06 on !8; override delay = M1-07) |
+| NFR-08 | partial (M1-02 AB-06 admin-only on main; override delay = M1-07) |
 | NFR-09 | partial (M1-03 AB-09/10; program order ABs later) |
-| NFR-10 | partial (M1-01: gitleaks + self-test, `audit:deps`; AB-16/AB-17; !9 currently red on `bigint-buffer`) |
-| NFR-11 | in progress (M1-11 !10) |
+| NFR-10 | partial (M1-01 audits + AB-16/AB-17; OQ-10 LiteSVM ignores accepted D-047; !9 clearing `bigint-buffer` via OQ-12(b)) |
+| NFR-11 | met for M1 safety gate (M1-11 !10: AB-14/15/20 + schema/range validation; live agent = M3) |
 | NFR-12 | not started |
 | NFR-13 | not started |
 | NFR-14 | partial (M1-01 AB-22 feature test; full settle path M1-07) |
@@ -101,4 +102,4 @@ _None._
 ## Security findings
 | ID | Severity | Status | Ticket |
 |---|---|---|---|
-| _none_ | | | M1-01 added AB-16, AB-17, AB-22; M1-03 added AB-09, AB-10 book tests — no open findings |
+| _none_ | | | M1-01 AB-16/17/22; M1-02 LiteSVM audit ignores accepted (D-047 / OQ-10); M1-03 AB-09/10; M1-11 AB-14/15/20 — no open findings |
