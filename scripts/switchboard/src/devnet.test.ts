@@ -116,6 +116,19 @@ describe("liveSimulator", () => {
     await expect(run).rejects.toThrow("update simulation failed: custom [redacted]");
   });
 
+  it.each([
+    ["feedHashOf", { feedHashOf: () => Promise.reject(new Error(`rpc echo ${SECRET}`)) }],
+    ["fetchUpdate", { fetchUpdate: () => Promise.reject(new Error(`fetch echo ${SECRET}`)) }],
+    ["simulate", { simulate: () => Promise.reject(new Error(`sim echo ${SECRET}`)) }],
+  ])("redacts keys in exceptions thrown by %s", async (_name, override) => {
+    const run = liveSimulator({ client: fake(override), feeds, variableOverrides }).simulate(
+      aaplTiingo,
+      hash,
+    );
+    await expect(run).rejects.toThrow("echo [redacted]");
+    await expect(run).rejects.not.toThrow(SECRET);
+  });
+
   it("returns redacted per-oracle errors alongside successes", async () => {
     const client = fake({
       fetchUpdate: () =>

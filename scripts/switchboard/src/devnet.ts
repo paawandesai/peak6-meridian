@@ -93,35 +93,42 @@ export function liveSimulator(params: {
   readonly variableOverrides: Record<string, string>;
 }): UpdateSimulator {
   const secrets = Object.values(params.variableOverrides);
+  const run: UpdateSimulator["simulate"] = async (def, feedHash) => {
+    const feed = params.feeds[def.ticker]?.[SOURCES.indexOf(def.source)];
+    if (feed === undefined) {
+      throw new Error(`no feed account for ${def.ticker}/${def.source} in SWITCHBOARD_FEEDS_JSON`);
+    }
+    const onChainHash = await params.client.feedHashOf(feed);
+    if (onChainHash !== feedHash) {
+      throw new Error(
+        `feed ${feed.toBase58()} has hash ${onChainHash}, definition has ${feedHash}`,
+      );
+    }
+    const update = await params.client.fetchUpdate(feed, params.variableOverrides);
+    const oracles = update.oracles.map((o) => ({
+      ...o,
+      error: o.error === null ? null : redact(o.error, secrets),
+    }));
+    if (update.ixs === undefined) {
+      throw new Error(
+        `no oracle signed an update: ${oracles.map((o) => o.error ?? "ok").join("; ")}`,
+      );
+    }
+    const result = await params.client.simulate(update.ixs, update.luts);
+    if (result.error !== null) {
+      throw new Error(`update simulation failed: ${redact(result.error, secrets)}`);
+    }
+    return { feed: feed.toBase58(), slot: result.slot, oracles };
+  };
   return {
+    // SDK/network exceptions can echo the request (and so the keys), same as oracle errors.
     async simulate(def, feedHash) {
-      const feed = params.feeds[def.ticker]?.[SOURCES.indexOf(def.source)];
-      if (feed === undefined) {
-        throw new Error(
-          `no feed account for ${def.ticker}/${def.source} in SWITCHBOARD_FEEDS_JSON`,
-        );
+      try {
+        return await run(def, feedHash);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(redact(message, secrets));
       }
-      const onChainHash = await params.client.feedHashOf(feed);
-      if (onChainHash !== feedHash) {
-        throw new Error(
-          `feed ${feed.toBase58()} has hash ${onChainHash}, definition has ${feedHash}`,
-        );
-      }
-      const update = await params.client.fetchUpdate(feed, params.variableOverrides);
-      const oracles = update.oracles.map((o) => ({
-        ...o,
-        error: o.error === null ? null : redact(o.error, secrets),
-      }));
-      if (update.ixs === undefined) {
-        throw new Error(
-          `no oracle signed an update: ${oracles.map((o) => o.error ?? "ok").join("; ")}`,
-        );
-      }
-      const result = await params.client.simulate(update.ixs, update.luts);
-      if (result.error !== null) {
-        throw new Error(`update simulation failed: ${redact(result.error, secrets)}`);
-      }
-      return { feed: feed.toBase58(), slot: result.slot, oracles };
     },
   };
 }
