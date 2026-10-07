@@ -147,3 +147,45 @@ Append-only. The operator appends entries and never edits or deletes human entri
 
 ---
 <!-- Operator entries below. Format: ### D-0NN · By: operator · Tier N · YYYY-MM-DD -->
+
+
+### D-035 · By: operator · Tier 1 · 2026-10-06
+**Decision:** Pin the M1-01 toolchain to Rust **1.99.0** (rustfmt/clippy/llvm-tools-preview), Agave CLI **2.1.21** (SBF platform tools v1.43), avm/anchor-cli **0.31.1**, Node **22.23.3** (nvm 0.40.8), pnpm **9.15.9**, uv **0.12.23**, Python **3.12**, cargo-llvm-cov **0.9.1**, cargo-audit **0.22.2**, pip-audit **2.10.1**, gitleaks image **v8.30.1**; keep `anchor-*` crates at 0.31.1 (not 0.31.2) and `solana-program` 2.1.21 to match the CLI.
+**Why:** Ticket requires exact pins; stack says Anchor 0.31.1. **Alternatives rejected:** taking crates.io 0.31.2 patch line without an explicit stack change. **How to reverse:** Edit pins in `scripts/toolchain.sh` / lockfiles and rerun `make toolchain`.
+
+### D-036 · By: operator · Tier 1 · 2026-10-06
+**Decision:** Keep SBF builds compatible with platform-tools cargo 1.79 via `rust-version = "1.79.0"`, `.cargo/config.toml` `resolver.incompatible-rust-versions = "fallback"`, and holding `blake3` at 1.8.2.
+**Why:** Edition-2024 crates break Agave 2.1 platform tools. **Alternatives rejected:** `--tools-version` newer tools (ticket fixes `build-local = anchor build -- --features local-oracle`). **How to reverse:** Drop the pin when Agave ≥ 2.2 is adopted.
+
+### D-037 · By: operator · Tier 1 · 2026-10-06
+**Decision:** Use `package.json#pnpm.overrides` to force patched `next>postcss` 8.5.29 and `@coral-xyz/anchor>toml` 4.3.0 so `pnpm audit --audit-level high` passes.
+**Why:** Upstream pins were vulnerable (GHSA on postcss/toml); overrides upgrade, they do not ignore. **How to reverse:** Drop overrides once upstream bumps.
+
+### D-038 · By: operator · Tier 1 · 2026-10-06
+**Decision:** Drive the placeholder `version` instruction tests natively (no LiteSVM in M1-01); LiteSVM arrives with the first stateful instruction in M1-02.
+**Why:** Keeps cold CI build small (~7 CPU-min LiteSVM cost deferred). **How to reverse:** Add LiteSVM in M1-02 as planned.
+
+### D-039 · By: operator · Tier 1 · 2026-10-06
+**Decision:** Deny `clippy::unwrap_used`, `expect_used`, `panic`, `arithmetic_side_effects` in `programs/meridian` (allowed in tests via `clippy.toml`).
+**Why:** Enforces program safety rules early. **How to reverse:** Relax allowlists in `Cargo.toml` / `clippy.toml`.
+
+### D-040 · By: operator · Tier 1 · 2026-10-06
+**Decision:** CI job shape for the shared 1 vCPU host: per-job `TOOLCHAIN` subset installs; cache via `scripts/ci/link-cache.sh`; `e2e` tagged `heavy` (shared runner); other jobs untagged (dedicated #291); `retry` only on `runner_system_failure` / `runner_interrupted`; `CARGO_INCREMENTAL=0`.
+**Why:** Human runner rules + timeout raise; full cold install per job would be ~40 min. **How to reverse:** Prebuilt CI image removes subset/cache complexity.
+
+### D-041 · By: operator · Tier 1 · 2026-10-06
+**Decision:** Worker branch naming `ao/peak6-meridian-2/m1-01-scaffold-ci` (AO session-namespace prefix + ticket id).
+**Why:** AO tracks MRs by session-namespace prefix. **How to reverse:** Rename convention in orchestrator rules only.
+
+### D-042 · By: operator · Tier 1 · 2026-10-06
+**Decision:** Add `make audit` and `install-rust|js|py` Makefile targets so CI and developers share one entry point.
+**Why:** Ticket requires Makefile as sole entry point. **How to reverse:** Inline commands in `.gitlab-ci.yml` (not preferred).
+
+### D-043 · By: operator · Tier 1 · 2026-10-06
+**Decision:** `scripts/e2e.sh` refuses dirty `programs/meridian/src/lib.rs` / `Anchor.toml`, restores them on exit via `git checkout --`, uses `E2E_PAYER_KEYPAIR` or a throwaway payer (never `~/.config/solana/id.json`), configurable RPC/faucet ports.
+**Why:** Trap would otherwise discard local work; safety for concurrent checkouts. **How to reverse:** Change script guards carefully.
+
+### D-044 · By: operator · Tier 1 · 2026-10-06
+**Decision:** Python packages use `uv_build` backend and `TypedDict` for placeholder `health()` payloads (no runtime deps yet).
+**Why:** No extra download; nothing to audit until real boundaries. **How to reverse:** Switch backend / add pydantic when first real boundary lands.
+

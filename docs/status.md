@@ -1,7 +1,7 @@
 <!-- OWNER: operator. -->
 # Status
 
-_Last updated: 2026-10-06 19:20 ET by operator (post-M1-01)._
+_Last updated: 2026-10-06 19:15 CT by operator (post-M1-01 gates)._
 
 ## Current milestone
 **M1: Core lifecycle, local** (ends Wed Oct 7 23:59 ET). Tickets: [tickets/M1.md](tickets/M1.md). Next anchor: Thu Oct 8 16:05 ET devnet rehearsal settlement.
@@ -11,8 +11,9 @@ _Last updated: 2026-10-06 19:20 ET by operator (post-M1-01)._
 - M1-01 · Scaffold the monorepo and GitLab CI (MR !2, merged 2026-10-06 as `52dcb6d`).
 
 ## In progress
+- Post-M1-01 gates: Pipelines-must-succeed **on**; daily `HEARTBEAT=1` schedule **id 20** created. Remaining: confirm main pipeline 39399 green; merge this docs MR; then !1 runbook / !3 ops log when green+approved.
 - M1-02 · Program skeleton (dispatched).
-- M1-03 · Matching engine crate (dispatched).
+- M1-03 · Matching engine crate (dispatched; MR !5 draft).
 - Queued: M1-08, M1-09, M1-11.
 
 ## Blocked
@@ -29,7 +30,7 @@ _None._
 | OQ-3 | Pyth inquiry outcome; if Pyth grants equities on devnet, decide whether to switch adapters (D-005). | human | none (Switchboard is default) |
 | OQ-4 | Switchboard spike: can the feed job itself verify the bar date, and can API keys stay out of public feed definitions? (domain.md § Settlement rules) | M1-09 | M2 settlement |
 | OQ-5 | Custody of the devnet program keypair, upgrade authority and admin keypair (generated where, backed up by whom). | human | M2 devnet deploy |
-| OQ-6 | Any `cargo audit` advisories from upstream Solana/Anchor crates with no fix: accept (human) or replace. | human | M1-01 `audit:deps` |
+| OQ-6 | Any `cargo audit` advisories from upstream Solana/Anchor crates with no fix: accept (human) or replace. | human | none (see OQ-7; `audit:deps` green with 0 vulns) |
 | OQ-7 | M1-01 `cargo audit` result (answers part of OQ-6): 0 vulnerabilities, so `audit:deps` passes. It prints 3 informational warnings, all from upstream Solana 2.1 / Anchor 0.31.1 crates with no fixed version on that line: RUSTSEC-2025-0141 (`bincode` 1.3.3 unmaintained), RUSTSEC-2025-0161 (`libsecp256k1` 0.6.0 unmaintained), RUSTSEC-2026-0097 (`rand` 0.7.3 unsound with a custom logger). Nothing is silenced. Accept these warnings, or make warnings fail the job? | human | none (job is green) |
 | OQ-8 | NFR-18 "CI pipeline ≤ 20 min" is at risk. CI runs on one 1 vCPU / 2 GB host (`w2-ci-runner`) that serves both runners: #291 `meridian` (untagged jobs) and #235 (jobs tagged `heavy`, i.e. `e2e`; job limit raised to 60 min by the human on 2026-10-06). Measured on the first M1-01 pipeline (39093, cold caches): `guard:human-files` 39 s, `secrets:gitleaks` 6 s, `typecheck` 161 s, `lint` 388 s, `audit:deps` 1,799 s (of which 1,647 s is the one-off `cargo install cargo-audit`; the audit itself takes 49 s). Tool builds are cached per runner afterwards, so only the first pipeline on a runner, or one that changes `scripts/toolchain.sh` / `rust-toolchain.toml`, pays them. Warm timings and the remaining jobs: MR !2. Later tickets add heavier crates (LiteSVM, Switchboard). Options: a larger runner (4+ vCPU / 8 GB), or a prebuilt CI image (M1-01 defers it). | human | NFR-18 |
 
