@@ -30,7 +30,8 @@
   "pnpm": {
     "overrides": {
       "next>postcss": "8.5.29",
-      "@coral-xyz/anchor>toml": "4.3.0"
+      "@coral-xyz/anchor>toml": "4.3.0",
+      "@solana/buffer-layout-utils>bigint-buffer": "link:./packages/bigint-buffer-js"
     }
   }
 }
