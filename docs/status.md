@@ -1,7 +1,7 @@
 <!-- OWNER: operator. -->
 # Status
 
-_Last updated: 2026-10-07 10:18 CT by operator (OQ-10 / D-047; post M1-02 / M1-11)._
+_Last updated: 2026-10-07 12:05 CT by operator (merge main into M1-09 after D-047; OQ-12 option b on MR !9)._
 
 ## Current milestone
 **M1: Core lifecycle, local** (ends Wed Oct 7 23:59 ET). Tickets: [tickets/M1.md](tickets/M1.md). Next anchor: Thu Oct 8 16:05 ET devnet rehearsal settlement.
@@ -17,7 +17,7 @@ _Last updated: 2026-10-07 10:18 CT by operator (OQ-10 / D-047; post M1-02 / M1-1
 - M1-02 · Program skeleton (MR !8, merged 2026-10-07 as `ecf72eb` / squash `a3840c1`).
 
 ## In progress
-- M1-09 · Switchboard feed definitions and spike (MR !9; OQ-12(b) / D-046 on branch — in-repo `bigint-buffer-js` override; awaiting green CI + Cursor approve).
+- M1-09 · Switchboard feed definitions and spike (MR !9; OQ-12 **(b)** applied: in-repo `packages/bigint-buffer-js` + `pnpm.overrides`; awaiting CI green + Cursor APPROVE).
 
 ## Queued / blocked on deps
 - M1-04 (after M1-02), then M1-05 (needs M1-03+M1-04), M1-07 (after M1-04), M1-06 (after M1-05), M1-12 (after M1-04), M1-10 (after M1-06/07/08).
@@ -39,10 +39,10 @@ _None._
 | OQ-6 | Any `cargo audit` advisories from upstream Solana/Anchor crates with no fix: accept (human) or replace. | human | none (see OQ-7; OQ-10 accepted as D-047 for LiteSVM dev-deps) |
 | OQ-7 | M1-01 `cargo audit` result (answers part of OQ-6): 0 vulnerabilities, so `audit:deps` passes. It prints 3 informational warnings, all from upstream Solana 2.1 / Anchor 0.31.1 crates with no fixed version on that line: RUSTSEC-2025-0141 (`bincode` 1.3.3 unmaintained), RUSTSEC-2025-0161 (`libsecp256k1` 0.6.0 unmaintained), RUSTSEC-2026-0097 (`rand` 0.7.3 unsound with a custom logger). Nothing is silenced. Accept these warnings, or make warnings fail the job? | human | none (job is green) |
 | OQ-8 | NFR-18 "CI pipeline ≤ 20 min" is at risk. CI runs on one 1 vCPU / 2 GB host (`w2-ci-runner`) that serves both runners: #291 `meridian` (untagged jobs) and #235 (jobs tagged `heavy`, i.e. `e2e`; job limit raised to 60 min by the human on 2026-10-06). Measured on the first M1-01 pipeline (39093, cold caches): `guard:human-files` 39 s, `secrets:gitleaks` 6 s, `typecheck` 161 s, `lint` 388 s, `audit:deps` 1,799 s (of which 1,647 s is the one-off `cargo install cargo-audit`; the audit itself takes 49 s). Tool builds are cached per runner afterwards, so only the first pipeline on a runner, or one that changes `scripts/toolchain.sh` / `rust-toolchain.toml`, pays them. Warm timings and the remaining jobs: MR !2. Later tickets add heavier crates (LiteSVM, Switchboard). Options: a larger runner (4+ vCPU / 8 GB), or a prebuilt CI image (M1-01 defers it). | human | NFR-18 |
-| OQ-9 | M1-02 config tickers written in ≤6 slots per call (packet/IDL limits). Confirm when !8 merges. | operator→human | none (!8 merged; confirm still open) |
+| OQ-9 | M1-02 config tickers written in ≤6 slots per call (packet/IDL limits). Confirm after !8 merge (`ecf72eb`). | operator→human | none |
 | OQ-10 | **RESOLVED / accepted 2026-10-07 ~10:17 CT (Paawan) → [D-047](decisions.md).** Six `.cargo/audit.toml` ignores for LiteSVM **dev-deps only** (RUSTSEC-2022-0093, 2024-0344, 2026-0258, 2026-0098, 2026-0099, 2026-0104). NFR-10 / AB-16 still enforced; advisories only via LiteSVM (D-017); same family as OQ-6/OQ-7; remove when Agave ≥ 2.2; PRD security goals unchanged. | human | — |
-| OQ-11 | M1-09 live Switchboard spike blocked pending usable API keys / non-sandbox egress (MR !9). Offline dry-run covered in CI. | human | M1-09 AC3 live |
-| OQ-12 | M1-09 `bigint-buffer` GHSA-3gc7-fjrx-p6mg (high). Human chose **(b)** isolate via in-repo pure-JS override (D-046 on MR !9 branch; not yet on main). | human | M1-09 `audit:deps` |
+| OQ-11 | M1-09 live spike (AC3): **blocked: needs keys.** Offline `--dry-run` covered in CI. Manual (devnet only; ~0.5 SOL airdrop): `pnpm tsx scripts/switchboard/create-feeds.ts --cluster devnet --keypair <funded>`, put `SWITCHBOARD_FEEDS_JSON=…` in `.env`, then `pnpm tsx scripts/switchboard/spike.ts --cluster devnet` with keys exported. Options: (a) human runs commands; (b) allow agent key egress for this run. | human | OQ-4 answer, M2 settlement |
+| OQ-12 | **Resolved (D-046):** chose option **(b)** isolate/override. `pnpm.overrides` `@solana/buffer-layout-utils>bigint-buffer` → `link:./packages/bigint-buffer-js` (upstream 1.1.5 pure-JS path, native addon removed). JS fallback matches upstream 1.1.5 semantics; u64/u128 layout behavior through `@solana/buffer-layout-utils` / Switchboard SDK chain unchanged (no feature loss). Rejected (a) audit ignore and (c) third-party forks. | operator (human-approved) | none (`audit:deps` should pass without ignore) |
 
 ## Requirements coverage
 | ID | Status |

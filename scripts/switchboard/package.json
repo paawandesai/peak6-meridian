@@ -9,5 +9,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@solana/web3.js": "1.99.0",
+    "@switchboard-xyz/common": "5.8.5",
+    "@switchboard-xyz/common-legacy": "1.1.1",
+    "@switchboard-xyz/on-demand": "3.10.6",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "fast-check": "4.10.2",
+    "tsx": "4.23.15"
   }
 }

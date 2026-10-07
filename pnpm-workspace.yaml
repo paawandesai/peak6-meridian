@@ -2,6 +2,7 @@ packages:
   - app
   - services/automation
   - packages/client
+  - packages/bigint-buffer-js
   - scripts/switchboard
   - tests/security/ts
   - tests/e2e
