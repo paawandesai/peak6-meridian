@@ -16,12 +16,24 @@ cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
-idl-build = ["anchor-lang/idl-build"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 # Test-only oracle (AB-22): enabled by `make build-local`, never by `make build-devnet`.
 local-oracle = []
 
 [dependencies]
 anchor-lang = "=0.31.1"
+anchor-spl = "=0.31.1"
+# Required by Anchor's zero-copy accounts (`Book`).
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
+# Matching engine (D-002, D-022); the `Book` account mirrors its layout.
+meridian-book = { path = "../../crates/meridian-book" }
+
+[dev-dependencies]
+# LiteSVM tests run against the built program (D-017, D-031); 0.5 is the line built on Solana 2.1.
+litesvm = "=0.5.0"
+solana-sdk = "=2.1.21"
+# Decodes `Program data:` log lines to assert on emitted events.
+base64 = "0.22"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("anchor-debug", "custom-heap", "custom-panic"))'] }

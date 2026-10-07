@@ -7,6 +7,13 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The LiteSVM harness (src/lib.rs includes programs/meridian/tests/common/mod.rs by path).
+anchor-lang = "=0.31.1"
+anchor-spl = "=0.31.1"
+base64 = "0.22"
+litesvm = "=0.5.0"
+meridian = { path = "../../../programs/meridian" }
+solana-sdk = "=2.1.21"
 
 [dev-dependencies]
 meridian-book = { path = "../../../crates/meridian-book" }
