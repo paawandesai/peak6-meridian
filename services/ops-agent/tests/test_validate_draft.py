@@ -2,10 +2,12 @@
 
 from datetime import UTC, date, datetime
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from meridian_ops_agent.models import Evidence, OverrideDraft, SourceClose
 from meridian_ops_agent.validate import validate_draft
+from pydantic import ValidationError
 
 MARKET = "AAPL-20261006-250"
 MAX_CENTS = 10**9  # $10,000,000.00: far above any equity close
@@ -89,11 +91,20 @@ def test_sources_must_be_exactly_the_fetched_ones() -> None:
         update={"sources": [make_close("tiingo", 25012), make_close("twelvedata", 25011)]}
     )
     codes = [v.code for v in validate_draft(tampered, evidence).violations]
-    assert codes == ["unknown_source"]
+    assert codes == ["unknown_source", "omitted_source"]
     renamed = draft_from(evidence, 25012).model_copy(
         update={"sources": [make_close("bloomberg", 25012)]}
     )
-    assert "unknown_source" in {v.code for v in validate_draft(renamed, evidence).violations}
+    codes = [v.code for v in validate_draft(renamed, evidence).violations]
+    assert codes == ["unknown_source", "omitted_source", "omitted_source"]
+    subset = draft_from(evidence, 25012).model_copy(
+        update={"sources": [make_close("tiingo", 25012)]}
+    )
+    assert [v.code for v in validate_draft(subset, evidence).violations] == ["omitted_source"]
+    superset = draft_from(evidence, 25012).model_copy(
+        update={"sources": [*evidence.closes, make_close("finnhub", 25011)]}
+    )
+    assert [v.code for v in validate_draft(superset, evidence).violations] == ["unknown_source"]
 
 
 def test_spread_must_match_the_evidence() -> None:
@@ -119,11 +130,26 @@ def test_text_fields_are_scanned_again_for_keys_urls_and_delimiters() -> None:
         update={"sources": [make_close("tiingo", 25012).model_copy(update={"name": "www.x.io"})]}
     )
     codes = {v.code for v in validate_draft(hostile_source, evidence).violations}
-    assert {"unknown_source", "url_in_text"} <= codes
+    assert {"unknown_source", "omitted_source", "url_in_text"} <= codes
 
 
 def test_violation_details_never_echo_the_offending_text() -> None:
     evidence = evidence_of([make_close("tiingo", 25012)])
-    hostile = draft_from(evidence, 25012).model_copy(update={"note": "sk-ant-aaaaaaaaaaaaaaaa"})
-    for violation in validate_draft(hostile, evidence).violations:
-        assert "sk-ant-" not in violation.detail
+    secret = "sk-ant-aaaaaaaaaaaaaaaa"
+    hostile_note = draft_from(evidence, 25012).model_copy(update={"note": secret})
+    # A secret-shaped source name bypassing construction (model_copy skips validation).
+    hostile_source = draft_from(evidence, 25012).model_copy(
+        update={"sources": [make_close("tiingo", 25012).model_copy(update={"name": secret})]}
+    )
+    for draft in (hostile_note, hostile_source):
+        result = validate_draft(draft, evidence)
+        assert not result.ok
+        for violation in result.violations:
+            assert secret not in violation.detail and "sk-ant" not in violation.detail
+
+
+def test_source_names_are_scanned_at_construction() -> None:
+    with pytest.raises(ValidationError):
+        make_close("sk-ant-aaaaaaaaaaaaaaaa", 25012)
+    with pytest.raises(ValidationError):
+        make_close("ghp_dddddddddddddddddddd", 25012)

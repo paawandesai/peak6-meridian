@@ -110,6 +110,24 @@ def test_sources_cannot_be_widened_to_legitimize_a_price() -> None:
     assert {"price_out_of_range", "unknown_source"} <= codes
 
 
+def test_sources_cannot_be_narrowed_to_legitimize_a_price() -> None:
+    """Dropping the fetched close that contradicts the price is rejected as an omitted source."""
+    fetched = [
+        SourceClose(name="tiingo", close_cents=25012, as_of=AS_OF),
+        SourceClose(name="twelvedata", close_cents=24000, as_of=AS_OF),
+    ]
+    evidence = Evidence(ticker="AAPL", trading_date=TRADING_DATE, closes=fetched)
+    narrowed = OverrideDraft(
+        market=M1,
+        proposed_price_cents=25012,
+        sources=fetched[:1],
+        spread_bps=evidence.spread_bps,
+        note="n",
+    )
+    codes = [v.code for v in validate_draft(narrowed, evidence).violations]
+    assert codes == ["omitted_source"]
+
+
 def test_no_evidence_means_no_draft_at_all() -> None:
     incident = Incident(
         incident_id="inc-1", ticker="AAPL", trading_date=TRADING_DATE, markets=[M1], failure="x"

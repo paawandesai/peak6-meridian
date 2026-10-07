@@ -46,6 +46,7 @@ ViolationCode = Literal[
     "invalid_draft",
     "missing_sources",
     "unknown_source",
+    "omitted_source",
     "price_out_of_range",
     "spread_mismatch",
     "key_like_text",
@@ -82,6 +83,12 @@ class SourceClose(StrictModel):
     name: Ident
     close_cents: int = Field(gt=0)
     as_of: AwareDatetime
+
+    @field_validator("name")
+    @classmethod
+    def _name_is_clean(cls, value: str) -> str:
+        check_text_is_clean("source name", value)
+        return value
 
 
 class SourceReport(StrictModel):

@@ -14,8 +14,9 @@ __all__ = ["validate_draft"]
 
 
 def validate_draft(draft: OverrideDraft, evidence: Evidence) -> ValidationResult:
-    """Reject a draft whose price leaves the evidence range, whose sources are missing or not
-    the fetched ones, or whose text looks like a key, a URL or a prompt delimiter.
+    """Reject a draft whose price leaves the evidence range, whose sources are missing, added
+    or omitted relative to the fetched ones, or whose text looks like a key, a URL or a prompt
+    delimiter.
 
     Pure and side-effect free; returns every violation found rather than the first.
     """
@@ -40,11 +41,19 @@ def validate_draft(draft: OverrideDraft, evidence: Evidence) -> ValidationResult
                 )
             )
 
+    # Sources must be exactly the fetched closes: nothing added, nothing left out. Details carry
+    # positions only, never names, since a name could itself be secret-shaped text.
     fetched = {(c.name, c.close_cents, c.as_of) for c in evidence.closes}
-    for source in draft.sources:
+    listed = {(c.name, c.close_cents, c.as_of) for c in draft.sources}
+    for index, source in enumerate(draft.sources):
         if (source.name, source.close_cents, source.as_of) not in fetched:
             violations.append(
-                Violation(code="unknown_source", detail=f"source {source.name!r} was not fetched")
+                Violation(code="unknown_source", detail=f"sources[{index}] was not fetched")
+            )
+    for index, close in enumerate(evidence.closes):
+        if (close.name, close.close_cents, close.as_of) not in listed:
+            violations.append(
+                Violation(code="omitted_source", detail=f"fetched close #{index} is not listed")
             )
 
     for field, text in (
