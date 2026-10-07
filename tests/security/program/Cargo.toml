@@ -11,6 +11,8 @@ publish.workspace = true
 anchor-lang = "=0.31.1"
 anchor-spl = "=0.31.1"
 base64 = "0.22"
+# The harness reads the zero-copy `Book` account (M1-04).
+bytemuck = "1"
 litesvm = "=0.5.0"
 meridian = { path = "../../../programs/meridian" }
 solana-sdk = "=2.1.21"

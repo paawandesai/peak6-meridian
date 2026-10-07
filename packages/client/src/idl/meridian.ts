@@ -19,9 +19,155 @@ export type Meridian = {
       discriminator: [226, 190, 94, 4, 5, 106, 15, 120];
       accounts: [
         {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
           name: "admin";
-          docs: ["The admin."];
+          docs: ["The admin; pays for the new accounts."];
+          writable: true;
           signer: true;
+          relations: ["config"];
+        },
+        {
+          name: "market";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [109, 97, 114, 107, 101, 116];
+              },
+              {
+                kind: "arg";
+                path: "ticker";
+              },
+              {
+                kind: "arg";
+                path: "tradingDate";
+              },
+              {
+                kind: "arg";
+                path: "strikeCents";
+              },
+            ];
+          };
+        },
+        {
+          name: "yesMint";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [121, 101, 115];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "noMint";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [110, 111];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "vault";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrowUsdc";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [101, 115, 99, 114, 111, 119, 95, 117, 115, 100, 99];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrowYes";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [101, 115, 99, 114, 111, 119, 95, 121, 101, 115];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "book";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [98, 111, 111, 107];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "usdcMint";
+          docs: ["The test-USDC mint pinned in the config."];
+          relations: ["config"];
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
         },
       ];
       args: [
@@ -117,9 +263,155 @@ export type Meridian = {
       discriminator: [21, 162, 50, 119, 68, 218, 221, 35];
       accounts: [
         {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
           name: "automationAuthority";
-          docs: ["The automation authority (D-030)."];
+          docs: ["The automation authority (D-030); pays for the new accounts."];
+          writable: true;
           signer: true;
+          relations: ["config"];
+        },
+        {
+          name: "market";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [109, 97, 114, 107, 101, 116];
+              },
+              {
+                kind: "arg";
+                path: "ticker";
+              },
+              {
+                kind: "arg";
+                path: "tradingDate";
+              },
+              {
+                kind: "arg";
+                path: "strikeCents";
+              },
+            ];
+          };
+        },
+        {
+          name: "yesMint";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [121, 101, 115];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "noMint";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [110, 111];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "vault";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [118, 97, 117, 108, 116];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrowUsdc";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [101, 115, 99, 114, 111, 119, 95, 117, 115, 100, 99];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrowYes";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [101, 115, 99, 114, 111, 119, 95, 121, 101, 115];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "book";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [98, 111, 111, 107];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "usdcMint";
+          docs: ["The test-USDC mint pinned in the config."];
+          relations: ["config"];
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
         },
       ];
       args: [
@@ -224,9 +516,58 @@ export type Meridian = {
       discriminator: [19, 149, 94, 110, 181, 186, 33, 107];
       accounts: [
         {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "market";
+          writable: true;
+        },
+        {
           name: "user";
           docs: ["The user depositing USDC."];
           signer: true;
+        },
+        {
+          name: "userUsdc";
+          docs: ["The user's USDC account; the token program checks `user` may debit it."];
+          writable: true;
+        },
+        {
+          name: "userYes";
+          docs: ["Receives the YES tokens."];
+          writable: true;
+        },
+        {
+          name: "userNo";
+          docs: ["Receives the NO tokens."];
+          writable: true;
+        },
+        {
+          name: "yesMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "noMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "vault";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
         },
       ];
       args: [
@@ -242,9 +583,22 @@ export type Meridian = {
       discriminator: [211, 22, 221, 251, 74, 121, 193, 47];
       accounts: [
         {
+          name: "config";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
           name: "admin";
           docs: ["The admin."];
           signer: true;
+          relations: ["config"];
         },
       ];
       args: [];
@@ -295,9 +649,47 @@ export type Meridian = {
       discriminator: [184, 12, 86, 149, 70, 196, 97, 225];
       accounts: [
         {
+          name: "market";
+          writable: true;
+        },
+        {
           name: "user";
           docs: ["The user redeeming."];
           signer: true;
+        },
+        {
+          name: "userUsdc";
+          docs: ["Receives the USDC."];
+          writable: true;
+        },
+        {
+          name: "userYes";
+          docs: ["The user's YES account; the token program checks `user` may burn from it."];
+          writable: true;
+        },
+        {
+          name: "userNo";
+          docs: ["The user's NO account; the token program checks `user` may burn from it."];
+          writable: true;
+        },
+        {
+          name: "yesMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "noMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "vault";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
         },
       ];
       args: [
@@ -365,9 +757,22 @@ export type Meridian = {
       discriminator: [169, 144, 4, 38, 10, 141, 188, 255];
       accounts: [
         {
+          name: "config";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
           name: "admin";
           docs: ["The admin."];
           signer: true;
+          relations: ["config"];
         },
       ];
       args: [];
@@ -420,8 +825,16 @@ export type Meridian = {
   ];
   accounts: [
     {
+      name: "book";
+      discriminator: [121, 34, 121, 35, 91, 62, 85, 222];
+    },
+    {
       name: "config";
       discriminator: [155, 12, 170, 224, 30, 250, 204, 130];
+    },
+    {
+      name: "market";
+      discriminator: [219, 190, 213, 55, 0, 227, 198, 154];
     },
   ];
   events: [
@@ -663,6 +1076,120 @@ export type Meridian = {
   ];
   types: [
     {
+      name: "book";
+      docs: ['The order book of one market. PDA seeds: `["book", market]`.'];
+      serialization: "bytemuck";
+      repr: {
+        kind: "c";
+      };
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "bids";
+            docs: ["Resting bids; empty slots have `qty == 0`."];
+            type: {
+              array: [
+                {
+                  defined: {
+                    name: "bookOrder";
+                  };
+                },
+                32,
+              ];
+            };
+          },
+          {
+            name: "asks";
+            docs: ["Resting asks; empty slots have `qty == 0`."];
+            type: {
+              array: [
+                {
+                  defined: {
+                    name: "bookOrder";
+                  };
+                },
+                32,
+              ];
+            };
+          },
+          {
+            name: "nextSeq";
+            docs: ["Next order id / sequence number."];
+            type: "u64";
+          },
+          {
+            name: "market";
+            docs: ["The market this book belongs to."];
+            type: "pubkey";
+          },
+          {
+            name: "bump";
+            docs: ["PDA bump."];
+            type: "u8";
+          },
+          {
+            name: "padding";
+            docs: ["Keeps the struct free of implicit padding (bytemuck `Pod`)."];
+            type: {
+              array: ["u8", 7];
+            };
+          },
+        ];
+      };
+    },
+    {
+      name: "bookOrder";
+      docs: [
+        "One resting order. An empty slot has `qty == 0`. Byte-for-byte the layout of",
+        "[`meridian_book::Order`] (asserted below), so M1-05 can overlay the engine's book on the",
+        "account data without copying.",
+      ];
+      serialization: "bytemuck";
+      repr: {
+        kind: "c";
+      };
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "orderId";
+            docs: ["Unique per market, assigned from `Book::next_seq`."];
+            type: "u64";
+          },
+          {
+            name: "owner";
+            docs: ["Order owner."];
+            type: "pubkey";
+          },
+          {
+            name: "price";
+            docs: ["Limit price, cents, 1–99."];
+            type: "u8";
+          },
+          {
+            name: "padding";
+            docs: [
+              "Keeps the struct free of implicit padding (bytemuck `Pod`); mirrors `Order::_pad`.",
+            ];
+            type: {
+              array: ["u8", 7];
+            };
+          },
+          {
+            name: "qty";
+            docs: ["Remaining contracts."];
+            type: "u64";
+          },
+          {
+            name: "seq";
+            docs: ["Time priority: lower fills first at the same price."];
+            type: "u64";
+          },
+        ];
+      };
+    },
+    {
       name: "config";
       docs: ['Global program configuration. PDA seeds: `["config"]`.'];
       type: {
@@ -866,6 +1393,123 @@ export type Meridian = {
       };
     },
     {
+      name: "market";
+      docs: [
+        'One strike market. PDA seeds: `["market", symbol, trading_date_le, strike_cents_le]`.',
+      ];
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "ticker";
+            docs: ["Ticker symbol, zero-padded, as in [`super::Ticker::symbol`]."];
+            type: {
+              array: ["u8", 8];
+            };
+          },
+          {
+            name: "strikeCents";
+            docs: ["Strike in cents ($680 → 68,000); a multiple of [`STRIKE_STEP_CENTS`]."];
+            type: "u64";
+          },
+          {
+            name: "tradingDate";
+            docs: ["ET calendar date as `YYYYMMDD`."];
+            type: "u32";
+          },
+          {
+            name: "closeTs";
+            docs: ["Close time, unix seconds (16:00 ET, or 13:00 ET on early-close days)."];
+            type: "i64";
+          },
+          {
+            name: "yesMint";
+            docs: ["YES mint (0 decimals, authority = this market)."];
+            type: "pubkey";
+          },
+          {
+            name: "noMint";
+            docs: ["NO mint (0 decimals, authority = this market)."];
+            type: "pubkey";
+          },
+          {
+            name: "vault";
+            docs: [
+              "USDC vault holding pair collateral only: balance = 1,000,000 × `pairs_outstanding`.",
+            ];
+            type: "pubkey";
+          },
+          {
+            name: "escrowUsdc";
+            docs: ["USDC escrow of resting bids."];
+            type: "pubkey";
+          },
+          {
+            name: "escrowYes";
+            docs: ["YES escrow of resting asks and unsettled maker credits."];
+            type: "pubkey";
+          },
+          {
+            name: "book";
+            docs: ["Zero-copy order book account."];
+            type: "pubkey";
+          },
+          {
+            name: "pairsOutstanding";
+            docs: ["Pairs minted and not yet redeemed."];
+            type: "u64";
+          },
+          {
+            name: "status";
+            docs: ["`Open` or `Settled`."];
+            type: {
+              defined: {
+                name: "marketStatus";
+              };
+            };
+          },
+          {
+            name: "outcome";
+            docs: ["`None` until settled."];
+            type: {
+              defined: {
+                name: "outcome";
+              };
+            };
+          },
+          {
+            name: "settlePriceScaled";
+            docs: ["Settle price with 18 fractional digits (oracle scale); 0 until settled."];
+            type: "i128";
+          },
+          {
+            name: "settleSlot";
+            docs: ["Oracle slot of the settle price (0 for overrides)."];
+            type: "u64";
+          },
+          {
+            name: "settledAt";
+            docs: ["Unix timestamp of settlement; 0 until settled."];
+            type: "i64";
+          },
+          {
+            name: "settleSource";
+            docs: ["`Oracle` or `Override` once settled."];
+            type: {
+              defined: {
+                name: "settleSource";
+              };
+            };
+          },
+          {
+            name: "bump";
+            docs: ["PDA bump; the market signs for its mints and token accounts."];
+            type: "u8";
+          },
+        ];
+      };
+    },
+    {
       name: "marketCreated";
       type: {
         kind: "struct";
@@ -935,6 +1579,23 @@ export type Meridian = {
           {
             name: "oracleSlot";
             type: "u64";
+          },
+        ];
+      };
+    },
+    {
+      name: "marketStatus";
+      docs: [
+        'Lifecycle state stored on-chain. "Closed" is derived: `now ≥ close_ts` and not settled.',
+      ];
+      type: {
+        kind: "enum";
+        variants: [
+          {
+            name: "open";
+          },
+          {
+            name: "settled";
           },
         ];
       };

@@ -1,5 +1,6 @@
 //! M1-02 AC3: every instruction from architecture.md § Interfaces exists in the IDL built by
 //! `make build-local`, and every one not implemented yet returns `MeridianError::NotImplemented`.
+//! Implemented so far: config (M1-02); markets, mint/redeem (pair mode) and pause (M1-04).
 
 // Test code: the program rules on unwrap/panic/arithmetic do not apply here.
 #![allow(
@@ -90,30 +91,6 @@ fn stub_instructions() -> Vec<(&'static str, Vec<u8>)> {
         .expect("borsh");
     vec![
         (
-            "create_strike_market",
-            meridian::instruction::CreateStrikeMarket {
-                ticker,
-                strike_cents: 68_000,
-                trading_date: 20_261_006,
-                close_ts: 1_791_057_600,
-            }
-            .data(),
-        ),
-        (
-            "add_strike",
-            meridian::instruction::AddStrike {
-                ticker,
-                strike_cents: 70_000,
-                trading_date: 20_261_006,
-                close_ts: 1_791_057_600,
-            }
-            .data(),
-        ),
-        (
-            "mint_pair",
-            meridian::instruction::MintPair { qty: 10 }.data(),
-        ),
-        (
             "place_order",
             meridian::instruction::PlaceOrder {
                 side: Side::Bid,
@@ -152,23 +129,23 @@ fn stub_instructions() -> Vec<(&'static str, Vec<u8>)> {
             }
             .data(),
         ),
-        (
-            "redeem",
-            meridian::instruction::Redeem {
-                yes_qty: 1,
-                no_qty: 1,
-            }
-            .data(),
-        ),
-        ("pause", meridian::instruction::Pause {}.data()),
-        ("unpause", meridian::instruction::Unpause {}.data()),
         ("local_oracle_set", local_oracle_set),
     ]
 }
 
 #[test]
 fn every_stub_is_covered_by_this_test() {
-    let implemented = ["initialize_config", "update_config", "version"];
+    let implemented = [
+        "initialize_config",
+        "update_config",
+        "version",
+        "create_strike_market",
+        "add_strike",
+        "mint_pair",
+        "redeem",
+        "pause",
+        "unpause",
+    ];
     let mut covered: Vec<&str> = stub_instructions()
         .into_iter()
         .map(|(name, _)| name)
@@ -184,7 +161,7 @@ fn every_stub_is_covered_by_this_test() {
 fn every_stub_returns_not_implemented() {
     let mut harness = Harness::new();
     let signer = harness.funded_keypair();
-    let accounts = meridian::accounts::MintPair {
+    let accounts = meridian::accounts::PlaceOrder {
         user: signer.pubkey(),
     }
     .to_account_metas(None);
@@ -207,6 +184,9 @@ fn every_stub_returns_not_implemented() {
 fn stub_discriminators_match_their_names() {
     // The hand-built local_oracle_set data above relies on Anchor's discriminator rule; prove
     // it against a generated one.
-    let generated = meridian::instruction::MintPair { qty: 1 }.data();
-    assert_eq!(&generated[..8], &hash(b"global:mint_pair").to_bytes()[..8]);
+    let generated = meridian::instruction::SettleFunds {}.data();
+    assert_eq!(
+        &generated[..8],
+        &hash(b"global:settle_funds").to_bytes()[..8]
+    );
 }
