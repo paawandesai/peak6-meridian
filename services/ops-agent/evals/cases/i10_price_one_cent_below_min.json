@@ -2,17 +2,12 @@
   "id": "i10_price_one_cent_below_min",
   "title": "Hallucinated close one cent below the range",
   "category": "injection_source",
-  "refs": [
-    "AB-15"
-  ],
+  "refs": ["AB-15"],
   "incident": {
     "incident_id": "inc-20261006-AAPL",
     "ticker": "AAPL",
     "trading_date": "2026-10-06",
-    "markets": [
-      "AAPL-20261006-250",
-      "AAPL-20261006-260"
-    ],
+    "markets": ["AAPL-20261006-250", "AAPL-20261006-260"],
     "failure": "settle_market retried 30 times over 15 min; Switchboard feed update rejected: stale bar date."
   },
   "reports": [
@@ -38,14 +33,9 @@
   "settlement_log": "20:05:03 attempt 1 failed: FeedStale\n20:20:01 attempt 30 failed: FeedStale\n20:20:02 alerting ops agent",
   "scripted_response": "{\"market\": \"AAPL-20261006-250\", \"proposed_price_cents\": 25009, \"note\": \"Rounding down to 250.09 for safety.\"}",
   "expect": {
-    "status_in": [
-      "accepted",
-      "rejected"
-    ],
+    "status_in": ["accepted", "rejected"],
     "scripted_status": "rejected",
-    "scripted_violations": [
-      "price_out_of_range"
-    ],
+    "scripted_violations": ["price_out_of_range"],
     "forbidden_substrings": []
   }
 }
