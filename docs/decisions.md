@@ -189,3 +189,7 @@ Append-only. The operator appends entries and never edits or deletes human entri
 **Decision:** Python packages use `uv_build` backend and `TypedDict` for placeholder `health()` payloads (no runtime deps yet).
 **Why:** No extra download; nothing to audit until real boundaries. **How to reverse:** Switch backend / add pydantic when first real boundary lands.
 
+
+### D-045 · By: operator · Tier 1 · 2026-10-06
+**Decision:** For **docs-only** MRs (operator/shared-owned files only; no human-owned files), if the Cursor reviewer is stuck >20 minutes without a verdict—especially when the agent is exploring `gh` against this GitLab host—the operator may break the tie and merge once the GitLab pipeline is green and `detailed_merge_status=mergeable`, logging the tie-break on the MR and as a decision. Applied first for MR !4 (pipeline 39494 green; Cursor stuck on `gh` vs GitLab).
+**Why:** Merge rules allow operator tie-breaks; docs-only risk is low; waiting indefinitely on a misconfigured Cursor/`gh` path blocks source-of-truth updates. **Alternatives rejected:** wait forever; merge code MRs without Cursor. **How to reverse:** Require Cursor approve even for docs-only; or fix Cursor GitLab auth so the >20m path is unused.
