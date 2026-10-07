@@ -1867,6 +1867,7 @@ dependencies = [
  "bytemuck",
  "litesvm",
  "meridian-book",
+ "proptest",
  "solana-sdk",
 ]
 
@@ -2563,6 +2564,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "base64 0.22.1",
+ "bytemuck",
  "litesvm",
  "meridian",
  "meridian-book",
