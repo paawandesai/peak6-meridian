@@ -148,9 +148,13 @@ audit:deps:
     - make audit
 
 # ---- test ---------------------------------------------------------------------------------
+# Cold first builds (empty cargo/toolchain caches) can take 40–60+ min of Rust compile on the
+# small runner; warm runs are much faster. Job timeout 2h covers first-pipeline cold install
+# without raising every lightweight check job.
 test:
   stage: test
   extends: .on-mr-and-main
+  timeout: 2 hours
   variables:
     TOOLCHAIN: apt rust solana anchor node uv
     CACHE_GROUP: sbf
@@ -166,6 +170,7 @@ test:
 coverage:
   stage: test
   extends: .on-mr-and-main
+  timeout: 2 hours
   variables:
     TOOLCHAIN: apt rust cargo-llvm-cov node uv
     CACHE_GROUP: coverage
@@ -185,6 +190,7 @@ coverage:
 e2e:
   stage: e2e
   extends: .on-mr-and-main
+  timeout: 2 hours
   tags:
     - heavy
   variables:
