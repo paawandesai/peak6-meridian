@@ -144,8 +144,9 @@ def test_violation_details_never_echo_the_offending_text() -> None:
     for draft in (hostile_note, hostile_source):
         result = validate_draft(draft, evidence)
         assert not result.ok
+        assert "sk-ant" not in result.model_dump_json()
         for violation in result.violations:
-            assert secret not in violation.detail and "sk-ant" not in violation.detail
+            assert secret not in violation.detail
 
 
 def test_source_names_are_scanned_at_construction() -> None:
