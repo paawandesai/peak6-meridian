@@ -1,0 +1,192 @@
+{
+  "slot": 412345678,
+  "oracles": [
+    "FPsYb9PRZ5iG6F6T7phJmCowgsJpM1fDWLhgW6FEkWzU",
+    "BVwKeMYakRAnDiht9n4HHK4c2V8Fxjxb7hnEhVVSt6P1",
+    "9v5s7i4uVXr5PP6P4EhJ3mKZxFR5r5je3QG69pSMUyNH"
+  ],
+  "responses": {
+    "https://api.tiingo.com/tiingo/daily/aapl/prices": [
+      {
+        "date": "2026-10-05T00:00:00.000Z",
+        "close": 254.43,
+        "high": 256.53,
+        "low": 252.53,
+        "open": 253.93,
+        "volume": 41234567,
+        "adjClose": 254.43,
+        "adjHigh": 256.53,
+        "adjLow": 252.53,
+        "adjOpen": 253.93,
+        "adjVolume": 41234567,
+        "divCash": 0,
+        "splitFactor": 1
+      }
+    ],
+    "https://api.twelvedata.com/eod?symbol=AAPL&exchange=NASDAQ": {
+      "symbol": "AAPL",
+      "exchange": "NASDAQ",
+      "mic_code": "XNGS",
+      "currency": "USD",
+      "datetime": "2026-10-05",
+      "timestamp": 1759694400,
+      "close": "254.43"
+    },
+    "https://api.tiingo.com/tiingo/daily/msft/prices": [
+      {
+        "date": "2026-10-05T00:00:00.000Z",
+        "close": 517.35,
+        "high": 519.45,
+        "low": 515.45,
+        "open": 516.85,
+        "volume": 41234567,
+        "adjClose": 517.35,
+        "adjHigh": 519.45,
+        "adjLow": 515.45,
+        "adjOpen": 516.85,
+        "adjVolume": 41234567,
+        "divCash": 0,
+        "splitFactor": 1
+      }
+    ],
+    "https://api.twelvedata.com/eod?symbol=MSFT&exchange=NASDAQ": {
+      "symbol": "MSFT",
+      "exchange": "NASDAQ",
+      "mic_code": "XNGS",
+      "currency": "USD",
+      "datetime": "2026-10-05",
+      "timestamp": 1759694400,
+      "close": "517.35"
+    },
+    "https://api.tiingo.com/tiingo/daily/googl/prices": [
+      {
+        "date": "2026-10-05T00:00:00.000Z",
+        "close": 245.35,
+        "high": 247.45,
+        "low": 243.45,
+        "open": 244.85,
+        "volume": 41234567,
+        "adjClose": 245.35,
+        "adjHigh": 247.45,
+        "adjLow": 243.45,
+        "adjOpen": 244.85,
+        "adjVolume": 41234567,
+        "divCash": 0,
+        "splitFactor": 1
+      }
+    ],
+    "https://api.twelvedata.com/eod?symbol=GOOGL&exchange=NASDAQ": {
+      "symbol": "GOOGL",
+      "exchange": "NASDAQ",
+      "mic_code": "XNGS",
+      "currency": "USD",
+      "datetime": "2026-10-05",
+      "timestamp": 1759694400,
+      "close": "245.35"
+    },
+    "https://api.tiingo.com/tiingo/daily/amzn/prices": [
+      {
+        "date": "2026-10-05T00:00:00.000Z",
+        "close": 219.51,
+        "high": 221.61,
+        "low": 217.61,
+        "open": 219.01,
+        "volume": 41234567,
+        "adjClose": 219.51,
+        "adjHigh": 221.61,
+        "adjLow": 217.61,
+        "adjOpen": 219.01,
+        "adjVolume": 41234567,
+        "divCash": 0,
+        "splitFactor": 1
+      }
+    ],
+    "https://api.twelvedata.com/eod?symbol=AMZN&exchange=NASDAQ": {
+      "symbol": "AMZN",
+      "exchange": "NASDAQ",
+      "mic_code": "XNGS",
+      "currency": "USD",
+      "datetime": "2026-10-05",
+      "timestamp": 1759694400,
+      "close": "219.52"
+    },
+    "https://api.tiingo.com/tiingo/daily/nvda/prices": [
+      {
+        "date": "2026-10-05T00:00:00.000Z",
+        "close": 187.62,
+        "high": 189.72,
+        "low": 185.72,
+        "open": 187.12,
+        "volume": 41234567,
+        "adjClose": 187.62,
+        "adjHigh": 189.72,
+        "adjLow": 185.72,
+        "adjOpen": 187.12,
+        "adjVolume": 41234567,
+        "divCash": 0,
+        "splitFactor": 1
+      }
+    ],
+    "https://api.twelvedata.com/eod?symbol=NVDA&exchange=NASDAQ": {
+      "symbol": "NVDA",
+      "exchange": "NASDAQ",
+      "mic_code": "XNGS",
+      "currency": "USD",
+      "datetime": "2026-10-05",
+      "timestamp": 1759694400,
+      "close": "187.62"
+    },
+    "https://api.tiingo.com/tiingo/daily/meta/prices": [
+      {
+        "date": "2026-10-05T00:00:00.000Z",
+        "close": 715.66,
+        "high": 717.76,
+        "low": 713.76,
+        "open": 715.16,
+        "volume": 41234567,
+        "adjClose": 715.66,
+        "adjHigh": 717.76,
+        "adjLow": 713.76,
+        "adjOpen": 715.16,
+        "adjVolume": 41234567,
+        "divCash": 0,
+        "splitFactor": 1
+      }
+    ],
+    "https://api.twelvedata.com/eod?symbol=META&exchange=NASDAQ": {
+      "symbol": "META",
+      "exchange": "NASDAQ",
+      "mic_code": "XNGS",
+      "currency": "USD",
+      "datetime": "2026-10-05",
+      "timestamp": 1759694400,
+      "close": "715.66"
+    },
+    "https://api.tiingo.com/tiingo/daily/tsla/prices": [
+      {
+        "date": "2026-10-05T00:00:00.000Z",
+        "close": 453.25,
+        "high": 455.35,
+        "low": 451.35,
+        "open": 452.75,
+        "volume": 41234567,
+        "adjClose": 453.25,
+        "adjHigh": 455.35,
+        "adjLow": 451.35,
+        "adjOpen": 452.75,
+        "adjVolume": 41234567,
+        "divCash": 0,
+        "splitFactor": 1
+      }
+    ],
+    "https://api.twelvedata.com/eod?symbol=TSLA&exchange=NASDAQ": {
+      "symbol": "TSLA",
+      "exchange": "NASDAQ",
+      "mic_code": "XNGS",
+      "currency": "USD",
+      "datetime": "2026-10-05",
+      "timestamp": 1759694400,
+      "close": "453.25"
+    }
+  }
+}
