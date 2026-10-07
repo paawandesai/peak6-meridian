@@ -3,13 +3,18 @@
 # The runner is small (1 vCPU, 2 GB RAM), so each job installs only the toolchain components it
 # needs (TOOLCHAIN) and caches what is slow to rebuild. GitLab caches only paths inside the
 # project, so scripts/ci/link-cache.sh symlinks the tool directories under $HOME into .ci-cache/.
+#
+# Merge-request pipelines are manual: they are created but blocked at `ci:run` until the operator
+# plays it (operator-rules §6). Main-branch and scheduled pipelines run automatically.
 
 stages:
+  - .pre
   - check
   - test
   - e2e
 
-# Merge-request pipelines, pushes to main and schedules; no duplicate branch pipelines.
+# Merge-request pipelines (manual, gated by ci:run), pushes to main and schedules; no duplicate
+# branch pipelines.
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -27,6 +32,8 @@ variables:
 
 default:
   image: ubuntu:24.04
+  # A newer push auto-cancels superseded pipelines' jobs.
+  interruptible: true
   before_script:
     - scripts/ci/link-cache.sh
     - scripts/toolchain.sh $TOOLCHAIN
@@ -80,6 +87,26 @@ default:
 .on-mr-and-main:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
+
+# ---- manual MR gate ------------------------------------------------------------------------
+# MR pipelines are created but blocked here (operator-rules §6). The operator plays this ONE job
+# on the ready head (after local tests + Cursor review); every later stage waits on it through
+# normal stage ordering, so the rest of the pipeline runs automatically. Main-branch and
+# scheduled pipelines have no gate and run as before.
+# Trigger: MR -> Pipelines -> play `ci:run`, or `timeout 30 glab ci trigger <job-id>` /
+# `timeout 30 glab api -X POST projects/2084/jobs/<job-id>/play`.
+ci:run:
+  stage: .pre
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: false
+  variables:
+    GIT_STRATEGY: none
+  before_script: []
+  cache: []
+  script:
+    - echo "Manual MR pipeline started for $CI_COMMIT_SHA"
 
 # ---- check --------------------------------------------------------------------------------
 # Human-owned files change only with the `human-approved` label. Adding the label does not
