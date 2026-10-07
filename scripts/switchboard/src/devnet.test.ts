@@ -14,7 +14,7 @@ import {
   type SwitchboardClient,
 } from "./devnet";
 import { loadFeedDefinitions, type FeedDefinition } from "./feeds";
-import { computeFeedHash } from "./spike";
+import { computeFeedHash, runSpike } from "./spike";
 import { fakeClient } from "./test-fakes";
 
 const defs = loadFeedDefinitions(DEFAULT_FEEDS_DIR);
@@ -127,6 +127,22 @@ describe("liveSimulator", () => {
     );
     await expect(run).rejects.toThrow("echo [redacted]");
     await expect(run).rejects.not.toThrow(SECRET);
+  });
+
+  it("never puts a key in the printed spike report when fetchUpdate throws", async () => {
+    const client = fake({
+      fetchUpdate: () =>
+        Promise.reject(new Error(`POST failed, body: {"TIINGO_API_KEY":"${SECRET}"}`)),
+    });
+    const report = await runSpike({
+      mode: "devnet",
+      queue: DEVNET_QUEUE,
+      defs: [aaplTiingo],
+      simulator: liveSimulator({ client, feeds, variableOverrides }),
+    });
+    const printed = JSON.stringify(report);
+    expect(printed).not.toContain(SECRET);
+    expect(printed).toContain("[redacted]");
   });
 
   it("returns redacted per-oracle errors alongside successes", async () => {
