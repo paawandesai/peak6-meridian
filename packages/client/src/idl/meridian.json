@@ -1,0 +1,1203 @@
+{
+  "address": "3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq",
+  "metadata": {
+    "name": "meridian",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Meridian on-chain program"
+  },
+  "instructions": [
+    {
+      "name": "add_strike",
+      "docs": ["Admin adds a strike before close (FR-03). Stub until M1-04."],
+      "discriminator": [226, 190, 94, 4, 5, 106, 15, 120],
+      "accounts": [
+        {
+          "name": "admin",
+          "docs": ["The admin."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "ticker",
+          "type": {
+            "array": ["u8", 8]
+          }
+        },
+        {
+          "name": "strike_cents",
+          "type": "u64"
+        },
+        {
+          "name": "trading_date",
+          "type": "u32"
+        },
+        {
+          "name": "close_ts",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "admin_settle_override",
+      "docs": ["Admin settlement with a manual price after the delay (FR-09). Stub until M1-07."],
+      "discriminator": [92, 131, 189, 52, 161, 70, 203, 95],
+      "accounts": [
+        {
+          "name": "admin",
+          "docs": ["The admin."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "settle_price_cents",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "buy_no",
+      "docs": ["Mint pair + sell YES (FR-06). Stub until M1-06."],
+      "discriminator": [89, 240, 244, 16, 196, 201, 190, 163],
+      "accounts": [
+        {
+          "name": "user",
+          "docs": ["The user buying NO."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "qty",
+          "type": "u64"
+        },
+        {
+          "name": "price",
+          "type": "u8"
+        },
+        {
+          "name": "kind",
+          "type": {
+            "defined": {
+              "name": "OrderKind"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "cancel_order",
+      "docs": ["Cancels the owner's resting order (FR-05). Stub until M1-05."],
+      "discriminator": [95, 129, 237, 240, 8, 49, 223, 132],
+      "accounts": [
+        {
+          "name": "owner",
+          "docs": ["The order owner."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "order_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "create_strike_market",
+      "docs": ["Automation authority creates one strike market (FR-02). Stub until M1-04."],
+      "discriminator": [21, 162, 50, 119, 68, 218, 221, 35],
+      "accounts": [
+        {
+          "name": "automation_authority",
+          "docs": ["The automation authority (D-030)."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "ticker",
+          "type": {
+            "array": ["u8", 8]
+          }
+        },
+        {
+          "name": "strike_cents",
+          "type": "u64"
+        },
+        {
+          "name": "trading_date",
+          "type": "u32"
+        },
+        {
+          "name": "close_ts",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_config",
+      "docs": ["Creates the config; the payer becomes the admin (FR-01)."],
+      "discriminator": [208, 127, 21, 1, 194, 190, 196, 70],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "docs": ["The deployer; becomes the admin."],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "usdc_mint",
+          "docs": ["Test-USDC mint; must have 6 decimals (domain.md § Units)."]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "ConfigParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "local_oracle_set",
+      "docs": ["Test-only oracle writer; never in devnet builds (D-028, AB-22). Stub until M1-07."],
+      "discriminator": [91, 149, 169, 250, 188, 137, 130, 242],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": ["The local oracle writer (test only)."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "ticker",
+          "type": {
+            "array": ["u8", 8]
+          }
+        },
+        {
+          "name": "source_slot",
+          "type": "u8"
+        },
+        {
+          "name": "value",
+          "type": "i128"
+        },
+        {
+          "name": "slot",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "mint_pair",
+      "docs": ["Deposits `qty` USDC and mints `qty` YES + `qty` NO (FR-04). Stub until M1-04."],
+      "discriminator": [19, 149, 94, 110, 181, 186, 33, 107],
+      "accounts": [
+        {
+          "name": "user",
+          "docs": ["The user depositing USDC."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "qty",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "pause",
+      "docs": ["Global pause (FR-11). Stub until M1-04."],
+      "discriminator": [211, 22, 221, 251, 74, 121, 193, 47],
+      "accounts": [
+        {
+          "name": "admin",
+          "docs": ["The admin."],
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "place_order",
+      "docs": ["Places a YES bid or ask, limit or IOC (FR-05). Stub until M1-05."],
+      "discriminator": [51, 194, 155, 175, 109, 130, 96, 106],
+      "accounts": [
+        {
+          "name": "user",
+          "docs": ["The order owner."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "side",
+          "type": {
+            "defined": {
+              "name": "Side"
+            }
+          }
+        },
+        {
+          "name": "price",
+          "type": "u8"
+        },
+        {
+          "name": "qty",
+          "type": "u64"
+        },
+        {
+          "name": "kind",
+          "type": {
+            "defined": {
+              "name": "OrderKind"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "redeem",
+      "docs": [
+        "Pair redeem before settlement, winner redeem after (FR-10). Stub until M1-04 / M1-07."
+      ],
+      "discriminator": [184, 12, 86, 149, 70, 196, 97, 225],
+      "accounts": [
+        {
+          "name": "user",
+          "docs": ["The user redeeming."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "yes_qty",
+          "type": "u64"
+        },
+        {
+          "name": "no_qty",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "sell_no",
+      "docs": ["IOC buy YES with a price cap + pair redeem (FR-07). Stub until M1-06."],
+      "discriminator": [189, 194, 132, 42, 80, 249, 154, 103],
+      "accounts": [
+        {
+          "name": "user",
+          "docs": ["The user selling NO."],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "qty",
+          "type": "u64"
+        },
+        {
+          "name": "price",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "settle_funds",
+      "docs": ["Withdraws the owner's free balances (FR-12, D-029). Stub until M1-05."],
+      "discriminator": [238, 64, 163, 96, 75, 171, 16, 33],
+      "accounts": [
+        {
+          "name": "owner",
+          "docs": ["The open orders owner."],
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "settle_market",
+      "docs": ["Permissionless settlement from the two oracle feeds (FR-08). Stub until M1-07."],
+      "discriminator": [193, 153, 95, 216, 166, 6, 144, 217],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": ["Anyone: settlement is permissionless (D-030)."],
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "unpause",
+      "docs": ["Lifts the global pause (FR-11). Stub until M1-04."],
+      "discriminator": [169, 144, 4, 38, 10, 141, 188, 255],
+      "accounts": [
+        {
+          "name": "admin",
+          "docs": ["The admin."],
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_config",
+      "docs": ["Admin replaces every configurable field except the admin itself (FR-01, AB-06)."],
+      "discriminator": [29, 158, 252, 191, 10, 83, 219, 99],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": ["config"]
+        },
+        {
+          "name": "usdc_mint",
+          "docs": ["Test-USDC mint; must have 6 decimals (domain.md § Units)."]
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "ConfigParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "version",
+      "docs": ["Logs the crate version. Kept until M1-10: the e2e placeholder calls it."],
+      "discriminator": [118, 65, 195, 198, 129, 216, 252, 192],
+      "accounts": [],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [155, 12, 170, 224, 30, 250, 204, 130]
+    }
+  ],
+  "events": [
+    {
+      "name": "ConfigInitialized",
+      "discriminator": [181, 49, 200, 156, 19, 167, 178, 91]
+    },
+    {
+      "name": "ConfigUpdated",
+      "discriminator": [40, 241, 230, 122, 11, 19, 198, 194]
+    },
+    {
+      "name": "Fill",
+      "discriminator": [78, 225, 199, 154, 86, 219, 224, 169]
+    },
+    {
+      "name": "FundsSettled",
+      "discriminator": [24, 77, 58, 215, 113, 149, 47, 216]
+    },
+    {
+      "name": "MarketCreated",
+      "discriminator": [88, 184, 130, 231, 226, 84, 6, 58]
+    },
+    {
+      "name": "MarketSettled",
+      "discriminator": [237, 212, 22, 175, 201, 117, 215, 99]
+    },
+    {
+      "name": "OrderCancelled",
+      "discriminator": [108, 56, 128, 68, 168, 113, 168, 239]
+    },
+    {
+      "name": "OrderPlaced",
+      "discriminator": [96, 130, 204, 234, 169, 219, 216, 227]
+    },
+    {
+      "name": "PairsMinted",
+      "discriminator": [108, 154, 184, 215, 50, 138, 35, 141]
+    },
+    {
+      "name": "Paused",
+      "discriminator": [172, 248, 5, 253, 49, 255, 255, 232]
+    },
+    {
+      "name": "Redeemed",
+      "discriminator": [14, 29, 183, 71, 31, 165, 107, 38]
+    },
+    {
+      "name": "Unpaused",
+      "discriminator": [156, 150, 47, 174, 120, 216, 93, 117]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotImplemented",
+      "msg": "Instruction not implemented yet"
+    },
+    {
+      "code": 6001,
+      "name": "AdminOnly",
+      "msg": "Signer is not the admin"
+    },
+    {
+      "code": 6002,
+      "name": "AutomationOnly",
+      "msg": "Signer is not the automation authority"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidUsdcMint",
+      "msg": "USDC mint must have 6 decimals"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidTickerSymbol",
+      "msg": "Ticker symbol must be non-empty upper-case ASCII, zero-padded"
+    },
+    {
+      "code": 6005,
+      "name": "DuplicateTickerSymbol",
+      "msg": "Ticker symbols must be unique"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidTickerSlot",
+      "msg": "Ticker slot index must be below 7"
+    },
+    {
+      "code": 6007,
+      "name": "DuplicateTickerSlot",
+      "msg": "A ticker slot is listed twice in one call"
+    },
+    {
+      "code": 6008,
+      "name": "TooManyTickerSlots",
+      "msg": "At most 6 ticker slots fit in one call"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidMaxStaleness",
+      "msg": "max_staleness_slots must be greater than zero"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidMaxConfBps",
+      "msg": "max_conf_bps must be between 1 and 10,000"
+    },
+    {
+      "code": 6011,
+      "name": "UnknownTicker",
+      "msg": "Ticker is not in the config"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidStrike",
+      "msg": "Strike must be a positive multiple of $10"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidTradingDate",
+      "msg": "Trading date must be a calendar date as YYYYMMDD"
+    },
+    {
+      "code": 6014,
+      "name": "CloseInThePast",
+      "msg": "Close time must be in the future"
+    },
+    {
+      "code": 6015,
+      "name": "MarketClosed",
+      "msg": "Market is closed: no minting or new orders at or after close_ts"
+    },
+    {
+      "code": 6016,
+      "name": "Paused",
+      "msg": "Trading is paused: no minting or new orders"
+    },
+    {
+      "code": 6017,
+      "name": "AlreadySettled",
+      "msg": "Market is already settled; the outcome never changes"
+    },
+    {
+      "code": 6018,
+      "name": "NotSettled",
+      "msg": "Market is not settled yet"
+    },
+    {
+      "code": 6019,
+      "name": "NotClosed",
+      "msg": "Market has not closed yet"
+    },
+    {
+      "code": 6020,
+      "name": "InvalidPrice",
+      "msg": "Price must be between 1 and 99 cents"
+    },
+    {
+      "code": 6021,
+      "name": "InvalidQuantity",
+      "msg": "Quantity must be at least 1 contract"
+    },
+    {
+      "code": 6022,
+      "name": "TooManyRestingOrders",
+      "msg": "Owner already has the maximum number of resting orders in this market"
+    },
+    {
+      "code": 6023,
+      "name": "BookFull",
+      "msg": "Book is full and the order does not beat the worst resting order"
+    },
+    {
+      "code": 6024,
+      "name": "OrderNotFound",
+      "msg": "Order not found"
+    },
+    {
+      "code": 6025,
+      "name": "NotOrderOwner",
+      "msg": "Signer does not own this order or balance"
+    },
+    {
+      "code": 6026,
+      "name": "InsufficientOpenOrdersBalance",
+      "msg": "Open orders balance is insufficient"
+    },
+    {
+      "code": 6027,
+      "name": "OracleWrongOwner",
+      "msg": "Oracle feed account is not owned by the Switchboard program"
+    },
+    {
+      "code": 6028,
+      "name": "OracleFeedHashMismatch",
+      "msg": "Oracle feed hash does not match the one pinned in the config"
+    },
+    {
+      "code": 6029,
+      "name": "OracleStale",
+      "msg": "Oracle value is older than max_staleness_slots"
+    },
+    {
+      "code": 6030,
+      "name": "OracleBeforeClose",
+      "msg": "Oracle value was produced before close_ts"
+    },
+    {
+      "code": 6031,
+      "name": "OracleSpreadTooWide",
+      "msg": "Oracle values differ by more than max_conf_bps"
+    },
+    {
+      "code": 6032,
+      "name": "OracleInvalidValue",
+      "msg": "Oracle value is not a valid price"
+    },
+    {
+      "code": 6033,
+      "name": "OverrideTooEarly",
+      "msg": "Override is not allowed before close_ts + override_delay_secs"
+    },
+    {
+      "code": 6034,
+      "name": "PairQuantityMismatch",
+      "msg": "Pair redeem needs equal YES and NO quantities before settlement"
+    },
+    {
+      "code": 6035,
+      "name": "NothingToRedeem",
+      "msg": "Nothing to redeem"
+    },
+    {
+      "code": 6036,
+      "name": "MathOverflow",
+      "msg": "Arithmetic overflow"
+    }
+  ],
+  "types": [
+    {
+      "name": "Config",
+      "docs": ["Global program configuration. PDA seeds: `[\"config\"]`."],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "docs": [
+              "Admin: config updates, pause, add strike, settlement override (D-026, D-030)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "automation_authority",
+            "docs": ["Creates the daily strike markets; can do nothing else (AB-19)."],
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "docs": ["Test-USDC mint (6 decimals) used as collateral everywhere."],
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "docs": ["Global pause: blocks minting, new orders, `buy_no` and `sell_no` only."],
+            "type": "bool"
+          },
+          {
+            "name": "max_staleness_slots",
+            "docs": ["Oracle values older than this many slots are rejected at settlement."],
+            "type": "u64"
+          },
+          {
+            "name": "max_conf_bps",
+            "docs": [
+              "Maximum spread between the two oracle values, in basis points of their mean."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "override_delay_secs",
+            "docs": ["Seconds after `close_ts` before `admin_settle_override` is allowed."],
+            "type": "u64"
+          },
+          {
+            "name": "tickers",
+            "docs": ["The MAG7 tickers with their feeds; unset slots have an all-zero symbol."],
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Ticker"
+                  }
+                },
+                7
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "docs": ["PDA bump."],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "automation_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigParams",
+      "docs": [
+        "Every configurable field (everything except `admin` and `paused`), as taken by",
+        "`initialize_config` and `update_config`. `usdc_mint` is passed as an account so its decimals",
+        "can be checked. Ticker slots not listed keep their value (empty after `initialize_config`);",
+        "a full set of seven therefore takes `initialize_config` plus one `update_config`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "automation_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "max_staleness_slots",
+            "type": "u64"
+          },
+          {
+            "name": "max_conf_bps",
+            "type": "u16"
+          },
+          {
+            "name": "override_delay_secs",
+            "type": "u64"
+          },
+          {
+            "name": "tickers",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "TickerSlot"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "automation_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Fill",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "taker",
+            "type": "pubkey"
+          },
+          {
+            "name": "price",
+            "type": "u8"
+          },
+          {
+            "name": "qty",
+            "type": "u64"
+          },
+          {
+            "name": "taker_side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "FundsSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc",
+            "type": "u64"
+          },
+          {
+            "name": "yes",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "ticker",
+            "type": {
+              "array": ["u8", 8]
+            }
+          },
+          {
+            "name": "strike_cents",
+            "type": "u64"
+          },
+          {
+            "name": "trading_date",
+            "type": "u32"
+          },
+          {
+            "name": "close_ts",
+            "type": "i64"
+          },
+          {
+            "name": "yes_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "no_mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "outcome",
+            "type": {
+              "defined": {
+                "name": "Outcome"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "type": "i128"
+          },
+          {
+            "name": "source",
+            "type": {
+              "defined": {
+                "name": "SettleSource"
+              }
+            }
+          },
+          {
+            "name": "oracle_slot",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderCancelled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "order_id",
+            "type": "u64"
+          },
+          {
+            "name": "qty",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderKind",
+      "docs": ["How an order behaves when it does not fill completely."],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Limit"
+          },
+          {
+            "name": "Ioc"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderPlaced",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "order_id",
+            "type": "u64"
+          },
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "type": "u8"
+          },
+          {
+            "name": "qty",
+            "type": "u64"
+          },
+          {
+            "name": "rested_qty",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Outcome",
+      "docs": ["Binary outcome, written once at settlement and never changed (invariant 4)."],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "None"
+          },
+          {
+            "name": "Yes"
+          },
+          {
+            "name": "No"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairsMinted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "qty",
+            "type": "u64"
+          },
+          {
+            "name": "pairs_outstanding",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Paused",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Redeemed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "user",
+            "type": "pubkey"
+          },
+          {
+            "name": "yes_qty",
+            "type": "u64"
+          },
+          {
+            "name": "no_qty",
+            "type": "u64"
+          },
+          {
+            "name": "usdc",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SettleSource",
+      "docs": ["Who settled the market."],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "None"
+          },
+          {
+            "name": "Oracle"
+          },
+          {
+            "name": "Override"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Side",
+      "docs": ["Side of the single YES-vs-USDC book."],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Bid"
+          },
+          {
+            "name": "Ask"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ticker",
+      "docs": ["A ticker and its two oracle feeds (one per data source), pinned by feed hash."],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "symbol",
+            "docs": ["Upper-case ASCII symbol, zero-padded (e.g. `b\"META\\0\\0\\0\\0\"`)."],
+            "type": {
+              "array": ["u8", 8]
+            }
+          },
+          {
+            "name": "feeds",
+            "docs": ["Switchboard feed accounts, index 0 = Tiingo, index 1 = Twelve Data."],
+            "type": {
+              "array": ["pubkey", 2]
+            }
+          },
+          {
+            "name": "feed_hashes",
+            "docs": ["Feed hashes pinned for the accounts above, same order."],
+            "type": {
+              "array": [
+                {
+                  "array": ["u8", 32]
+                },
+                2
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "TickerSlot",
+      "docs": ["One ticker slot to write: `index` is the position in [`Config::tickers`]."],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "index",
+            "type": "u8"
+          },
+          {
+            "name": "ticker",
+            "type": {
+              "defined": {
+                "name": "Ticker"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Unpaused",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
+}
