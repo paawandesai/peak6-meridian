@@ -92,14 +92,26 @@ describe("spike --dry-run (AC2)", () => {
     expect(printed.includes(TIINGO) || printed.includes(TWELVE)).toBe(false);
   });
 
-  it("the spike.ts entry point runs in a subprocess with --dry-run", () => {
-    const out = execFileSync(
-      process.execPath,
-      ["--import", "tsx", resolve(REPO_ROOT, "scripts/switchboard/spike.ts"), "--dry-run"],
-      { cwd: REPO_ROOT, encoding: "utf8", env: { PATH: process.env["PATH"] ?? "" } },
-    );
-    expect((JSON.parse(out) as SpikeReport).ok).toBe(true);
-  });
+  // Cold-start of spike.ts via tsx + Switchboard SDK (heavier after OQ-12(b)
+  // bigint-buffer override) regularly exceeds vitest's 5s default when CI runs
+  // test+coverage on the same runner. Keep a hard child timeout below the test budget.
+  it(
+    "the spike.ts entry point runs in a subprocess with --dry-run",
+    () => {
+      const out = execFileSync(
+        process.execPath,
+        ["--import", "tsx", resolve(REPO_ROOT, "scripts/switchboard/spike.ts"), "--dry-run"],
+        {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          env: { PATH: process.env["PATH"] ?? "" },
+          timeout: 55_000,
+        },
+      );
+      expect((JSON.parse(out) as SpikeReport).ok).toBe(true);
+    },
+    60_000,
+  );
 
   it("exits non-zero when the fixture sources disagree", async () => {
     const dir = mkdtempSync(join(tmpdir(), "spike-"));
