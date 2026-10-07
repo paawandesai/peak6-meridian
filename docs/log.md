@@ -46,3 +46,9 @@ PRD/docs verification (local `.ao-ops/prd-docs-verification.md`):
 - Open MRs: !8 M1-02 (CI running post BookOrder fix; needs Cursor re-approve), !9 M1-09 draft (audit:deps fail on `bigint-buffer`), !10 M1-11 (CI running).
 - `status.md` refreshed for M1-03/M1-08 coverage; no human-owned files touched.
 - !8 not merged this loop (CI not green + no Cursor approve; D-045 docs-only only).
+
+## 2026-10-07 10:18 CT · operator
+- M1-02 merged earlier today: MR !8 → `ecf72eb` (squash `a3840c1`); Cursor APPROVE on tip after reviewer tmux fix.
+- M1-11 already on main: MR !10 → `a1c486a`.
+- **OQ-10 accepted** by Paawan (~10:17 CT): six LiteSVM-only `.cargo/audit.toml` ignores → **D-047**. NFR-10/AB-16 unchanged; remove ignores at Agave ≥ 2.2.
+- Docs MR: `ops/oq-10-accept` (decisions + status + audit.toml header).
