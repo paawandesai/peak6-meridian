@@ -120,7 +120,7 @@ describe("DST transitions (AC3)", () => {
       }),
       { numRuns: 300 },
     );
-  });
+  }, 60_000); // Intl formatting is slow on a loaded CI runner; 5s default flaked on !9
 });
 
 describe("previousTradingDay", () => {
