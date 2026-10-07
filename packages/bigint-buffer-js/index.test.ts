@@ -78,6 +78,17 @@ describe("bigint-buffer pure-JS replacement", () => {
     );
   });
 
+  it("round-trips u128 values (property)", () => {
+    fc.assert(
+      fc.property(fc.bigInt({ min: 0n, max: (1n << 128n) - 1n }), (n) => {
+        const le = toBufferLE(n, 16);
+        expect(le).toHaveLength(16);
+        expect(toBigIntLE(le)).toBe(n);
+        expect(toBigIntBE(toBufferBE(n, 16))).toBe(n);
+      }),
+    );
+  });
+
   it("does not mutate its input", () => {
     const buf = Buffer.from([1, 2, 3]);
     toBigIntLE(buf);
