@@ -1868,6 +1868,7 @@ dependencies = [
  "litesvm",
  "meridian-book",
  "proptest",
+ "serde_json",
  "solana-sdk",
 ]
 
@@ -2568,6 +2569,7 @@ dependencies = [
  "litesvm",
  "meridian",
  "meridian-book",
+ "serde_json",
  "solana-sdk",
 ]
 
