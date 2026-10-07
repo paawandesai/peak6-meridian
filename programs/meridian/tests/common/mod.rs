@@ -196,8 +196,10 @@ impl Harness {
     }
 
     /// Sends one instruction signed by `signers` (the first one pays). LiteSVM does not enforce
-    /// the packet size a real cluster does, so this panics on an oversized transaction.
+    /// the packet size a real cluster does, so this panics on an oversized transaction. The
+    /// blockhash is rotated first so an identical instruction can be sent twice in a row.
     pub fn send(&mut self, instruction: Instruction, signers: &[&Keypair]) -> TransactionResult {
+        self.svm.expire_blockhash();
         let tx = self.transaction(instruction, signers);
         let size = transaction_size(&tx);
         assert!(
@@ -354,4 +356,502 @@ pub fn find_event<E: anchor_lang::Event + Discriminator>(meta: &TransactionMetad
         .filter_map(|payload| BASE64_STANDARD.decode(payload).ok())
         .filter(|bytes| bytes.starts_with(E::DISCRIMINATOR))
         .find_map(|bytes| E::try_from_slice(&bytes[E::DISCRIMINATOR.len()..]).ok())
+}
+
+// ---- M1-04: markets, tokens and the clock ---------------------------------------------------
+
+use anchor_lang::solana_program::clock::Clock;
+use meridian::state::{
+    Book, Market, BOOK_SEED, ESCROW_USDC_SEED, ESCROW_YES_SEED, MARKET_SEED, NO_MINT_SEED,
+    PAIR_COLLATERAL, VAULT_SEED, YES_MINT_SEED,
+};
+use solana_sdk::account::Account as SdkAccount;
+
+/// 2026-10-06 09:00 ET (13:00 UTC): a plausible "now" for tests.
+pub const BASE_UNIX_TS: i64 = 1_791_032_400;
+/// 2026-10-06 16:00 ET (20:00 UTC): the normal close of [`BASE_TRADING_DATE`].
+pub const BASE_CLOSE_TS: i64 = 1_791_057_600;
+/// The trading date matching [`BASE_CLOSE_TS`].
+pub const BASE_TRADING_DATE: u32 = 20_261_006;
+/// META $680.
+pub const BASE_STRIKE_CENTS: u64 = 68_000;
+
+/// Arguments of one market creation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MarketArgs {
+    pub ticker: [u8; SYMBOL_LEN],
+    pub strike_cents: u64,
+    pub trading_date: u32,
+    pub close_ts: i64,
+}
+
+impl MarketArgs {
+    /// META $680 on 2026-10-06, closing at 16:00 ET.
+    pub fn base() -> Self {
+        MarketArgs {
+            ticker: symbol("META"),
+            strike_cents: BASE_STRIKE_CENTS,
+            trading_date: BASE_TRADING_DATE,
+            close_ts: BASE_CLOSE_TS,
+        }
+    }
+
+    /// The same market with another strike.
+    pub fn with_strike(self, strike_cents: u64) -> Self {
+        MarketArgs {
+            strike_cents,
+            ..self
+        }
+    }
+}
+
+/// Every PDA of one market (architecture.md § Data model).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MarketAddresses {
+    pub market: Pubkey,
+    pub yes_mint: Pubkey,
+    pub no_mint: Pubkey,
+    pub vault: Pubkey,
+    pub escrow_usdc: Pubkey,
+    pub escrow_yes: Pubkey,
+    pub book: Pubkey,
+}
+
+impl MarketAddresses {
+    pub fn derive(args: &MarketArgs) -> Self {
+        let market = Pubkey::find_program_address(
+            &[
+                MARKET_SEED,
+                &args.ticker,
+                &args.trading_date.to_le_bytes(),
+                &args.strike_cents.to_le_bytes(),
+            ],
+            &meridian::ID,
+        )
+        .0;
+        let child =
+            |seed: &[u8]| Pubkey::find_program_address(&[seed, market.as_ref()], &meridian::ID).0;
+        MarketAddresses {
+            market,
+            yes_mint: child(YES_MINT_SEED),
+            no_mint: child(NO_MINT_SEED),
+            vault: child(VAULT_SEED),
+            escrow_usdc: child(ESCROW_USDC_SEED),
+            escrow_yes: child(ESCROW_YES_SEED),
+            book: child(BOOK_SEED),
+        }
+    }
+}
+
+/// A user with a keypair and token accounts for one market.
+pub struct User {
+    pub keypair: Keypair,
+    pub usdc: Pubkey,
+    pub yes: Pubkey,
+    pub no: Pubkey,
+}
+
+impl User {
+    pub fn pubkey(&self) -> Pubkey {
+        self.keypair.pubkey()
+    }
+}
+
+impl Harness {
+    /// The current `Clock` sysvar.
+    pub fn clock(&self) -> Clock {
+        self.svm.get_sysvar::<Clock>()
+    }
+
+    /// Sets `Clock::unix_timestamp` (the slot is left alone).
+    pub fn set_unix_timestamp(&mut self, unix_timestamp: i64) {
+        let mut clock = self.clock();
+        clock.unix_timestamp = unix_timestamp;
+        self.svm.set_sysvar(&clock);
+    }
+
+    /// Writes an initialised SPL token account for `mint` owned by `owner` holding `amount`.
+    pub fn create_token_account(&mut self, mint: Pubkey, owner: Pubkey, amount: u64) -> Pubkey {
+        let address = Pubkey::new_unique();
+        self.write_token_account(address, mint, owner, amount);
+        address
+    }
+
+    /// Writes (or overwrites) the token account at `address`.
+    pub fn write_token_account(
+        &mut self,
+        address: Pubkey,
+        mint: Pubkey,
+        owner: Pubkey,
+        amount: u64,
+    ) {
+        let token_account = spl_token::state::Account {
+            mint,
+            owner,
+            amount,
+            delegate: COption::None,
+            state: spl_token::state::AccountState::Initialized,
+            is_native: COption::None,
+            delegated_amount: 0,
+            close_authority: COption::None,
+        };
+        let mut data = vec![0u8; spl_token::state::Account::LEN];
+        token_account.pack_into_slice(&mut data);
+        let account = SdkAccount {
+            lamports: self.svm.minimum_balance_for_rent_exemption(data.len()),
+            data,
+            owner: spl_token::ID,
+            executable: false,
+            rent_epoch: 0,
+        };
+        self.svm.set_account(address, account).unwrap();
+    }
+
+    /// The balance of a token account.
+    pub fn token_amount(&self, address: Pubkey) -> u64 {
+        self.token_account(address).amount
+    }
+
+    /// The unpacked token account.
+    pub fn token_account(&self, address: Pubkey) -> spl_token::state::Account {
+        let account = self
+            .svm
+            .get_account(&address)
+            .expect("token account exists");
+        assert_eq!(account.owner, spl_token::ID, "owned by the token program");
+        spl_token::state::Account::unpack(&account.data).expect("token account unpacks")
+    }
+
+    /// The unpacked mint.
+    pub fn mint(&self, address: Pubkey) -> spl_token::state::Mint {
+        let account = self.svm.get_account(&address).expect("mint exists");
+        assert_eq!(account.owner, spl_token::ID, "owned by the token program");
+        spl_token::state::Mint::unpack(&account.data).expect("mint unpacks")
+    }
+
+    /// The supply of a mint.
+    pub fn mint_supply(&self, address: Pubkey) -> u64 {
+        self.mint(address).supply
+    }
+
+    /// The stored market.
+    pub fn market(&self, address: Pubkey) -> Market {
+        let account = self.svm.get_account(&address).expect("market exists");
+        assert_eq!(
+            account.owner,
+            meridian::ID,
+            "market is owned by the program"
+        );
+        Market::try_deserialize(&mut account.data.as_slice()).expect("market deserialises")
+    }
+
+    /// True when no account exists at `address`.
+    pub fn is_absent(&self, address: Pubkey) -> bool {
+        self.svm.get_account(&address).is_none()
+    }
+
+    /// The stored book (zero-copy).
+    pub fn book(&self, address: Pubkey) -> Book {
+        let account = self.svm.get_account(&address).expect("book exists");
+        assert_eq!(account.owner, meridian::ID, "book is owned by the program");
+        assert_eq!(account.data.len(), Book::SPACE);
+        assert_eq!(&account.data[..8], Book::DISCRIMINATOR);
+        *bytemuck::from_bytes::<Book>(&account.data[8..])
+    }
+
+    /// A funded user with USDC, YES and NO accounts for `market`, holding `usdc` base units.
+    pub fn user_for(&mut self, market: &MarketAddresses, usdc: u64) -> User {
+        let keypair = self.funded_keypair();
+        let owner = keypair.pubkey();
+        let usdc_mint = self.usdc_mint;
+        User {
+            usdc: self.create_token_account(usdc_mint, owner, usdc),
+            yes: self.create_token_account(market.yes_mint, owner, 0),
+            no: self.create_token_account(market.no_mint, owner, 0),
+            keypair,
+        }
+    }
+
+    /// `create_strike_market` signed by `signer` against `config`, for `args`.
+    pub fn create_strike_market_ix(
+        signer: Pubkey,
+        config: Pubkey,
+        usdc_mint: Pubkey,
+        addresses: &MarketAddresses,
+        args: &MarketArgs,
+    ) -> Instruction {
+        Instruction {
+            program_id: meridian::ID,
+            accounts: meridian::accounts::CreateStrikeMarket {
+                config,
+                automation_authority: signer,
+                market: addresses.market,
+                yes_mint: addresses.yes_mint,
+                no_mint: addresses.no_mint,
+                vault: addresses.vault,
+                escrow_usdc: addresses.escrow_usdc,
+                escrow_yes: addresses.escrow_yes,
+                book: addresses.book,
+                usdc_mint,
+                token_program: spl_token::ID,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: meridian::instruction::CreateStrikeMarket {
+                ticker: args.ticker,
+                strike_cents: args.strike_cents,
+                trading_date: args.trading_date,
+                close_ts: args.close_ts,
+            }
+            .data(),
+        }
+    }
+
+    /// `add_strike` signed by `signer` against `config`, for `args`.
+    pub fn add_strike_ix(
+        signer: Pubkey,
+        config: Pubkey,
+        usdc_mint: Pubkey,
+        addresses: &MarketAddresses,
+        args: &MarketArgs,
+    ) -> Instruction {
+        Instruction {
+            program_id: meridian::ID,
+            accounts: meridian::accounts::AddStrike {
+                config,
+                admin: signer,
+                market: addresses.market,
+                yes_mint: addresses.yes_mint,
+                no_mint: addresses.no_mint,
+                vault: addresses.vault,
+                escrow_usdc: addresses.escrow_usdc,
+                escrow_yes: addresses.escrow_yes,
+                book: addresses.book,
+                usdc_mint,
+                token_program: spl_token::ID,
+                system_program: system_program::ID,
+            }
+            .to_account_metas(None),
+            data: meridian::instruction::AddStrike {
+                ticker: args.ticker,
+                strike_cents: args.strike_cents,
+                trading_date: args.trading_date,
+                close_ts: args.close_ts,
+            }
+            .data(),
+        }
+    }
+
+    /// Sends `create_strike_market` signed by `signer` with the harness config and mint.
+    pub fn create_strike_market_as(
+        &mut self,
+        signer: &Keypair,
+        args: &MarketArgs,
+    ) -> (MarketAddresses, TransactionResult) {
+        let addresses = MarketAddresses::derive(args);
+        let ix = Self::create_strike_market_ix(
+            signer.pubkey(),
+            config_pda(),
+            self.usdc_mint,
+            &addresses,
+            args,
+        );
+        let result = self.send(ix, &[signer]);
+        (addresses, result)
+    }
+
+    /// Sends `add_strike` signed by `signer` with the harness config and mint.
+    pub fn add_strike_as(
+        &mut self,
+        signer: &Keypair,
+        args: &MarketArgs,
+    ) -> (MarketAddresses, TransactionResult) {
+        let addresses = MarketAddresses::derive(args);
+        let ix = Self::add_strike_ix(
+            signer.pubkey(),
+            config_pda(),
+            self.usdc_mint,
+            &addresses,
+            args,
+        );
+        let result = self.send(ix, &[signer]);
+        (addresses, result)
+    }
+
+    /// `mint_pair` for `user` on `addresses`.
+    pub fn mint_pair_ix(user: &User, addresses: &MarketAddresses, qty: u64) -> Instruction {
+        Instruction {
+            program_id: meridian::ID,
+            accounts: meridian::accounts::MintPair {
+                config: config_pda(),
+                market: addresses.market,
+                user: user.pubkey(),
+                user_usdc: user.usdc,
+                user_yes: user.yes,
+                user_no: user.no,
+                yes_mint: addresses.yes_mint,
+                no_mint: addresses.no_mint,
+                vault: addresses.vault,
+                token_program: spl_token::ID,
+            }
+            .to_account_metas(None),
+            data: meridian::instruction::MintPair { qty }.data(),
+        }
+    }
+
+    /// Sends `mint_pair` for `user`.
+    pub fn mint_pair(
+        &mut self,
+        user: &User,
+        addresses: &MarketAddresses,
+        qty: u64,
+    ) -> TransactionResult {
+        self.send(Self::mint_pair_ix(user, addresses, qty), &[&user.keypair])
+    }
+
+    /// `redeem` for `user` on `addresses`.
+    pub fn redeem_ix(
+        user: &User,
+        addresses: &MarketAddresses,
+        yes_qty: u64,
+        no_qty: u64,
+    ) -> Instruction {
+        Instruction {
+            program_id: meridian::ID,
+            accounts: meridian::accounts::Redeem {
+                market: addresses.market,
+                user: user.pubkey(),
+                user_usdc: user.usdc,
+                user_yes: user.yes,
+                user_no: user.no,
+                yes_mint: addresses.yes_mint,
+                no_mint: addresses.no_mint,
+                vault: addresses.vault,
+                token_program: spl_token::ID,
+            }
+            .to_account_metas(None),
+            data: meridian::instruction::Redeem { yes_qty, no_qty }.data(),
+        }
+    }
+
+    /// Sends `redeem` for `user`.
+    pub fn redeem(
+        &mut self,
+        user: &User,
+        addresses: &MarketAddresses,
+        yes_qty: u64,
+        no_qty: u64,
+    ) -> TransactionResult {
+        self.send(
+            Self::redeem_ix(user, addresses, yes_qty, no_qty),
+            &[&user.keypair],
+        )
+    }
+
+    /// Sends `pause` signed by `signer` against the config PDA.
+    pub fn pause_as(&mut self, signer: &Keypair) -> TransactionResult {
+        let ix = Instruction {
+            program_id: meridian::ID,
+            accounts: meridian::accounts::Pause {
+                config: config_pda(),
+                admin: signer.pubkey(),
+            }
+            .to_account_metas(None),
+            data: meridian::instruction::Pause {}.data(),
+        };
+        self.send(ix, &[signer])
+    }
+
+    /// Sends `unpause` signed by `signer` against the config PDA.
+    pub fn unpause_as(&mut self, signer: &Keypair) -> TransactionResult {
+        let ix = Instruction {
+            program_id: meridian::ID,
+            accounts: meridian::accounts::Unpause {
+                config: config_pda(),
+                admin: signer.pubkey(),
+            }
+            .to_account_metas(None),
+            data: meridian::instruction::Unpause {}.data(),
+        };
+        self.send(ix, &[signer])
+    }
+
+    /// Sends `pause` as the harness admin.
+    pub fn pause(&mut self) -> TransactionResult {
+        let admin = self.admin.insecure_clone();
+        self.pause_as(&admin)
+    }
+
+    /// Sends `unpause` as the harness admin.
+    pub fn unpause(&mut self) -> TransactionResult {
+        let admin = self.admin.insecure_clone();
+        self.unpause_as(&admin)
+    }
+
+    /// Asserts invariants 1 and 3 (domain.md): vault = 1,000,000 × pairs outstanding and
+    /// YES supply = NO supply = pairs outstanding (before settlement).
+    pub fn assert_market_invariants(&self, addresses: &MarketAddresses) {
+        let market = self.market(addresses.market);
+        let pairs = market.pairs_outstanding;
+        assert_eq!(
+            self.token_amount(addresses.vault),
+            pairs.checked_mul(PAIR_COLLATERAL).expect("fits"),
+            "vault = 1,000,000 × pairs outstanding"
+        );
+        assert_eq!(self.mint_supply(addresses.yes_mint), pairs, "YES supply");
+        assert_eq!(self.mint_supply(addresses.no_mint), pairs, "NO supply");
+    }
+}
+
+/// A harness with the config initialised (all seven tickers), the clock at [`BASE_UNIX_TS`]
+/// and a funded automation authority.
+pub struct MarketHarness {
+    pub harness: Harness,
+    pub automation: Keypair,
+}
+
+impl Default for MarketHarness {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MarketHarness {
+    pub fn new() -> Self {
+        let mut harness = Harness::new();
+        harness.set_unix_timestamp(BASE_UNIX_TS);
+        let automation = harness.funded_keypair();
+        expect_success(&harness.initialize_config(&default_params(automation.pubkey())));
+        let mut rest = default_params(automation.pubkey());
+        rest.tickers = mag7_slots(6..7);
+        expect_success(&harness.update_config(&rest));
+        MarketHarness {
+            harness,
+            automation,
+        }
+    }
+
+    /// Creates a market as the automation authority and asserts success.
+    pub fn create_market(&mut self, args: &MarketArgs) -> MarketAddresses {
+        let (addresses, result) = self.harness.create_strike_market_as(&self.automation, args);
+        expect_success(&result);
+        addresses
+    }
+
+    /// The base market (META $680), created.
+    pub fn base_market(&mut self) -> MarketAddresses {
+        self.create_market(&MarketArgs::base())
+    }
+}
+
+/// Asserts that the transaction failed inside the SPL token program with `expected`.
+pub fn assert_token_error(result: &TransactionResult, expected: spl_token::error::TokenError) {
+    let failure = expect_failure(result);
+    let code = expected.clone() as u32;
+    assert_eq!(
+        failure.err,
+        TransactionError::InstructionError(0, InstructionError::Custom(code)),
+        "expected token error {expected:?}; logs: {:#?}",
+        failure.meta.logs
+    );
 }

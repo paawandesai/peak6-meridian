@@ -112,3 +112,89 @@ fn update_config_cannot_change_the_admin() {
         "ConfigParams must not carry admin"
     );
 }
+
+// ---- M1-04: create_strike_market (automation only), add_strike and pause (admin only) ------
+
+use meridian::state::PAIR_COLLATERAL;
+use security_tests::harness::{expect_success as ok, MarketArgs, MarketHarness};
+
+#[test]
+fn create_strike_market_rejects_every_signer_but_the_automation_authority() {
+    let mut h = MarketHarness::new();
+    let admin = h.harness.admin.insecure_clone();
+    let intruder = h.harness.funded_keypair();
+    let args = MarketArgs::base();
+    for signer in [&admin, &intruder] {
+        let (addresses, result) = h.harness.create_strike_market_as(signer, &args);
+        assert_meridian_error(&result, MeridianError::AutomationOnly);
+        assert!(h.harness.is_absent(addresses.market));
+    }
+    let automation = h.automation.insecure_clone();
+    let (addresses, result) = h.harness.create_strike_market_as(&automation, &args);
+    ok(&result);
+    assert!(!h.harness.is_absent(addresses.market));
+}
+
+#[test]
+fn add_strike_rejects_every_signer_but_the_admin() {
+    let mut h = MarketHarness::new();
+    let automation = h.automation.insecure_clone();
+    let intruder = h.harness.funded_keypair();
+    let args = MarketArgs::base().with_strike(75_000);
+    // The automation authority may only create the daily markets (AB-19), not add strikes.
+    for signer in [&automation, &intruder] {
+        let (addresses, result) = h.harness.add_strike_as(signer, &args);
+        assert_meridian_error(&result, MeridianError::AdminOnly);
+        assert!(h.harness.is_absent(addresses.market));
+    }
+    let admin = h.harness.admin.insecure_clone();
+    let (addresses, result) = h.harness.add_strike_as(&admin, &args);
+    ok(&result);
+    assert!(!h.harness.is_absent(addresses.market));
+}
+
+#[test]
+fn pause_and_unpause_reject_every_signer_but_the_admin() {
+    let mut h = MarketHarness::new();
+    let automation = h.automation.insecure_clone();
+    let intruder = h.harness.funded_keypair();
+    for signer in [&automation, &intruder] {
+        assert_meridian_error(&h.harness.pause_as(signer), MeridianError::AdminOnly);
+        assert!(!h.harness.config().paused);
+    }
+    ok(&h.harness.pause());
+    assert!(h.harness.config().paused);
+    for signer in [&automation, &intruder] {
+        assert_meridian_error(&h.harness.unpause_as(signer), MeridianError::AdminOnly);
+        assert!(h.harness.config().paused);
+    }
+    ok(&h.harness.unpause());
+    assert!(!h.harness.config().paused);
+}
+
+#[test]
+fn a_stolen_automation_key_cannot_move_funds_or_pause() {
+    // D-030: the automation authority creates markets and nothing else.
+    let mut h = MarketHarness::new();
+    let addresses = h.base_market();
+    let user = h.harness.user_for(&addresses, PAIR_COLLATERAL);
+    ok(&h.harness.mint_pair(&user, &addresses, 1));
+    let automation = h.automation.insecure_clone();
+    assert_meridian_error(&h.harness.pause_as(&automation), MeridianError::AdminOnly);
+    assert_meridian_error(
+        &h.harness
+            .add_strike_as(&automation, &MarketArgs::base().with_strike(70_000))
+            .1,
+        MeridianError::AdminOnly,
+    );
+    assert_meridian_error(
+        &h.harness.update_config_as(
+            &automation,
+            config_pda(),
+            h.harness.usdc_mint,
+            &default_params(automation.pubkey()),
+        ),
+        MeridianError::AdminOnly,
+    );
+    h.harness.assert_market_invariants(&addresses);
+}
