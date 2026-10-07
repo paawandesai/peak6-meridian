@@ -1,0 +1,32 @@
+{
+  "name": "AAPL close Tiingo",
+  "ticker": "AAPL",
+  "source": "tiingo",
+  "jobs": [
+    {
+      "tasks": [
+        {
+          "httpTask": {
+            "url": "https://api.tiingo.com/tiingo/daily/aapl/prices",
+            "method": "METHOD_GET",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Token ${TIINGO_API_KEY}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "jsonParseTask": {
+            "path": "$[0].close"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "MSFT close Twelve Data",
+  "ticker": "MSFT",
+  "source": "twelvedata",
+  "jobs": [
+    {
+      "tasks": [
+        {
+          "httpTask": {
+            "url": "https://api.twelvedata.com/eod?symbol=MSFT&exchange=NASDAQ",
+            "method": "METHOD_GET",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "apikey ${TWELVEDATA_API_KEY}"
+              }
+            ]
+          }
+        },
+        {
+          "jsonParseTask": {
+            "path": "$.close"
+          }
+        }
+      ]
+    }
+  ]
+}

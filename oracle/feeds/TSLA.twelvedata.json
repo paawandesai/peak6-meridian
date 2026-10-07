@@ -1,0 +1,28 @@
+{
+  "name": "TSLA close Twelve Data",
+  "ticker": "TSLA",
+  "source": "twelvedata",
+  "jobs": [
+    {
+      "tasks": [
+        {
+          "httpTask": {
+            "url": "https://api.twelvedata.com/eod?symbol=TSLA&exchange=NASDAQ",
+            "method": "METHOD_GET",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "apikey ${TWELVEDATA_API_KEY}"
+              }
+            ]
+          }
+        },
+        {
+          "jsonParseTask": {
+            "path": "$.close"
+          }
+        }
+      ]
+    }
+  ]
+}

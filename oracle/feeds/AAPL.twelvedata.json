@@ -1,0 +1,28 @@
+{
+  "name": "AAPL close Twelve Data",
+  "ticker": "AAPL",
+  "source": "twelvedata",
+  "jobs": [
+    {
+      "tasks": [
+        {
+          "httpTask": {
+            "url": "https://api.twelvedata.com/eod?symbol=AAPL&exchange=NASDAQ",
+            "method": "METHOD_GET",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "apikey ${TWELVEDATA_API_KEY}"
+              }
+            ]
+          }
+        },
+        {
+          "jsonParseTask": {
+            "path": "$.close"
+          }
+        }
+      ]
+    }
+  ]
+}
