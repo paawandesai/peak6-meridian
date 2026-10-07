@@ -1,0 +1,14 @@
+{
+  "meta": { "symbol": "AAPL", "interval": "1day", "exchange_timezone": "America/New_York" },
+  "values": [
+    {
+      "datetime": "2026-10-02",
+      "open": "227.10000",
+      "high": "229.20000",
+      "low": "226.80000",
+      "close": "228.75000",
+      "volume": "38811200"
+    }
+  ],
+  "status": "ok"
+}
