@@ -35,3 +35,14 @@ Post-M1-01 kickoff step 10 gates applied (operating-rules):
 - Created daily pipeline schedule id **20** on `main`: cron `0 14 * * *` America/Chicago, variable `HEARTBEAT=1` (log-freshness heartbeat job).
 - Main post-merge pipeline [39399](https://labs.gauntletai.com/paawandesai/peak6-meridian/-/pipelines/39399) on `52dcb6d4` tracked (await/confirm green before merging doc MRs !1 / !3).
 - Operator decisions for M1-01 logged as D-035–D-044 in `docs/decisions.md`.
+
+## 2026-10-06 20:50 CT · operator
+- M1-03 matching engine merged: MR !5, merge commit `b91e208`. Pipeline green; Cursor approved. `crates/meridian-book` + AB-09/AB-10 on main.
+- M1-08 strike calculator / NYSE calendar / prevCloses merged: MR !7, merge commit `eb5fe77`. Pipeline green; Cursor approved.
+- Main pipeline #39660 success on `eb5fe77`.
+
+## 2026-10-06 21:55 CT · operator
+PRD/docs verification (local `.ao-ops/prd-docs-verification.md`):
+- Open MRs: !8 M1-02 (CI running post BookOrder fix; needs Cursor re-approve), !9 M1-09 draft (audit:deps fail on `bigint-buffer`), !10 M1-11 (CI running).
+- `status.md` refreshed for M1-03/M1-08 coverage; no human-owned files touched.
+- !8 not merged this loop (CI not green + no Cursor approve; D-045 docs-only only).

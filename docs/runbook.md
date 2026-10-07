@@ -72,7 +72,7 @@ Restart AO desktop/daemon if needed: `$AO stop` then `$AO start` (or relaunch th
 ## GitLab operator checklist
 
 - Labels: `M1`, `human-approved` (never apply `human-approved` except HUMAN DOC UPDATE)
-- Until **M1-01** merges: no other MR merges; afterward enable "Pipelines must succeed" and daily heartbeat schedule (`HEARTBEAT=1`)
+- **M1-01 merged** (2026-10-06). "Pipelines must succeed" is on; daily heartbeat schedule **id 20** (`HEARTBEAT=1`, `0 14 * * *` America/Chicago). Feature MRs still need green CI + Cursor approve (D-045 = docs-only tie-break only).
 - Merge only when: GitLab pipeline green + Cursor review vs `docs/review.md` (or logged tie-break) + ACs met
 
 ## Heartbeats / monitors
