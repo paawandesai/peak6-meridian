@@ -1,0 +1,89 @@
+"use client";
+
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
+import { useMemo } from "react";
+
+import { TradeView } from "./trade-view";
+import { createTradeReader } from "../_lib/reader";
+import { createTradeActions } from "../_lib/tx";
+import { AppHeader } from "@/components/app-header";
+import { FaucetButton } from "@/components/faucet-button";
+import { Providers } from "@/components/providers";
+import { useReader } from "@/components/reader-context";
+import { useAsync } from "@/components/use-async";
+import { useNow } from "@/components/use-now";
+import { explorerTxUrl } from "@/lib/admin-chain";
+import { loadPublicConfig } from "@/lib/config";
+import { useMarketData } from "@/lib/market-data";
+
+export const NOT_FOUND_TEXT = "This market does not exist. Go back to Markets and pick a strike.";
+
+function Page({ address }: { readonly address: string }) {
+  const reader = useReader();
+  const nowSecs = useNow();
+  const { connection } = useConnection();
+  const { publicKey, signTransaction } = useWallet();
+  const config = useMemo(() => loadPublicConfig(), []);
+  const markets = useAsync(() => reader.listMarkets(), [reader]);
+  const appConfig = useAsync(() => reader.getConfig(), [reader]);
+  const market =
+    markets.status === "ready" ? markets.value.find((m) => m.address === address) : undefined;
+  // Prices only: the Trade page reads its own full book (an empty market list skips book polling).
+  const marketData = useMarketData([]);
+  const tradeReader = useMemo(
+    () => (market === undefined ? null : createTradeReader(config, market)),
+    [config, market],
+  );
+  const actions = useMemo(
+    () =>
+      market === undefined || publicKey === null || signTransaction === undefined
+        ? null
+        : createTradeActions(connection, { publicKey, signTransaction }, config, market),
+    [connection, publicKey, signTransaction, config, market],
+  );
+
+  let body;
+  if (markets.status === "loading" || appConfig.status === "loading" || nowSecs === null) {
+    body = <p role="status">Loading market…</p>;
+  } else if (markets.status === "error") {
+    body = <p role="alert">Could not load the market: {markets.message}</p>;
+  } else if (appConfig.status === "error") {
+    body = <p role="alert">Could not load the configuration: {appConfig.message}</p>;
+  } else if (market === undefined || tradeReader === null) {
+    body = <p role="alert">{NOT_FOUND_TEXT}</p>;
+  } else {
+    body = (
+      <TradeView
+        market={market}
+        config={appConfig.value}
+        nowSecs={nowSecs}
+        reader={tradeReader}
+        actions={actions}
+        wallet={publicKey}
+        marketData={marketData}
+        explorerUrl={(signature) => explorerTxUrl(signature, config)}
+      />
+    );
+  }
+  return (
+    <>
+      <AppHeader
+        nowSecs={nowSecs}
+        markets={markets.status === "ready" ? markets.value : null}
+        config={appConfig.status === "ready" ? appConfig.value : null}
+        currentPath="/"
+      >
+        <FaucetButton />
+      </AppHeader>
+      <main className="mx-auto max-w-5xl px-mer-4 py-mer-6">{body}</main>
+    </>
+  );
+}
+
+export function TradeShell({ address }: { readonly address: string }) {
+  return (
+    <Providers>
+      <Page address={address} />
+    </Providers>
+  );
+}
