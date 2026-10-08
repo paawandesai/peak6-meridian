@@ -65,6 +65,28 @@ export function morningDeadline(date: IsoDate): number {
   return DateTime.fromISO(date, { zone: ET_ZONE }).set(MORNING_DEADLINE_ET).toMillis();
 }
 
+/**
+ * Whether a freshly started service should run the morning job now (startup catch-up): it is a
+ * trading day, the 08:00 ET trigger has passed (so a restart or downtime after 08:00 did not
+ * leave the day without markets) and the market has not closed yet. The run is idempotent, so a
+ * catch-up over markets that already exist creates nothing. A date the calendar cannot answer
+ * counts as due, so `runMorning` fails loudly with its single alert instead of staying silent.
+ */
+export function catchUpDue(now: Date): boolean {
+  const date = tradingDateET(now);
+  try {
+    if (!isTradingDay(date)) {
+      return false;
+    }
+    const trigger = DateTime.fromISO(date, { zone: ET_ZONE })
+      .set({ hour: 8, minute: 0 })
+      .toMillis();
+    return now.getTime() >= trigger && now.getTime() < closeTimeET(date).closeTs * 1_000;
+  } catch {
+    return true;
+  }
+}
+
 export async function runMorning(deps: MorningDeps): Promise<MorningResult> {
   const startedAt = deps.now();
   const tradingDate = tradingDateET(startedAt);

@@ -12,7 +12,6 @@ export * from "./server";
 export * from "./service";
 export * from "./state";
 export * from "./strikes";
-export * from "./testing/fakeHttp";
 
 /** Health report of the automation service. */
 export interface Health {

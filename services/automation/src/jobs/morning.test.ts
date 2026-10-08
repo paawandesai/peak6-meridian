@@ -4,7 +4,7 @@ import { fetchPrevClose, type PrevCloseResult } from "../prevCloses";
 import { RunState } from "../state";
 import { fakeSourcesHttp, type FakeSourcesOptions } from "../testing/fakeHttp";
 import { FakeChain, FakeClock, RecordingAlerter, recordingLogger } from "../testing/harness";
-import { backoffMs, morningDeadline, runMorning, type MorningDeps } from "./morning";
+import { backoffMs, catchUpDue, morningDeadline, runMorning, type MorningDeps } from "./morning";
 
 /** 08:00 ET on 2026-10-06 (a Tuesday; EDT = UTC-4). */
 const TUESDAY_0800 = new Date("2026-10-06T12:00:00Z");
@@ -217,5 +217,25 @@ describe("schedule helpers", () => {
   it("puts the deadline at 08:30 ET, in EDT and EST alike", () => {
     expect(morningDeadline("2026-10-06")).toBe(Date.UTC(2026, 9, 6, 12, 30));
     expect(morningDeadline("2026-12-01")).toBe(Date.UTC(2026, 11, 1, 13, 30));
+  });
+});
+
+describe("catchUpDue", () => {
+  it("is due from 08:00 ET until the close on a trading day", () => {
+    expect(catchUpDue(new Date("2026-10-06T11:59:59Z"))).toBe(false); // 07:59:59 ET
+    expect(catchUpDue(new Date("2026-10-06T12:00:00Z"))).toBe(true); // 08:00 ET
+    expect(catchUpDue(new Date("2026-10-06T19:59:59Z"))).toBe(true);
+    expect(catchUpDue(new Date("2026-10-06T20:00:00Z"))).toBe(false); // closed
+  });
+
+  it("uses the early close and skips holidays and weekends", () => {
+    expect(catchUpDue(new Date("2026-11-27T17:59:59Z"))).toBe(true); // 12:59:59 EST
+    expect(catchUpDue(new Date("2026-11-27T18:00:00Z"))).toBe(false); // early close 13:00 ET
+    expect(catchUpDue(new Date("2026-11-26T15:00:00Z"))).toBe(false);
+    expect(catchUpDue(new Date("2026-10-10T15:00:00Z"))).toBe(false);
+  });
+
+  it("is due when the calendar does not cover the year, so the job can alert", () => {
+    expect(catchUpDue(new Date("2027-01-04T15:00:00Z"))).toBe(true);
   });
 });

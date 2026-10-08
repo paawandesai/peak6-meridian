@@ -14,6 +14,8 @@ export interface JobSpec {
   readonly run: () => Promise<void>;
   /** Public key of the account that signs this job's transactions, if it signs any. */
   readonly signer?: string;
+  /** True for a stand-in that does no real work yet (reported as such in `/health`). */
+  readonly placeholder?: boolean;
 }
 
 export interface ScheduledHandle {
@@ -35,6 +37,7 @@ export interface ScheduledJob {
   readonly name: string;
   readonly cron: string;
   readonly signer?: string;
+  readonly placeholder?: boolean;
   readonly handle: ScheduledHandle;
 }
 
@@ -52,6 +55,7 @@ export function scheduleJobs(
     name: spec.name,
     cron: spec.cron,
     ...(spec.signer === undefined ? {} : { signer: spec.signer }),
+    ...(spec.placeholder === true ? { placeholder: true } : {}),
     handle: cron.schedule(
       spec.cron,
       async () => {

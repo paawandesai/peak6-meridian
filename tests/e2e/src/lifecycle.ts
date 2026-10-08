@@ -41,14 +41,8 @@ import {
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { z } from "zod";
 
-import {
-  chainMarketOps,
-  fakeSourcesHttp,
-  fetchPrevClose,
-  RunState,
-  runMorning,
-  silentLogger,
-} from "automation";
+import { chainMarketOps, fetchPrevClose, RunState, runMorning, silentLogger } from "automation";
+import { fakeSourcesHttp } from "automation/testing";
 
 import { Ledger, UNITS_PER_CENT, UNITS_PER_USDC } from "./ledger";
 

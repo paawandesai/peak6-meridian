@@ -28,11 +28,13 @@ async function start(options: {
   loaded: Keypair | null;
   configured: Keypair;
   settlementCrashes?: boolean;
+  /** Defaults to 07:00 ET on a trading day: before the 08:00 trigger, so no catch-up runs. */
+  clockStart?: Date;
 }) {
   const cronFake = fakeCron();
   const alerter = new RecordingAlerter();
   const chain = new FakeChain();
-  const clock = new FakeClock(new Date("2026-10-06T12:00:00Z"));
+  const clock = new FakeClock(options.clockStart ?? new Date("2026-10-06T11:00:00Z"));
   const logger = recordingLogger();
   const http = fakeSourcesHttp({
     closes: {
@@ -77,7 +79,7 @@ async function start(options: {
     log: logger.log,
   });
   running.push(service);
-  return { service, alerter, chain, logger, builtWith, ...cronFake };
+  return { service, alerter, chain, logger, builtWith, clock, ...cronFake };
 }
 
 function signerDeps(signer: Keypair) {
@@ -143,12 +145,27 @@ describe("startService with the right automation key", () => {
   it("runs the morning job from its cron handler and reports it in /health", async () => {
     const key = Keypair.generate();
     const t = await start({ loaded: key, configured: key });
+    await t.clock.sleep(3_600_000); // 08:00 ET
     await t.scheduled.find((s) => s.name === "morning")?.task();
     expect(t.chain.markets.size).toBe(38);
     const body = (await (await health(t.service)).json()) as {
       lastMorning: { status: string; created: number };
     };
     expect(body.lastMorning).toMatchObject({ status: "ok", created: 38 });
+  });
+
+  it("reports the placeholder settlement job as such, signing with the loaded key", async () => {
+    const key = Keypair.generate();
+    const t = await start({ loaded: key, configured: key });
+    const body = (await (await health(t.service)).json()) as {
+      jobs: { name: string; signer?: string; placeholder?: boolean; scheduled: boolean }[];
+    };
+    expect(body.jobs.find((j) => j.name === "settlement")).toMatchObject({
+      scheduled: true,
+      placeholder: true,
+      signer: key.publicKey.toBase58(),
+    });
+    expect(body.jobs.find((j) => j.name === "morning")?.placeholder).toBeUndefined();
   });
 
   it("records a crashed job in /health and alerts once (never swallowed)", async () => {
@@ -266,6 +283,53 @@ describe("degraded mode: automation key mismatch (AC5)", () => {
     expect(alerter.alerts).toHaveLength(1);
     expect(alerter.alerts[0]).toMatchObject({ kind: "startup_failed" });
     expect(JSON.stringify(alerter.alerts)).not.toContain("SECRET");
+  });
+});
+
+describe("startup catch-up", () => {
+  const key = Keypair.generate();
+  // 2026-10-06 (a Tuesday): 08:00 ET = 12:00Z, close 16:00 ET = 20:00Z.
+  const at = (iso: string) => new Date(iso);
+
+  it("runs the morning job at startup when it is past 08:00 ET on a trading day (restart or downtime)", async () => {
+    const t = await start({ loaded: key, configured: key, clockStart: at("2026-10-06T12:20:00Z") });
+    const result = await t.service.catchUp;
+    expect(result).toMatchObject({ status: "ok", created: 38 });
+    expect(t.chain.markets.size).toBe(38);
+    const body = (await (await health(t.service)).json()) as { lastMorning: { status: string } };
+    expect(body.lastMorning.status).toBe("ok");
+  });
+
+  it("alerts once when the catch-up cannot create the markets", async () => {
+    const t = await start({ loaded: key, configured: key, clockStart: at("2026-10-06T12:45:00Z") });
+    t.chain.failCreates = { remaining: 1_000, message: "rpc down" };
+    expect(await t.service.catchUp).toMatchObject({ status: "failed" });
+    expect(t.alerter.alerts).toHaveLength(1);
+  });
+
+  it("does nothing before 08:00 ET, after the close, or on a holiday or weekend", async () => {
+    for (const iso of [
+      "2026-10-06T11:59:00Z", // 07:59 ET
+      "2026-10-06T20:00:00Z", // 16:00 ET, closed
+      "2026-11-26T15:00:00Z", // Thanksgiving
+      "2026-10-10T15:00:00Z", // Saturday
+    ]) {
+      const t = await start({ loaded: key, configured: key, clockStart: at(iso) });
+      expect(await t.service.catchUp, iso).toBeNull();
+      expect(t.chain.createCalls, iso).toEqual([]);
+      expect(t.alerter.alerts, iso).toEqual([]);
+      await t.service.stop();
+    }
+  });
+
+  it("is skipped in degraded mode (the morning job is disabled)", async () => {
+    const t = await start({
+      loaded: Keypair.generate(),
+      configured: key,
+      clockStart: at("2026-10-06T12:20:00Z"),
+    });
+    expect(await t.service.catchUp).toBeNull();
+    expect(t.chain.createCalls).toEqual([]);
   });
 });
 

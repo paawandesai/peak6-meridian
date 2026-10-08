@@ -14,6 +14,7 @@ export const SETTLEMENT_CRON = "* * * * *";
 export function placeholderSettlementJob(signer: Keypair): JobSpec {
   return {
     signer: signer.publicKey.toBase58(),
+    placeholder: true,
     name: "settlement",
     cron: SETTLEMENT_CRON,
     run: () => Promise.resolve(),

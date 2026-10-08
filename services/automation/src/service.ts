@@ -16,7 +16,13 @@ import type { AddressInfo } from "node:net";
 import type { Keypair, PublicKey } from "@solana/web3.js";
 
 import type { Alert, Alerter } from "./alerts";
-import { runMorning, MORNING_CRON, type MorningDeps } from "./jobs/morning";
+import {
+  catchUpDue,
+  runMorning,
+  MORNING_CRON,
+  type MorningDeps,
+  type MorningResult,
+} from "./jobs/morning";
 import { describeError, type Logger } from "./log";
 import { scheduleJobs, type CronLike, type JobSpec, type ScheduledJob } from "./scheduler";
 import { createHealthServer } from "./server";
@@ -67,6 +73,8 @@ export interface HealthReport {
     readonly name: string;
     readonly cron?: string;
     readonly signer?: string;
+    /** A stand-in that does no real work yet. */
+    readonly placeholder?: boolean;
     readonly scheduled: boolean;
     readonly disabled?: string;
   }[];
@@ -81,6 +89,11 @@ export interface RunningService {
   readonly degraded: string | null;
   readonly jobs: readonly ScheduledJob[];
   readonly state: RunState;
+  /**
+   * The startup catch-up run of the morning job (null when none was due or the morning job is
+   * disabled). Not awaited by `startService`: it may retry for up to 30 minutes.
+   */
+  readonly catchUp: Promise<MorningResult | null>;
   health(): HealthReport;
   stop(): Promise<void>;
 }
@@ -128,6 +141,7 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
   let disabled: string[] = [];
   const specs: JobSpec[] = [];
   let alert: Alert | null = null;
+  let morningDeps: Omit<MorningDeps, "alerter" | "state" | "log"> | null = null;
   if (deps.signer === null) {
     degraded = KEY_MISSING;
     disabled = ["morning", "settlement"];
@@ -141,6 +155,7 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
     const { signerDeps, authority } = await readConfigWithRetry(deps, deps.signer);
     specs.push(signerDeps.settlement);
     if (deps.signer.publicKey.equals(authority)) {
+      morningDeps = signerDeps.morning;
       specs.push({
         name: "morning",
         cron: MORNING_CRON,
@@ -160,7 +175,7 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
       };
     }
   }
-  const jobs = scheduleJobs(deps.cron, specs, deps.log, async (job, message) => {
+  const onCrash = async (job: string, message: string): Promise<void> => {
     // A crash is recorded for /health and alerted once per crash, never only logged.
     state.failure(job, `crashed: ${message}`);
     await deps.alerter.send({
@@ -168,7 +183,8 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
       summary: `the ${job} job crashed: ${message}`,
       details: { job },
     });
-  });
+  };
+  const jobs = scheduleJobs(deps.cron, specs, deps.log, onCrash);
 
   if (degraded !== null && alert !== null) {
     deps.log("error", "degraded_mode", { reason: degraded });
@@ -186,6 +202,7 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
         name: job.name,
         cron: job.cron,
         ...(job.signer === undefined ? {} : { signer: job.signer }),
+        ...(job.placeholder === true ? { placeholder: true } : {}),
         scheduled: true,
       })),
       ...disabled.map((name) => ({ name, scheduled: false, disabled: degraded ?? "" })),
@@ -203,11 +220,27 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
   const port = (server.address() as AddressInfo).port;
   deps.log("info", "service_started", { port, degraded, jobs: jobs.map((j) => j.name) });
 
+  // Startup catch-up: a restart or redeploy after 08:00 ET must not leave the day without markets.
+  let catchUp: Promise<MorningResult | null> = Promise.resolve(null);
+  if (morningDeps !== null && catchUpDue(morningDeps.now())) {
+    const base = morningDeps;
+    deps.log("info", "morning_catch_up", {});
+    catchUp = runMorning({ ...base, alerter: deps.alerter, state, log: deps.log }).catch(
+      async (error: unknown) => {
+        const message = describeError(error);
+        deps.log("error", "job_crashed", { job: "morning", error: message });
+        await onCrash("morning", message);
+        return null;
+      },
+    );
+  }
+
   return {
     port,
     degraded,
     jobs,
     state,
+    catchUp,
     health,
     stop: async () => {
       for (const job of jobs) {
