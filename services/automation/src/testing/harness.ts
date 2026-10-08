@@ -1,5 +1,9 @@
 /** Test doubles shared by the job and service tests: a fake clock, an in-memory chain and logs. */
+import type { Keypair } from "@solana/web3.js";
+
 import type { Alert, Alerter } from "../alerts";
+import { SETTLEMENT_CRON } from "../jobs/settle";
+import type { JobSpec } from "../scheduler";
 import type { MarketOps, PlannedMarket } from "../cli/createMarkets";
 import type { Logger } from "../log";
 
@@ -72,5 +76,15 @@ export function recordingLogger(): { log: Logger; lines: LogLine[] } {
     log: (level, event, fields) => {
       lines.push({ level, event, fields });
     },
+  };
+}
+
+/** A settlement job spec that does nothing, bound to `signer`, for service-level tests. */
+export function noopSettlementJob(signer: Keypair): JobSpec {
+  return {
+    name: "settlement",
+    cron: SETTLEMENT_CRON,
+    signer: signer.publicKey.toBase58(),
+    run: () => Promise.resolve(),
   };
 }

@@ -12,6 +12,8 @@ export interface FakeSourcesOptions {
   readonly date: IsoDate;
   /** Twelve Data reports this many cents more than Tiingo for every ticker. */
   readonly twelveDataSkewCents?: number;
+  /** Twelve Data's latest bar is for this date instead (a stale source). */
+  readonly twelveDataDate?: IsoDate;
   readonly tiingoDown?: boolean;
   readonly twelveDataDown?: boolean;
 }
@@ -44,7 +46,12 @@ export function fakeSourcesHttp(options: FakeSourcesOptions): HttpGet & { calls:
     const values =
       close === undefined
         ? []
-        : [{ datetime: options.date, close: dollars(close + (options.twelveDataSkewCents ?? 0)) }];
+        : [
+            {
+              datetime: options.twelveDataDate ?? options.date,
+              close: dollars(close + (options.twelveDataSkewCents ?? 0)),
+            },
+          ];
     return Promise.resolve({
       status: 200,
       text: () => Promise.resolve(JSON.stringify({ status: "ok", values })),

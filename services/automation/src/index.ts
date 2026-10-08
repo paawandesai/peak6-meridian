@@ -1,17 +1,24 @@
 export * from "./alerts";
+export * from "./cluster";
 export * from "./calendar";
 export * from "./cli/createMarkets";
 export * from "./config";
 export * from "./jobs/morning";
+export * from "./incidents";
 export * from "./jobs/settle";
 export * from "./log";
 export * from "./money";
 export * from "./prevCloses";
 export * from "./scheduler";
 export * from "./server";
+export * from "./runtime";
 export * from "./service";
+export * from "./settleChain";
+export * from "./settleNow";
+export * from "./settleTx";
 export * from "./state";
 export * from "./strikes";
+export * from "./switchboard";
 
 /** Health report of the automation service. */
 export interface Health {
