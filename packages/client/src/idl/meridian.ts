@@ -215,9 +215,107 @@ export type Meridian = {
       discriminator: [89, 240, 244, 16, 196, 201, 190, 163];
       accounts: [
         {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "market";
+          writable: true;
+        },
+        {
+          name: "book";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [98, 111, 111, 107];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+          relations: ["market"];
+        },
+        {
           name: "user";
-          docs: ["The user buying NO."];
+          docs: ["The user buying NO; pays rent for `open_orders` on first use."];
+          writable: true;
           signer: true;
+        },
+        {
+          name: "openOrders";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 111];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+              {
+                kind: "account";
+                path: "user";
+              },
+            ];
+          };
+        },
+        {
+          name: "userUsdc";
+          writable: true;
+        },
+        {
+          name: "userYes";
+          writable: true;
+        },
+        {
+          name: "userNo";
+          writable: true;
+        },
+        {
+          name: "yesMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "noMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "vault";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowUsdc";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowYes";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
         },
       ];
       args: [
@@ -245,9 +343,53 @@ export type Meridian = {
       discriminator: [95, 129, 237, 240, 8, 49, 223, 132];
       accounts: [
         {
+          name: "market";
+        },
+        {
+          name: "book";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [98, 111, 111, 107];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+          relations: ["market"];
+        },
+        {
           name: "owner";
           docs: ["The order owner."];
           signer: true;
+        },
+        {
+          name: "openOrders";
+          docs: [
+            "Receives the refund. Its PDA seeds name its stored owner, which must be the signer.",
+          ];
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 111];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+              {
+                kind: "account";
+                path: "open_orders.owner";
+                account: "openOrders";
+              },
+            ];
+          };
         },
       ];
       args: [
@@ -609,9 +751,90 @@ export type Meridian = {
       discriminator: [51, 194, 155, 175, 109, 130, 96, 106];
       accounts: [
         {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "market";
+        },
+        {
+          name: "book";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [98, 111, 111, 107];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+          relations: ["market"];
+        },
+        {
           name: "user";
-          docs: ["The order owner."];
+          docs: ["The order owner; pays rent for `open_orders` on first use."];
+          writable: true;
           signer: true;
+        },
+        {
+          name: "openOrders";
+          docs: ["The owner's balances in this market, created on first use."];
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 111];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+              {
+                kind: "account";
+                path: "user";
+              },
+            ];
+          };
+        },
+        {
+          name: "userUsdc";
+          docs: ["USDC source (bids) and destination (ask proceeds)."];
+          writable: true;
+        },
+        {
+          name: "userYes";
+          docs: ["YES source (asks) and destination (bid fills)."];
+          writable: true;
+        },
+        {
+          name: "escrowUsdc";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowYes";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
         },
       ];
       args: [
@@ -709,9 +932,107 @@ export type Meridian = {
       discriminator: [189, 194, 132, 42, 80, 249, 154, 103];
       accounts: [
         {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "market";
+          writable: true;
+        },
+        {
+          name: "book";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [98, 111, 111, 107];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+          relations: ["market"];
+        },
+        {
           name: "user";
-          docs: ["The user selling NO."];
+          docs: ["The user selling NO; pays rent for `open_orders` on first use."];
+          writable: true;
           signer: true;
+        },
+        {
+          name: "openOrders";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 111];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+              {
+                kind: "account";
+                path: "user";
+              },
+            ];
+          };
+        },
+        {
+          name: "userUsdc";
+          writable: true;
+        },
+        {
+          name: "userYes";
+          writable: true;
+        },
+        {
+          name: "userNo";
+          writable: true;
+        },
+        {
+          name: "yesMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "noMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "vault";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowUsdc";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowYes";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
         },
       ];
       args: [
@@ -731,9 +1052,57 @@ export type Meridian = {
       discriminator: [238, 64, 163, 96, 75, 171, 16, 33];
       accounts: [
         {
+          name: "market";
+        },
+        {
           name: "owner";
           docs: ["The open orders owner."];
           signer: true;
+        },
+        {
+          name: "openOrders";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 111];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+              {
+                kind: "account";
+                path: "open_orders.owner";
+                account: "openOrders";
+              },
+            ];
+          };
+        },
+        {
+          name: "escrowUsdc";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowYes";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "userUsdc";
+          docs: ["Receives the free USDC."];
+          writable: true;
+        },
+        {
+          name: "userYes";
+          docs: ["Receives the free YES."];
+          writable: true;
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
         },
       ];
       args: [];
@@ -835,6 +1204,10 @@ export type Meridian = {
     {
       name: "market";
       discriminator: [219, 190, 213, 55, 0, 227, 198, 154];
+    },
+    {
+      name: "openOrders";
+      discriminator: [139, 166, 123, 206, 111, 2, 116, 33];
     },
   ];
   events: [
@@ -1596,6 +1969,45 @@ export type Meridian = {
           },
           {
             name: "settled";
+          },
+        ];
+      };
+    },
+    {
+      name: "openOrders";
+      docs: ['Free balances of one owner in one market. PDA seeds: `["oo", market, owner]`.'];
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "owner";
+            docs: ["The owner who can withdraw these balances."];
+            type: "pubkey";
+          },
+          {
+            name: "market";
+            docs: ["The market these balances belong to."];
+            type: "pubkey";
+          },
+          {
+            name: "freeUsdc";
+            docs: ["USDC base units withdrawable with `settle_funds`."];
+            type: "u64";
+          },
+          {
+            name: "freeYes";
+            docs: ["YES contracts withdrawable with `settle_funds`."];
+            type: "u64";
+          },
+          {
+            name: "restingCount";
+            docs: ["Orders currently resting on the book for this owner (cap: 8)."];
+            type: "u8";
+          },
+          {
+            name: "bump";
+            docs: ["PDA bump."];
+            type: "u8";
           },
         ];
       };

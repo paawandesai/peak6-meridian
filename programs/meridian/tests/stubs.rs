@@ -1,6 +1,7 @@
 //! M1-02 AC3: every instruction from architecture.md § Interfaces exists in the IDL built by
 //! `make build-local`, and every one not implemented yet returns `MeridianError::NotImplemented`.
-//! Implemented so far: config (M1-02); markets, mint/redeem (pair mode) and pause (M1-04).
+//! Implemented so far: config (M1-02); markets, mint/redeem (pair mode) and pause (M1-04);
+//! orders (M1-05); buy_no / sell_no (M1-06).
 
 // Test code: the program rules on unwrap/panic/arithmetic do not apply here.
 #![allow(
@@ -16,7 +17,6 @@ use anchor_lang::solana_program::hash::hash;
 use anchor_lang::{AnchorSerialize, InstructionData, ToAccountMetas};
 use common::{assert_meridian_error, symbol, Harness};
 use meridian::errors::MeridianError;
-use meridian::state::{OrderKind, Side};
 use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::Signer;
 
@@ -91,34 +91,6 @@ fn stub_instructions() -> Vec<(&'static str, Vec<u8>)> {
         .expect("borsh");
     vec![
         (
-            "place_order",
-            meridian::instruction::PlaceOrder {
-                side: Side::Bid,
-                price: 62,
-                qty: 10,
-                kind: OrderKind::Limit,
-            }
-            .data(),
-        ),
-        (
-            "cancel_order",
-            meridian::instruction::CancelOrder { order_id: 1 }.data(),
-        ),
-        ("settle_funds", meridian::instruction::SettleFunds {}.data()),
-        (
-            "buy_no",
-            meridian::instruction::BuyNo {
-                qty: 10,
-                price: 38,
-                kind: OrderKind::Ioc,
-            }
-            .data(),
-        ),
-        (
-            "sell_no",
-            meridian::instruction::SellNo { qty: 10, price: 65 }.data(),
-        ),
-        (
             "settle_market",
             meridian::instruction::SettleMarket {}.data(),
         ),
@@ -145,6 +117,11 @@ fn every_stub_is_covered_by_this_test() {
         "redeem",
         "pause",
         "unpause",
+        "place_order",
+        "cancel_order",
+        "settle_funds",
+        "buy_no",
+        "sell_no",
     ];
     let mut covered: Vec<&str> = stub_instructions()
         .into_iter()
@@ -161,8 +138,8 @@ fn every_stub_is_covered_by_this_test() {
 fn every_stub_returns_not_implemented() {
     let mut harness = Harness::new();
     let signer = harness.funded_keypair();
-    let accounts = meridian::accounts::PlaceOrder {
-        user: signer.pubkey(),
+    let accounts = meridian::accounts::SettleMarket {
+        payer: signer.pubkey(),
     }
     .to_account_metas(None);
     for (name, data) in stub_instructions() {

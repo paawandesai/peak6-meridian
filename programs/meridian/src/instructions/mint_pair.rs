@@ -63,6 +63,32 @@ pub fn handle_mint_pair(ctx: Context<MintPair>, qty: u64) -> Result<()> {
     require!(now < market.close_ts, MeridianError::MarketClosed);
     require!(qty > 0, MeridianError::InvalidQuantity);
 
+    mint_pairs(
+        &ctx.accounts.token_program,
+        &ctx.accounts.user,
+        &ctx.accounts.user_usdc,
+        &ctx.accounts.vault,
+        (&ctx.accounts.yes_mint, &ctx.accounts.user_yes),
+        (&ctx.accounts.no_mint, &ctx.accounts.user_no),
+        &mut ctx.accounts.market,
+        qty,
+    )
+}
+
+/// Deposits `qty` USDC into the vault and mints `qty` YES + `qty` NO to the user; the caller
+/// has checked pause, close and `qty > 0`. Also used by `buy_no`. Amounts are computed with
+/// checked arithmetic before any token movement (AB-12).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn mint_pairs<'info>(
+    token_program: &Program<'info, Token>,
+    user: &Signer<'info>,
+    user_usdc: &Account<'info, TokenAccount>,
+    vault: &Account<'info, TokenAccount>,
+    (yes_mint, user_yes): (&Account<'info, Mint>, &Account<'info, TokenAccount>),
+    (no_mint, user_no): (&Account<'info, Mint>, &Account<'info, TokenAccount>),
+    market: &mut Account<'info, Market>,
+    qty: u64,
+) -> Result<()> {
     let collateral = qty
         .checked_mul(PAIR_COLLATERAL)
         .ok_or(MeridianError::MathOverflow)?;
@@ -73,11 +99,11 @@ pub fn handle_mint_pair(ctx: Context<MintPair>, qty: u64) -> Result<()> {
 
     token::transfer(
         CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
+            token_program.to_account_info(),
             Transfer {
-                from: ctx.accounts.user_usdc.to_account_info(),
-                to: ctx.accounts.vault.to_account_info(),
-                authority: ctx.accounts.user.to_account_info(),
+                from: user_usdc.to_account_info(),
+                to: vault.to_account_info(),
+                authority: user.to_account_info(),
             },
         ),
         collateral,
@@ -90,13 +116,10 @@ pub fn handle_mint_pair(ctx: Context<MintPair>, qty: u64) -> Result<()> {
         &market.strike_cents.to_le_bytes(),
         &[market.bump],
     ]];
-    for (mint, to) in [
-        (&ctx.accounts.yes_mint, &ctx.accounts.user_yes),
-        (&ctx.accounts.no_mint, &ctx.accounts.user_no),
-    ] {
+    for (mint, to) in [(yes_mint, user_yes), (no_mint, user_no)] {
         token::mint_to(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                token_program.to_account_info(),
                 MintTo {
                     mint: mint.to_account_info(),
                     to: to.to_account_info(),
@@ -108,11 +131,10 @@ pub fn handle_mint_pair(ctx: Context<MintPair>, qty: u64) -> Result<()> {
         )?;
     }
 
-    let market = &mut ctx.accounts.market;
     market.pairs_outstanding = pairs_outstanding;
     emit!(PairsMinted {
         market: market.key(),
-        user: ctx.accounts.user.key(),
+        user: user.key(),
         qty,
         pairs_outstanding,
     });

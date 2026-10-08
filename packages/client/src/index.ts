@@ -7,6 +7,7 @@ export function clientInfo(): { readonly name: string; readonly program: string 
 }
 
 export * from "./config";
+export * from "./intents";
 export type { Meridian } from "./idl/meridian";
 export * from "./pda";
 export * from "./program";
