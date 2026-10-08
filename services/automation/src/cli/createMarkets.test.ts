@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { computeStrikes } from "../strikes";
 import {
   createMarkets,
+  isoDateSchema,
   type MarketOps,
   type PlannedMarket,
   planMarkets,
@@ -68,6 +69,14 @@ describe("planMarkets", () => {
     expect(() => planMarkets({ tradingDate: "2026-11-26", closes: { META: 68_000 } })).toThrow(
       RangeError,
     );
+  });
+
+  it("refuses a weekend or holiday even when the close is overridden", () => {
+    for (const tradingDate of ["2026-10-03", "2026-11-26", "2026-12-25"]) {
+      expect(() => planMarkets({ tradingDate, closes: { META: 68_000 }, closeTs: 1_234 })).toThrow(
+        RangeError,
+      );
+    }
   });
 
   it("plans exactly the strikes the calculator returns", () => {
@@ -142,5 +151,19 @@ describe("inputs", () => {
     ).toThrow();
     expect(() => prevClosesFileSchema.parse({ tradingDate: "10/06", closes: {} })).toThrow();
     expect(tradingDateNumber("2026-10-06")).toBe(20_261_006);
+  });
+
+  it("accepts only real ISO calendar dates", () => {
+    expect(isoDateSchema.parse("2026-10-06")).toBe("2026-10-06");
+    for (const bad of [
+      "2026-02-30",
+      "2026-13-01",
+      "2026-1-6",
+      "10/06/2026",
+      "",
+      "2026-10-06T00:00",
+    ]) {
+      expect(isoDateSchema.safeParse(bad).success, bad).toBe(false);
+    }
   });
 });

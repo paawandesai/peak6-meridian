@@ -11,7 +11,7 @@
  * E2E_SEED_ONLY=1 (stop after the markets exist; used by `make dev`).
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,7 +32,12 @@ import {
   symbolBytes,
   type TickerInput,
 } from "@meridian/client";
-import { createAccount, createMint, mintTo } from "@solana/spl-token";
+import {
+  createAccount,
+  createAssociatedTokenAccountIdempotent,
+  createMint,
+  mintTo,
+} from "@solana/spl-token";
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { z } from "zod";
 
@@ -213,6 +218,49 @@ async function createMarketsViaCli(sigs: string[]): Promise<{ created: number; e
   return { created: Number(match[1]), existed: Number(match[2]) };
 }
 
+/**
+ * `make dev`: two persisted local wallets (`trader-a`, `trader-b`) with SOL and 10,000 test-USDC
+ * each, so a browser wallet can import one of the keypairs and trade (docs/environment.md).
+ * The keypairs are throwaway local-validator keys under `target/` (gitignored); an existing
+ * file is reused so the imported wallet stays the same across `make dev` runs.
+ */
+async function fundDevWallets(usdcMint: PublicKey): Promise<void> {
+  const dir = resolve(ROOT, "target/dev-wallets");
+  mkdirSync(dir, { recursive: true });
+  for (const name of ["trader-a", "trader-b"]) {
+    const path = resolve(dir, `${name}.json`);
+    const keypair = existsSync(path)
+      ? Keypair.fromSecretKey(
+          Uint8Array.from(
+            z.array(z.number().int().min(0).max(255)).parse(JSON.parse(readFileSync(path, "utf8"))),
+          ),
+        )
+      : Keypair.generate();
+    if (!existsSync(path)) {
+      writeFileSync(path, JSON.stringify(Array.from(keypair.secretKey)), { mode: 0o600 });
+    }
+    const transfer = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: admin.publicKey,
+        toPubkey: keypair.publicKey,
+        lamports: 5_000_000_000,
+      }),
+    );
+    const sigs: string[] = [];
+    await send(transfer, [admin], sigs);
+    const account = await createAssociatedTokenAccountIdempotent(
+      connection,
+      admin,
+      usdcMint,
+      keypair.publicKey,
+    );
+    await mintTo(connection, admin, usdcMint, account, admin, 10_000n * UNITS_PER_USDC);
+    say(
+      `funded ${name} ${keypair.publicKey.toBase58()}: 5 SOL + 10,000 test-USDC (keypair ${path})`,
+    );
+  }
+}
+
 const closeInSecs = env.E2E_CLOSE_IN_SECS;
 
 async function main(): Promise<void> {
@@ -302,6 +350,7 @@ async function main(): Promise<void> {
   const market = await program.account.market.fetch(addresses.market);
   const closeTs = Number(market.closeTs.toString());
   if (env.E2E_SEED_ONLY !== undefined) {
+    await fundDevWallets(usdcMint);
     say(`seeded ${marketCount} markets for program ${programId.toBase58()}`);
     // Machine-readable: `scripts/e2e.sh --dev` hands this to the app as NEXT_PUBLIC_USDC_MINT.
     say(`SEED_USDC_MINT=${usdcMint.toBase58()}`);

@@ -16,7 +16,13 @@ import { createMeridianProgram, MERIDIAN_PROGRAM_ID } from "@meridian/client";
 import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { z } from "zod";
 
-import { chainMarketOps, createMarkets, planMarkets, prevClosesFileSchema } from "./createMarkets";
+import {
+  chainMarketOps,
+  createMarkets,
+  isoDateSchema,
+  planMarkets,
+  prevClosesFileSchema,
+} from "./createMarkets";
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
@@ -45,7 +51,7 @@ async function main(): Promise<void> {
   const file = prevClosesFileSchema.parse(
     JSON.parse(readFileSync(z.string().min(1).parse(values["prev-closes"]), "utf8")),
   );
-  const tradingDate = values.date ?? file.tradingDate;
+  const tradingDate = isoDateSchema.parse(values.date ?? file.tradingDate);
 
   const connection = new Connection(env.ANCHOR_PROVIDER_URL, "confirmed");
   const provider = new AnchorProvider(connection, new Wallet(loadKeypair(env.ANCHOR_WALLET)), {

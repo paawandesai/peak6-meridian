@@ -22,9 +22,18 @@ import { computeStrikes } from "../strikes";
 /** Ticker order of the config (docs/domain.md § Glossary: MAG7). */
 export const TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"] as const;
 
+/** `YYYY-MM-DD` naming a real calendar date (so `2026-02-30` and `2026-13-01` are refused). */
+export const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((text) => {
+    const parsed = new Date(`${text}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(text);
+  }, "not a real calendar date");
+
 /** Previous closes file: `{ tradingDate, closes: { SYMBOL: cents } }` (tests/fixtures/prev_closes.json). */
 export const prevClosesFileSchema = z.object({
-  tradingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  tradingDate: isoDateSchema,
   closes: z.record(z.string().regex(/^[A-Z]{1,8}$/), z.number().int().positive()),
 });
 export type PrevClosesFile = z.infer<typeof prevClosesFileSchema>;
@@ -51,7 +60,9 @@ export function tradingDateNumber(date: IsoDate): number {
 
 /** Every market of the day: each configured ticker with a previous close, each of its strikes. */
 export function planMarkets(input: PlanInput): PlannedMarket[] {
-  const closeTs = input.closeTs ?? closeTimeET(input.tradingDate).closeTs;
+  // Always consult the calendar: a holiday or weekend is refused even with a close override.
+  const calendarCloseTs = closeTimeET(input.tradingDate).closeTs;
+  const closeTs = input.closeTs ?? calendarCloseTs;
   const tradingDate = tradingDateNumber(input.tradingDate);
   return TICKERS.filter((symbol) => input.closes[symbol] !== undefined).flatMap((symbol) =>
     computeStrikes(input.closes[symbol] ?? 0).map((strike) => ({
