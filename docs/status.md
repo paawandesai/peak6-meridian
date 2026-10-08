@@ -26,7 +26,7 @@ _Last updated: 2026-10-07 12:05 CT by operator (merge main into M1-09 after D-04
 - M1-09 live spike / feed create on devnet: needs keys usable outside sandbox (see OQ-2 / OQ-11). Offline `--dry-run` is the CI path.
 
 ## Awaiting human veto
-_None._
+- D-048 · UI clarity and usability pass (`/design` spec → UI-01, then UI-02+ tickets). **Already approved** by Paawan 2026-10-07 ~20:32 CT; listed for visibility.
 
 ## Open questions
 | ID | Question | Owner | Blocks |

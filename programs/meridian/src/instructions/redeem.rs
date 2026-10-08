@@ -61,9 +61,32 @@ pub fn handle_redeem(ctx: Context<Redeem>, yes_qty: u64, no_qty: u64) -> Result<
 fn redeem_pair(ctx: Context<Redeem>, yes_qty: u64, no_qty: u64) -> Result<()> {
     require!(yes_qty == no_qty, MeridianError::PairQuantityMismatch);
     require!(yes_qty > 0, MeridianError::NothingToRedeem);
-    let qty = yes_qty;
-    let market = &ctx.accounts.market;
+    redeem_pairs(
+        &ctx.accounts.token_program,
+        &ctx.accounts.user,
+        &ctx.accounts.user_usdc,
+        (&ctx.accounts.yes_mint, &ctx.accounts.user_yes),
+        (&ctx.accounts.no_mint, &ctx.accounts.user_no),
+        &ctx.accounts.vault,
+        &mut ctx.accounts.market,
+        yes_qty,
+    )
+}
 
+/// Burns `qty` YES + `qty` NO of the user and pays `qty` USDC from the vault; the caller has
+/// checked `qty > 0`. Also used by `buy_no` and `sell_no`. Tokens are burned before the vault
+/// pays, with checked arithmetic first (AB-02, AB-12).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn redeem_pairs<'info>(
+    token_program: &Program<'info, Token>,
+    user: &Signer<'info>,
+    user_usdc: &Account<'info, TokenAccount>,
+    (yes_mint, user_yes): (&Account<'info, Mint>, &Account<'info, TokenAccount>),
+    (no_mint, user_no): (&Account<'info, Mint>, &Account<'info, TokenAccount>),
+    vault: &Account<'info, TokenAccount>,
+    market: &mut Account<'info, Market>,
+    qty: u64,
+) -> Result<()> {
     let usdc = qty
         .checked_mul(PAIR_COLLATERAL)
         .ok_or(MeridianError::MathOverflow)?;
@@ -72,16 +95,46 @@ fn redeem_pair(ctx: Context<Redeem>, yes_qty: u64, no_qty: u64) -> Result<()> {
         .checked_sub(qty)
         .ok_or(MeridianError::MathOverflow)?;
 
-    burn_tokens(&ctx, qty, qty)?;
-    pay_from_vault(&ctx, usdc)?;
+    for (mint, from) in [(yes_mint, user_yes), (no_mint, user_no)] {
+        token::burn(
+            CpiContext::new(
+                token_program.to_account_info(),
+                Burn {
+                    mint: mint.to_account_info(),
+                    from: from.to_account_info(),
+                    authority: user.to_account_info(),
+                },
+            ),
+            qty,
+        )?;
+    }
 
-    let market = &mut ctx.accounts.market;
+    let signer_seeds: &[&[&[u8]]] = &[&[
+        MARKET_SEED,
+        &market.ticker,
+        &market.trading_date.to_le_bytes(),
+        &market.strike_cents.to_le_bytes(),
+        &[market.bump],
+    ]];
+    token::transfer(
+        CpiContext::new_with_signer(
+            token_program.to_account_info(),
+            Transfer {
+                from: vault.to_account_info(),
+                to: user_usdc.to_account_info(),
+                authority: market.to_account_info(),
+            },
+            signer_seeds,
+        ),
+        usdc,
+    )?;
+
     market.pairs_outstanding = pairs_outstanding;
     emit!(Redeemed {
         market: market.key(),
-        user: ctx.accounts.user.key(),
-        yes_qty,
-        no_qty,
+        user: user.key(),
+        yes_qty: qty,
+        no_qty: qty,
         usdc,
     });
     Ok(())
@@ -106,23 +159,6 @@ fn redeem_winner(ctx: Context<Redeem>, yes_qty: u64, no_qty: u64) -> Result<()> 
         .checked_sub(winning_qty)
         .ok_or(MeridianError::MathOverflow)?;
 
-    burn_tokens(&ctx, yes_qty, no_qty)?;
-    pay_from_vault(&ctx, usdc)?;
-
-    let market = &mut ctx.accounts.market;
-    market.pairs_outstanding = pairs_outstanding;
-    emit!(Redeemed {
-        market: market.key(),
-        user: ctx.accounts.user.key(),
-        yes_qty,
-        no_qty,
-        usdc,
-    });
-    Ok(())
-}
-
-/// Burns `yes_qty` YES and `no_qty` NO from the user's accounts (zero amounts are skipped).
-fn burn_tokens(ctx: &Context<Redeem>, yes_qty: u64, no_qty: u64) -> Result<()> {
     for (mint, from, qty) in [
         (&ctx.accounts.yes_mint, &ctx.accounts.user_yes, yes_qty),
         (&ctx.accounts.no_mint, &ctx.accounts.user_no, no_qty),
@@ -142,32 +178,37 @@ fn burn_tokens(ctx: &Context<Redeem>, yes_qty: u64, no_qty: u64) -> Result<()> {
             qty,
         )?;
     }
-    Ok(())
-}
 
-/// Transfers `usdc` base units from the vault to the user, signed by the market PDA.
-fn pay_from_vault(ctx: &Context<Redeem>, usdc: u64) -> Result<()> {
-    if usdc == 0 {
-        return Ok(());
+    if usdc > 0 {
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            MARKET_SEED,
+            &market.ticker,
+            &market.trading_date.to_le_bytes(),
+            &market.strike_cents.to_le_bytes(),
+            &[market.bump],
+        ]];
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.vault.to_account_info(),
+                    to: ctx.accounts.user_usdc.to_account_info(),
+                    authority: market.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            usdc,
+        )?;
     }
-    let market = &ctx.accounts.market;
-    let signer_seeds: &[&[&[u8]]] = &[&[
-        MARKET_SEED,
-        &market.ticker,
-        &market.trading_date.to_le_bytes(),
-        &market.strike_cents.to_le_bytes(),
-        &[market.bump],
-    ]];
-    token::transfer(
-        CpiContext::new_with_signer(
-            ctx.accounts.token_program.to_account_info(),
-            Transfer {
-                from: ctx.accounts.vault.to_account_info(),
-                to: ctx.accounts.user_usdc.to_account_info(),
-                authority: market.to_account_info(),
-            },
-            signer_seeds,
-        ),
+
+    let market = &mut ctx.accounts.market;
+    market.pairs_outstanding = pairs_outstanding;
+    emit!(Redeemed {
+        market: market.key(),
+        user: ctx.accounts.user.key(),
+        yes_qty,
+        no_qty,
         usdc,
-    )
+    });
+    Ok(())
 }
