@@ -16,9 +16,12 @@
 | `USDC_MINT` | all | Test-USDC mint | yes | `Usdc111111111111111111111111111111111111111` |
 | `PROGRAM_KEYPAIR_PATH` | scripts | Program ID keypair file for first devnet deploy (never committed) | M2 | `~/.config/meridian/program.json` |
 | `ADMIN_KEYPAIR_PATH` | scripts | Admin keypair file (deploy/config/override scripts) | scripts only | `~/.config/meridian/admin.json` |
-| `AUTOMATION_KEYPAIR` | automation, scripts (public key only) | Automation authority secret key (JSON array) | yes (automation) | `[1,2,3,...]` |
+| `AUTOMATION_KEYPAIR` | automation | Automation authority secret key (JSON array) | yes (automation) | `[1,2,3,...]` |
 | `MARKET_MAKER_KEYPAIR` | quant | Market-maker wallet secret key (JSON array) | M3 | `[1,2,3,...]` |
-| `FAUCET_KEYPAIR` | app (server), scripts (deploy/lifecycle) | Test-USDC mint authority for the faucet (JSON array) | M2 | `[1,2,3,...]` |
+| `FAUCET_KEYPAIR` | app (server), scripts (lifecycle fallback signing only) | Test-USDC mint authority for the faucet (JSON array) | M2 | `[1,2,3,...]` |
+| `AUTOMATION_PUBKEY` | scripts (deploy) | Automation authority public key written to Config (no secret needed by deploy) | M2 | `<base58 pubkey>` |
+| `FAUCET_PUBKEY` | scripts (deploy) | Faucet public key used as test-USDC mint authority (no secret needed by deploy) | M2 | `<base58 pubkey>` |
+| `FAUCET_MIN_SOL` | app (server) | Faucet key SOL balance floor; below it the faucet returns 503 and alerts | no (default 0.1) | `0.1` |
 | `FAUCET_AMOUNT_USDC` | app (server) | Faucet amount per claim | no (default 1000) | `1000` |
 | `SWITCHBOARD_QUEUE` | automation, scripts | Switchboard devnet queue pubkey | devnet | `<queue pubkey>` |
 | `SWITCHBOARD_FEEDS_JSON` | automation, scripts | Feed pubkeys per ticker and source | devnet | `{"AAPL":["<tiingo feed>","<twelvedata feed>"],...}` |
@@ -30,7 +33,7 @@
 | `OPS_AGENT_BUDGET_USD` | ops-agent | Hard spend cap; agent refuses calls once reached | no (default 20) | `20` |
 | `SERVICE_TOKEN` | app, automation, quant, ops-agent | Bearer token for internal HTTP calls | yes (services) | `local-dev-token` |
 | `QUANT_URL` / `OPS_AGENT_URL` | app, automation | Internal service URLs | M3 | `http://127.0.0.1:4100` |
-| `ALERT_WEBHOOK_URL` | automation, ops-agent | POST JSON alerts (Discord/Slack-compatible) | no | `https://example.invalid/webhook` |
+| `ALERT_WEBHOOK_URL` | automation, ops-agent, app (server) | POST JSON alerts (Discord/Slack-compatible) | no | `https://example.invalid/webhook` |
 | `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | CI deploy job only | Deploy the app with the Vercel CLI (IDs come from `vercel link`) | M2 | `test-vercel-token` |
 | `RAILWAY_TOKEN` | CI deploy job only | Railway project token for deploying services | M2 | `test-railway-token` |
 | `FAULT_INJECT_SOURCE` | local demo only | Make one fixture source report a bad close; refused unless `SOLANA_CLUSTER=localnet` | no | `twelvedata` |
