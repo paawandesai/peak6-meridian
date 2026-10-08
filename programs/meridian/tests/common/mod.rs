@@ -12,6 +12,8 @@
     clippy::result_large_err
 )]
 
+pub mod orders;
+
 use std::path::PathBuf;
 
 use anchor_lang::prelude::Pubkey;
