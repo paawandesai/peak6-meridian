@@ -17,8 +17,8 @@ make e2e              # scripted full lifecycle: create → mint → trade (4 pa
 Commands and conventions: [CLAUDE.md](CLAUDE.md). Environment variables: [docs/environment.md](docs/environment.md).
 
 ## Devnet
-- **Program ID (declared, re-keyed in D-053):** `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm` (its keypair is held outside the repo; see [docs/decisions.md](docs/decisions.md)). The first live run writes it, with the mint and Config PDA, to `deployments/devnet.json`.
-- **Test-USDC mint:** _not created yet._ The first live `make deploy-devnet` run creates it (6 decimals, mint authority = the faucet key) and writes its address to `deployments/devnet.json` and here.
+- **Program ID (re-keyed in D-053, deployed):** [`H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`](https://explorer.solana.com/address/H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm?cluster=devnet) (its keypair is held outside the repo; see [docs/decisions.md](docs/decisions.md)). Upgrade authority and admin: `6cp7ExvkgtdQuMyJXv26wg8Z2MBJT2idPdTkXx13F5Se`. The deployment record is `deployments/devnet.json`; the Config feeds are still placeholders until M2-02's live feeds are pinned.
+- **Test-USDC mint:** [`GKuoE1akZCNnA4ouVdB6P3ngSnanBM28oydPS54fSnT5`](https://explorer.solana.com/address/GKuoE1akZCNnA4ouVdB6P3ngSnanBM28oydPS54fSnT5?cluster=devnet) (6 decimals, mint authority = the faucet key `32eaD4Hp5WQ4UeD8S7eFVCVtxBvZuBpQzE4Byt7JLju7`). Config PDA: [`6Bf88kHFDDjdXG1BEdrj1edkLwWt9pEiKPFp6Ekhkoew`](https://explorer.solana.com/address/6Bf88kHFDDjdXG1BEdrj1edkLwWt9pEiKPFp6Ekhkoew?cluster=devnet) (automation authority `7JFyYPJyhJokQ3wMKHwJwb35MFj87snz52nTUS6qeEMy`).
 - **Frontend URL, how to get test-USDC:** _filled in when the app is deployed (M2)._
 
 Deploy (idempotent, refuses any cluster whose genesis hash is not devnet; needs the keypairs from D-053 (OQ-5), see [docs/environment.md](docs/environment.md#devnet-deploy)):
