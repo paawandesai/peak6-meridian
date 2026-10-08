@@ -93,10 +93,10 @@ describe("next close (AC4)", () => {
 
 describe("pause banner slot", () => {
   it("shows the pause text on every page when paused, and nothing otherwise", () => {
-    const { unmount } = header({ config: { paused: true, overrideDelaySecs: 3600n } });
+    const { unmount } = header({ config: { paused: true, overrideDelaySecs: 3600n, admin: "A" } });
     expect(screen.getByRole("status")).toHaveTextContent(PAUSE_BANNER_TEXT);
     unmount();
-    header({ config: { paused: false, overrideDelaySecs: 3600n } });
+    header({ config: { paused: false, overrideDelaySecs: 3600n, admin: "A" } });
     expect(screen.queryByText(PAUSE_BANNER_TEXT)).toBeNull();
   });
 });
