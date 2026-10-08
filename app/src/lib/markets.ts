@@ -1,8 +1,23 @@
 /** Market view model: status, grouping by ticker and display formatting. */
 import { strikeCentsToDollars } from "@meridian/client";
 
-/** `Closed` is derived (`now >= closeTs` and not settled); the chain stores Open or Settled. */
-export type MarketStatus = "Open" | "Closed" | "Settled";
+/**
+ * Market state per docs/design.md §3. The chain stores only Open or Settled; the rest is derived
+ * from `close_ts` and the clock (an injected `nowSecs`, never read here). `Paused` is a global
+ * flag (`Config.paused`), not a per-market status, so it is not part of this type.
+ */
+export type MarketStatus =
+  "Open" | "ClosingSoon" | "Closed" | "Settling" | "SettlementDelayed" | "Settled";
+
+/** Settlement outcome decoded from the `Market` account. */
+export type MarketOutcome = "None" | "Yes" | "No";
+
+/** "Closing soon" starts 15 minutes before `close_ts` (a UI threshold, design.md §3). */
+export const CLOSING_SOON_SECS = 15n * 60n;
+/** The settlement job's first attempt: `close_ts` + 5 minutes (domain.md). */
+export const SETTLING_START_SECS = 5n * 60n;
+/** The job's retry window ends 20 minutes after `close_ts`; after that settlement is delayed. */
+export const SETTLEMENT_DELAYED_SECS = 20n * 60n;
 
 export type MarketRow = {
   readonly address: string;
@@ -11,6 +26,10 @@ export type MarketRow = {
   readonly strikeCents: bigint;
   readonly closeTs: bigint;
   readonly settled: boolean;
+  /** `None` until settled. */
+  readonly outcome: MarketOutcome;
+  /** Settle price with 18 fractional digits (`0n` until settled). */
+  readonly settlePriceScaled: bigint;
   readonly pairsOutstanding: bigint;
 };
 
@@ -18,7 +37,12 @@ export type TickerGroup = { readonly ticker: string; readonly markets: readonly 
 
 export function marketStatus(market: MarketRow, nowSecs: number): MarketStatus {
   if (market.settled) return "Settled";
-  return BigInt(nowSecs) >= market.closeTs ? "Closed" : "Open";
+  const now = BigInt(nowSecs);
+  if (now < market.closeTs - CLOSING_SOON_SECS) return "Open";
+  if (now < market.closeTs) return "ClosingSoon";
+  if (now < market.closeTs + SETTLING_START_SECS) return "Closed";
+  if (now < market.closeTs + SETTLEMENT_DELAYED_SECS) return "Settling";
+  return "SettlementDelayed";
 }
 
 /** Groups by ticker (alphabetical), newest trading date first, then ascending strike. */

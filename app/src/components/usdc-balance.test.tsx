@@ -22,7 +22,7 @@ describe("UsdcBalance", () => {
     wallet.publicKey = OWNER;
     render(withReader(reader({ usdcBalance: () => Promise.resolve(1_250_000n) }), <UsdcBalance />));
     expect(screen.getByRole("status")).toHaveTextContent("Loading balance");
-    expect(await screen.findByText("1.250000 test-USDC")).toBeInTheDocument();
+    expect(await screen.findByText("1.25 test-USDC")).toBeInTheDocument();
   });
 
   it("says so when no mint is configured", async () => {
