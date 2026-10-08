@@ -14,6 +14,7 @@
 | `SOLANA_WS_URL` | app, automation, quant | RPC websocket | yes | `ws://127.0.0.1:8900` |
 | `MERIDIAN_PROGRAM_ID` | all | Deployed program ID | yes | `Merid1an11111111111111111111111111111111111` |
 | `USDC_MINT` | all | Test-USDC mint | yes | `Usdc111111111111111111111111111111111111111` |
+| `PROGRAM_KEYPAIR_PATH` | scripts | Program ID keypair file for first devnet deploy (never committed) | M2 | `~/.config/meridian/program.json` |
 | `ADMIN_KEYPAIR_PATH` | scripts | Admin keypair file (deploy/config/override scripts) | scripts only | `~/.config/meridian/admin.json` |
 | `AUTOMATION_KEYPAIR` | automation | Automation authority secret key (JSON array) | yes (automation) | `[1,2,3,...]` |
 | `MARKET_MAKER_KEYPAIR` | quant | Market-maker wallet secret key (JSON array) | M3 | `[1,2,3,...]` |
