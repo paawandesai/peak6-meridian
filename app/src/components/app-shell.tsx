@@ -1,24 +1,37 @@
 "use client";
 
+import { AppHeader } from "./app-header";
 import { MarketsView } from "./markets-view";
 import { Providers } from "./providers";
-import { UsdcBalance } from "./usdc-balance";
-import { WalletButton } from "./wallet-button";
+import { useReader } from "./reader-context";
+import { useAsync } from "./use-async";
+import { useNow } from "./use-now";
+
+/** Header data: the markets (for the next close) and the config (for the pause banner). */
+function Shell() {
+  const reader = useReader();
+  const nowSecs = useNow();
+  const markets = useAsync(() => reader.listMarkets(), [reader]);
+  const config = useAsync(() => reader.getConfig(), [reader]);
+  return (
+    <>
+      <AppHeader
+        nowSecs={nowSecs}
+        markets={markets.status === "ready" ? markets.value : null}
+        config={config.status === "ready" ? config.value : null}
+      />
+      <main className="mx-auto max-w-3xl px-mer-4 py-mer-6">
+        <h2 className="sr-only">Markets</h2>
+        <MarketsView />
+      </main>
+    </>
+  );
+}
 
 export function AppShell() {
   return (
     <Providers>
-      <header className="flex items-center justify-between border-b border-slate-200 px-6 py-3">
-        <h1 className="text-xl font-bold">Meridian</h1>
-        <div className="flex items-center gap-4 text-sm">
-          <UsdcBalance />
-          <WalletButton />
-        </div>
-      </header>
-      <main className="mx-auto max-w-3xl px-6 py-6">
-        <h2 className="sr-only">Markets</h2>
-        <MarketsView />
-      </main>
+      <Shell />
     </Providers>
   );
 }
