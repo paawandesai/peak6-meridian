@@ -132,7 +132,8 @@ CSS custom properties in `app/src/app/globals.css`, exposed to Tailwind v4 throu
   --mer-surface: #FFFFFF;    /* panels */
   --mer-ink: #13233A;        /* primary text (navy ink, AA on paper 14.5:1) */
   --mer-ink-muted: #4A5B72;  /* secondary text (AA 6.9:1) */
-  --mer-rule: #D5DDE8;       /* borders, ladder rails */
+  --mer-rule: #D5DDE8;       /* non-essential dividers and ladder rails only (1.3:1, decorative) */
+  --mer-control-border: #6B7C93; /* borders of inputs, buttons, the intent control (non-text AA: 4.0:1 on paper, 4.3:1 on surface) */
   --mer-yes: #1E5BB8;        /* YES (AA on white 6.3:1) */
   --mer-no: #A4500A;         /* NO amber-brown (AA on white 5.6:1) */
   --mer-gain: #146C43;       /* +P&L, pass */
@@ -152,13 +153,14 @@ CSS custom properties in `app/src/app/globals.css`, exposed to Tailwind v4 throu
 @media (prefers-color-scheme: dark) {
   :root {
     --mer-paper: #0E1726; --mer-surface: #15213A; --mer-ink: #E6EDF7;
-    --mer-ink-muted: #A3B2C7; --mer-rule: #2A3A55; --mer-yes: #7FAEF5;
+    --mer-ink-muted: #A3B2C7; --mer-rule: #2A3A55; --mer-control-border: #7C8DA6;
+    --mer-yes: #7FAEF5;
     --mer-no: #F2A766; --mer-gain: #5CC98D; --mer-loss: #F28B82;
     --mer-warn: #E8C26A; --mer-focus: #7FAEF5;
   }
 }
 ```
-Contrast values above are targets; UI-02 verifies each pair with an automated contrast test and adjusts hex values if any pair is below WCAG AA.
+Interactive controls (inputs, buttons, the four-intent segmented control, the wallet button) draw their boundary with `--mer-control-border`, never `--mer-rule`, so they meet the 3:1 non-text contrast of WCAG 1.4.11. `--mer-rule` is for decorative dividers and ladder rails only. Contrast values above are targets; UI-02 verifies each pair with an automated contrast test and adjusts hex values if any pair is below WCAG AA.
 
 Principle: spend the boldness in one place. The **strike ladder** is the memorable element (a vertical ladder per ticker with a horizontal probability bar per strike and the live price drawn as a line between strikes). Everything else stays quiet: no gradients, no card shadows, one radius, rules instead of boxes where possible.
 
