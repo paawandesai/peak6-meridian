@@ -226,6 +226,9 @@ describe("degraded mode: automation key missing or invalid (AC5b)", () => {
     // Exactly one alert.
     expect(t.alerter.alerts).toHaveLength(1);
     expect(t.alerter.alerts[0]?.kind).toBe("automation_key_missing");
+    // The alert tells the operator how to recover (AC5b).
+    expect(t.alerter.alerts[0]?.summary).toContain("settle-now");
+    expect(t.alerter.alerts[0]?.summary).toContain("redeploy");
   });
 
   it("leaks no key material, not even a fragment, into logs, alerts or /health", async () => {

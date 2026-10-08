@@ -96,7 +96,9 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
     disabled = ["morning", "settlement"];
     alert = {
       kind: "automation_key_missing",
-      summary: "AUTOMATION_KEYPAIR is missing or invalid; no job can sign, both jobs are disabled",
+      summary:
+        "AUTOMATION_KEYPAIR is missing or invalid, so no job can sign and both jobs are disabled. " +
+        "Fix the environment and redeploy, or settle manually with the settle-now CLI (M2-04) using any funded devnet keypair.",
     };
   } else {
     const signerDeps = await deps.withSigner(deps.signer);
