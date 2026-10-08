@@ -118,7 +118,11 @@ export async function runFaucetChecks(options: {
     const bucket = dayBucket(await realChain.clusterUnixTime());
     const prefunded = await markerAddress(faucetKey.publicKey, walletC, bucket);
     const tx = new Transaction().add(
-      SystemProgram.transfer({ fromPubkey: admin.publicKey, toPubkey: prefunded, lamports: 5_000 }),
+      SystemProgram.transfer({
+        fromPubkey: admin.publicKey,
+        toPubkey: prefunded,
+        lamports: await connection.getMinimumBalanceForRentExemption(0),
+      }),
     );
     sigs.push(await connection.sendTransaction(tx, [admin]));
     await connection.confirmTransaction(sigs[0] ?? "", "confirmed");
