@@ -66,7 +66,7 @@ Rule for everything below: **text plus colour, never colour alone.** Every colou
 |---|---|---|---|
 | Open | `Open` and `now < close_ts − 15 min` | Open | neutral outline |
 | Closing soon | `Open` and `close_ts − 15 min ≤ now < close_ts` | Closes in 12:04 | warn tint + live countdown |
-| Closed | `now ≥ close_ts`, not settled, before close + 5 min | Closed, settling at 16:05 ET | muted |
+| Closed | `now ≥ close_ts`, not settled, before close + 5 min | Closed, settling at close + 5 min (16:05 ET; 13:05 ET on early-close days) | muted |
 | Settling | after close + 5 min, not settled | Settling… (attempt n) | muted + spinner with text |
 | Settled YES | `Settled`, outcome YES | Settled YES at $181.42 | YES hue, solid |
 | Settled NO | `Settled`, outcome NO | Settled NO at $178.10 | NO hue, solid |
@@ -154,14 +154,14 @@ After:
 │ Will a MAG7 stock close at or above a price today? Pick a strike; YES wins at or above,│  ← landing (FR-21), 2 lines,
 │ NO wins below. Max loss is what you pay.                                [Connect wallet]│    hidden once connected
 ├ NVDA  $181.42  ▲0.8%  as of 14:52:05 ET                         7 strikes · closes 16:00 ET ┤
-│  $200  ▏██                         4¢ YES   96¢ NO    4%   Open                         │
-│  $190  ▏██████                    18¢ YES   82¢ NO   18%   Open                         │
-│ ─────── live $181.42 ───────────────────────────────────────────────                    │  ← live-price marker
 │  $180  ▏██████████████████        58¢ YES   42¢ NO   58%   Open             [Trade]     │  ← whole row is the link
+│ ─────── live $181.42 ───────────────────────────────────────────────                    │  ← live-price marker
+│  $190  ▏██████                    18¢ YES   82¢ NO   18%   Open                         │
+│  $200  ▏██                         4¢ YES   96¢ NO    4%   Open                         │
 │  ...                                                                                    │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
-Annotations: (a) the ladder bar length = YES price, labelled with the number; (b) the live-price line sits between the two strikes it falls between; (c) each row links to Trade (2 clicks from landing: ticker row → strike row); (d) state badge text per §3; (e) 390 px: the bar collapses under the strike and the NO column hides behind a "YES/NO" toggle.
+Strikes are listed ascending (UI-03 AC1). Annotations: (a) the ladder bar length = YES price, labelled with the number; (b) the live-price line sits between the two strikes it falls between; (c) each row links to Trade (2 clicks from landing: ticker row → strike row); (d) state badge text per §3; (e) 390 px: the bar collapses under the strike and the NO column hides behind a "YES/NO" toggle.
 
 ### Trade
 Before: does not exist (M2).
@@ -169,10 +169,10 @@ After:
 ```
 Will NVDA close at or above $180 today?          Open · closes in 1:07:53 · NVDA $181.42 as of 14:52:05 ET
 ┌ Book  [YES view | NO view]       ┐ ┌ [Buy YES][Buy NO][Sell YES][Sell NO]          ┐
-│ asks  61¢ ×40   60¢ ×25           │ │ Market ○ Limit ●  Price 42¢ NO   Qty [ 10 ]   │
-│ ─── spread 2¢ ───                 │ │ You pay $4.20 for 10 contracts. You win $10.00 │
-│ bids  58¢ ×30   57¢ ×50           │ │ (profit $5.80) if NVDA closes below $180.      │
-└───────────────────────────────────┘ │ Simulated: rests YES ask at 58¢. 1 signature. │
+│ asks  61¢ ×40   60¢ ×25           │ │ Market ○ Limit ●  Price 40¢ NO   Qty [ 10 ]   │
+│ ─── spread 2¢ ───                 │ │ You pay $4.00 for 10 contracts. You win $10.00 │
+│ bids  58¢ ×30   57¢ ×50           │ │ (profit $6.00) if NVDA closes below $180.      │
+└───────────────────────────────────┘ │ Simulated: rests YES ask at 60¢. 1 signature. │
   (M3) Fair 58¢ · Edge +0¢             │ [ Sign and buy NO ]   status: Simulating…      │
                                        └───────────────────────────────────────────────┘
 ```
@@ -182,13 +182,13 @@ Annotations: (a) the question is the H1; (b) the NO view relabels the same book 
 Before: does not exist (M2).
 After:
 ```
-USDC 1,250.00 · Redeemable now $40.00 [Redeem all] · Unrealized +$3.80 · Realized −$1.20
+USDC 1,250.00 · Redeemable now $40.00 [Redeem all] · Unrealized +$0.20 · Realized −$1.20
 Market            Side  Qty  Avg   Mark  Unrealized  Realized  State
 NVDA ≥ $180 10/08  NO    10  42¢   44¢   +$0.20      $0.00     Open · 1:07:53
 AAPL ≥ $230 10/07  YES   40  55¢   100¢  —           —         Settled YES at $231.02 [Redeem $40.00]
 MM exposure: NVDA $180 net −10 YES-equiv · $190 +25 · ...   Open orders 3 · Unsettled $12.40 [Withdraw]
 ```
-Annotations: (a) the totals line answers "where do I stand" first; (b) settled winners show the payout and a one-click Redeem (US-11); (c) the MM block is dense and tabular (P3), collapsed for wallets with no open orders.
+Figures are illustrative; the totals include positions not shown. Annotations: (a) the totals line answers "where do I stand" first; (b) settled winners show the payout and a one-click Redeem (US-11); (c) the MM block is dense and tabular (P3), collapsed for wallets with no open orders.
 
 ## 6. Accessibility and layout floor (all UI tickets)
 - Works at 1280 px and 390 px; no horizontal scroll at 390 px except the book table.
