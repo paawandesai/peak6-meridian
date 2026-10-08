@@ -21,7 +21,8 @@ idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 local-oracle = []
 
 [dependencies]
-anchor-lang = "=0.31.1"
+# `init-if-needed`: `place_order` creates the owner's OpenOrders on first use (D-029).
+anchor-lang = { version = "=0.31.1", features = ["init-if-needed"] }
 anchor-spl = "=0.31.1"
 # Required by Anchor's zero-copy accounts (`Book`).
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
