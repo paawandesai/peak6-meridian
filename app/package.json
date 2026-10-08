@@ -10,15 +10,36 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "seed:local": "esbuild scripts/seed-local.ts --bundle --platform=node --format=cjs --external:@coral-xyz/anchor --external:@solana/* --log-level=warning --outfile=node_modules/.cache/seed-local.cjs && node node_modules/.cache/seed-local.cjs"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "0.31.1",
+    "@meridian/client": "workspace:*",
+    "@solana/wallet-adapter-base": "0.9.28",
+    "@solana/wallet-adapter-phantom": "0.9.30",
+    "@solana/wallet-adapter-react": "0.15.40",
+    "@solana/wallet-adapter-react-ui": "0.9.40",
+    "@solana/wallet-adapter-solflare": "0.6.34",
+    "@solana/web3.js": "1.99.0",
     "next": "15.5.27",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
+    "@solana/spl-token": "0.4.15",
+    "@tailwindcss/postcss": "4.3.3",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
     "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0"
+    "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
+    "fast-check": "4.10.2",
+    "jsdom": "30.1.2",
+    "postcss": "8.5.29",
+    "tailwindcss": "4.3.3",
+    "tsx": "4.23.15"
   }
 }
