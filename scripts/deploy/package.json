@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Devnet deployment commands: program, test-USDC mint and config (M2-01)",
+  "description": "Devnet deployment commands: program, test-USDC mint and config (M2-01); platform services (M2-11, M3-08)",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "test:deploy": "vitest run --config vitest.deploy.config.ts",
-    "deploy-devnet": "tsx --env-file-if-exists=../../.env src/deploy-devnet.ts"
+    "deploy-devnet": "tsx --env-file-if-exists=../../.env src/deploy-devnet.ts",
+    "deploy-quant": "tsx --env-file-if-exists=../../.env src/deploy-quant-ops.ts quant",
+    "deploy-ops-agent": "tsx --env-file-if-exists=../../.env src/deploy-quant-ops.ts ops-agent"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.31.1",
