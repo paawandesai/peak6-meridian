@@ -16,9 +16,9 @@
 | `USDC_MINT` | all | Test-USDC mint | yes | `Usdc111111111111111111111111111111111111111` |
 | `PROGRAM_KEYPAIR_PATH` | scripts | Program ID keypair file for first devnet deploy (never committed) | M2 | `~/.config/meridian/program.json` |
 | `ADMIN_KEYPAIR_PATH` | scripts | Admin keypair file (deploy/config/override scripts) | scripts only | `~/.config/meridian/admin.json` |
-| `AUTOMATION_KEYPAIR` | automation | Automation authority secret key (JSON array) | yes (automation) | `[1,2,3,...]` |
+| `AUTOMATION_KEYPAIR` | automation, scripts (public key only) | Automation authority secret key (JSON array) | yes (automation) | `[1,2,3,...]` |
 | `MARKET_MAKER_KEYPAIR` | quant | Market-maker wallet secret key (JSON array) | M3 | `[1,2,3,...]` |
-| `FAUCET_KEYPAIR` | app (server) | Test-USDC mint authority for the faucet (JSON array) | M2 | `[1,2,3,...]` |
+| `FAUCET_KEYPAIR` | app (server), scripts (deploy/lifecycle) | Test-USDC mint authority for the faucet (JSON array) | M2 | `[1,2,3,...]` |
 | `FAUCET_AMOUNT_USDC` | app (server) | Faucet amount per claim | no (default 1000) | `1000` |
 | `SWITCHBOARD_QUEUE` | automation, scripts | Switchboard devnet queue pubkey | devnet | `<queue pubkey>` |
 | `SWITCHBOARD_FEEDS_JSON` | automation, scripts | Feed pubkeys per ticker and source | devnet | `{"AAPL":["<tiingo feed>","<twelvedata feed>"],...}` |
