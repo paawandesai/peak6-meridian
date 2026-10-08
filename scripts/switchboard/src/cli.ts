@@ -1,9 +1,12 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import { createMeridianProgram, findConfigPda, MERIDIAN_PROGRAM_ID } from "@meridian/client";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 
 import {
@@ -17,7 +20,9 @@ import {
   sdkClient,
   type SwitchboardClient,
 } from "./devnet";
-import { SOURCE_KEY_VARIABLE, SOURCES, loadFeedDefinitions } from "./feeds";
+import { checkFeeds, configReaderFromProgram, type ConfigReader } from "./check";
+import { SOURCE_KEY_VARIABLE, SOURCES, TICKERS, loadFeedDefinitions } from "./feeds";
+import { feedsFileJson, parseFeedsFile, type FeedsFile } from "./feedsFile";
 import { fixtureSimulator, loadFixture } from "./fixtures";
 import { computeFeedHash, runSpike } from "./spike";
 
@@ -25,6 +30,8 @@ import { computeFeedHash, runSpike } from "./spike";
 export const REPO_ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 export const DEFAULT_FEEDS_DIR = resolve(REPO_ROOT, "oracle/feeds");
 export const DEFAULT_FIXTURE = resolve(REPO_ROOT, "scripts/switchboard/fixtures/spike.json");
+export const DEFAULT_FEEDS_FILE = resolve(REPO_ROOT, "deployments/feeds.devnet.json");
+export const DEFAULT_DEPLOYMENT_RECORD = resolve(REPO_ROOT, "deployments/devnet.json");
 
 export const EXIT_OK = 0;
 export const EXIT_FAILED = 1;
@@ -40,6 +47,8 @@ export interface LiveDeps {
   connect(rpc: string): Connection;
   loadKeypair(path: string): Keypair;
   client(connection: Connection, payer: Keypair): Promise<SwitchboardClient>;
+  /** Reads the feeds pinned in Config (a read-only view, no signer needed). */
+  config(connection: Connection, programId: PublicKey): ConfigReader;
 }
 
 export const defaultLiveDeps: LiveDeps = {
@@ -52,6 +61,14 @@ export const defaultLiveDeps: LiveDeps = {
     return Keypair.fromSecretKey(Uint8Array.from(bytes as number[]));
   },
   client: sdkClient,
+  config: (connection, programId) =>
+    configReaderFromProgram(
+      createMeridianProgram(
+        new AnchorProvider(connection, new Wallet(Keypair.generate()), { commitment: "confirmed" }),
+        programId,
+      ),
+      findConfigPda(programId).address,
+    ),
 };
 
 interface Options {
@@ -61,6 +78,10 @@ interface Options {
   readonly rpc: string;
   readonly keypair: string;
   readonly queue: PublicKey;
+  /** Where `create-feeds` writes the feeds file; `check-feeds` reads `feedsFile`. */
+  readonly out: string | undefined;
+  readonly feedsFile: string;
+  readonly programId: string | undefined;
 }
 
 class UsageError extends Error {}
@@ -75,6 +96,9 @@ function parseOptions(argv: readonly string[], env: NodeJS.ProcessEnv): Options 
       fixture: { type: "string", default: DEFAULT_FIXTURE },
       rpc: { type: "string", default: DEFAULT_DEVNET_RPC },
       keypair: { type: "string", default: resolve(homedir(), ".config/solana/id.json") },
+      out: { type: "string" },
+      "feeds-file": { type: "string", default: DEFAULT_FEEDS_FILE },
+      "program-id": { type: "string" },
     },
     strict: true,
     allowPositionals: false,
@@ -90,6 +114,9 @@ function parseOptions(argv: readonly string[], env: NodeJS.ProcessEnv): Options 
     rpc: values.rpc,
     keypair: values.keypair,
     queue: queue === undefined || queue.length === 0 ? DEVNET_QUEUE : new PublicKey(queue),
+    out: values.out,
+    feedsFile: values["feeds-file"],
+    programId: values["program-id"],
   };
 }
 
@@ -191,7 +218,98 @@ export function createFeedsMain(
       JSON.stringify({ mode: "devnet", queue: options.queue.toBase58(), feeds: created }, null, 2),
     );
     io.out(`SWITCHBOARD_FEEDS_JSON=${feedAccountsJson(created)}`);
+    if (options.out !== undefined) {
+      // Public data only (feed accounts and hashes); the input of `deploy-devnet --feeds`.
+      mkdirSync(dirname(options.out), { recursive: true });
+      writeFileSync(options.out, feedsFileJson(created));
+      io.out(`wrote the feeds file (${TICKERS.length * SOURCES.length} feeds) to the --out path`);
+    }
     return EXIT_OK;
+  });
+}
+
+/** The program ID for reading Config: `--program-id`, else the deployment record, else the IDL's. */
+function programIdFor(options: Options): PublicKey {
+  if (options.programId !== undefined) {
+    return new PublicKey(options.programId);
+  }
+  try {
+    const record: unknown = JSON.parse(readFileSync(DEFAULT_DEPLOYMENT_RECORD, "utf8"));
+    const id = (record as { programId?: unknown }).programId;
+    if (typeof id === "string") {
+      return new PublicKey(id);
+    }
+  } catch {
+    // No record yet: fall through.
+  }
+  return MERIDIAN_PROGRAM_ID;
+}
+
+/**
+ * `check-feeds.ts` (M2-02): simulate an update of every feed and check that the 14 feeds are the
+ * ones in `oracle/feeds`, exist, are the ones pinned in Config, and that the two sources of each
+ * ticker agree within 0.05%. Prints a JSON report (value, slot, per-oracle results; no secrets)
+ * and exits non-zero naming the ticker of every problem. `--dry-run` simulates from fixtures,
+ * offline, and skips the account and Config checks.
+ */
+export function checkFeedsMain(
+  argv: readonly string[],
+  env: NodeJS.ProcessEnv,
+  io: Io,
+  deps: LiveDeps = defaultLiveDeps,
+): Promise<number> {
+  return guarded(io, async () => {
+    const options = parseOptions(argv, env);
+    const defs = loadFeedDefinitions(options.feedsDir);
+    let file: FeedsFile | undefined;
+    try {
+      file = parseFeedsFile(readFileSync(options.feedsFile, "utf8"), "the feeds file");
+    } catch (error) {
+      if (!options.dryRun) {
+        throw error;
+      }
+    }
+    let report;
+    if (options.dryRun) {
+      report = await checkFeeds({
+        mode: "dry-run",
+        queue: options.queue,
+        defs,
+        file,
+        simulator: fixtureSimulator(loadFixture(options.fixture)),
+      });
+    } else {
+      const keys = keyOverrides(env);
+      if (!keys.ok) {
+        io.err(`blocked: needs keys (${keys.missing.join(", ")})`);
+        return EXIT_BLOCKED;
+      }
+      if (file === undefined) {
+        throw new UsageError("the feeds file is required for a live check");
+      }
+      const { connection, client } = await liveSession(options, deps);
+      const accounts = Object.fromEntries(
+        TICKERS.map((ticker) => [
+          ticker,
+          (file?.[ticker] ?? []).map((pin) => new PublicKey(pin.pubkey)),
+        ]),
+      );
+      const programId = programIdFor(options);
+      report = await checkFeeds({
+        mode: "devnet",
+        queue: options.queue,
+        defs,
+        file,
+        accounts: client,
+        config: deps.config(connection, programId),
+        simulator: liveSimulator({ client, feeds: accounts, variableOverrides: keys.overrides }),
+      });
+    }
+    io.out(JSON.stringify(report, null, 2));
+    for (const failure of report.failures) {
+      io.err(`FAIL ${failure}`);
+    }
+    return report.ok ? EXIT_OK : EXIT_FAILED;
   });
 }
 

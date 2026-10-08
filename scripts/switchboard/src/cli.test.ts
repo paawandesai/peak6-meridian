@@ -13,6 +13,7 @@ import {
   EXIT_FAILED,
   EXIT_OK,
   REPO_ROOT,
+  checkFeedsMain,
   createFeedsMain,
   defaultLiveDeps,
   keyOverrides,
@@ -21,7 +22,8 @@ import {
   type LiveDeps,
 } from "./cli";
 import { DEVNET_GENESIS_HASH, DEVNET_QUEUE, type SwitchboardClient } from "./devnet";
-import { loadFeedDefinitions } from "./feeds";
+import { feedsFileJson, parseFeedsFile } from "./feedsFile";
+import { SOURCES, TICKERS, loadFeedDefinitions } from "./feeds";
 import { computeFeedHash, type SpikeReport } from "./spike";
 import { fakeClient } from "./test-fakes";
 
@@ -36,12 +38,17 @@ function capture(): Io & { stdout: string[]; stderr: string[] } {
 }
 
 /** Live deps with a fake RPC (given genesis) and a fake Switchboard client. */
-function fakeDeps(client: SwitchboardClient, genesis = DEVNET_GENESIS_HASH): LiveDeps {
+function fakeDeps(
+  client: SwitchboardClient,
+  genesis = DEVNET_GENESIS_HASH,
+  config: LiveDeps["config"] = () => ({ feed: () => Promise.resolve(null) }),
+): LiveDeps {
   const connection = { getGenesisHash: () => Promise.resolve(genesis) } as unknown as Connection;
   return {
     connect: () => connection,
     loadKeypair: () => Keypair.generate(),
     client: () => Promise.resolve(client),
+    config,
   };
 }
 
@@ -248,5 +255,156 @@ describe("defaultLiveDeps.loadKeypair", () => {
 
   it("connect builds a Connection without contacting it", () => {
     expect(defaultLiveDeps.connect("http://127.0.0.1:1").rpcEndpoint).toBe("http://127.0.0.1:1");
+  });
+});
+
+describe("create-feeds --out (M2-02): the feeds file for deploy-devnet --feeds", () => {
+  it("writes the seven tickers' feed accounts and hashes, public data only", async () => {
+    const byTask = new Map(defs.map((d) => [JSON.stringify(d.jobs[0]?.tasks[0]), d]));
+    const client = fakeClient({
+      storeJobs: (_, jobs) => {
+        const def = byTask.get(JSON.stringify(jobs[0]?.toJSON().tasks?.[0]));
+        return Promise.resolve(def === undefined ? "" : computeFeedHash(DEVNET_QUEUE, def));
+      },
+    });
+    const dir = mkdtempSync(join(tmpdir(), "feeds-out-"));
+    const out = join(dir, "nested", "feeds.devnet.json");
+    const io = capture();
+    const code = await createFeedsMain(
+      ["--out", out, "--keypair", "/nonexistent-keypair.json"],
+      { TIINGO_API_KEY: TIINGO, TWELVEDATA_API_KEY: TWELVE },
+      io,
+      fakeDeps(client),
+    );
+    expect(code).toBe(EXIT_OK);
+    const file = parseFeedsFile(readFileSync(out, "utf8"));
+    expect(Object.keys(file)).toEqual([...TICKERS]);
+    for (const ticker of TICKERS) {
+      SOURCES.forEach((source, slot) => {
+        const def = defs.find((d) => d.ticker === ticker && d.source === source);
+        expect(file[ticker][slot]?.hash).toBe(
+          def === undefined ? "" : computeFeedHash(DEVNET_QUEUE, def),
+        );
+      });
+    }
+    expect(readFileSync(out, "utf8")).not.toMatch(new RegExp(`${TIINGO}|${TWELVE}`));
+  });
+});
+
+describe("check-feeds (M2-02)", () => {
+  /** A fixture whose META sources differ by `deltaCents` around 681.25. */
+  function fixtureWithMetaSpread(deltaCents: number): string {
+    const fixture = JSON.parse(readFileSync(DEFAULT_FIXTURE, "utf8")) as {
+      responses: Record<string, unknown>;
+    };
+    const url = "https://api.twelvedata.com/eod?symbol=META&exchange=NASDAQ";
+    const entry = fixture.responses[url] as { close: string };
+    const base = Math.round(Number(entry.close) * 100);
+    entry.close = ((base + deltaCents) / 100).toFixed(2);
+    const dir = mkdtempSync(join(tmpdir(), "check-feeds-"));
+    const path = join(dir, "fixture.json");
+    writeFileSync(path, JSON.stringify(fixture));
+    return path;
+  }
+
+  it("--dry-run is offline and passes on the recorded fixture", async () => {
+    const fetchSpy = vi.fn(() => Promise.reject(new Error("network used in dry-run")));
+    vi.stubGlobal("fetch", fetchSpy);
+    const io = capture();
+    expect(await checkFeedsMain(["--dry-run"], {}, io, fakeDeps(fakeClient(), "not-called"))).toBe(
+      EXIT_OK,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(io.stderr).toEqual([]);
+    expect((JSON.parse(io.stdout.join("\n")) as { ok: boolean }).ok).toBe(true);
+  });
+
+  it("exits non-zero and names the ticker when the sources differ by more than 0.05%", async () => {
+    const io = capture();
+    const code = await checkFeedsMain(
+      ["--dry-run", "--fixture", fixtureWithMetaSpread(200)],
+      {},
+      io,
+      fakeDeps(fakeClient()),
+    );
+    expect(code).toBe(EXIT_FAILED);
+    expect(io.stderr).toHaveLength(1);
+    expect(io.stderr[0]).toMatch(/^FAIL META: the two sources differ by /);
+  });
+
+  it("live without usable keys is blocked, not failed", async () => {
+    const io = capture();
+    const file = join(mkdtempSync(join(tmpdir(), "feeds-file-")), "f.json");
+    writeFileSync(
+      file,
+      feedsFileJson(
+        SOURCES.flatMap((source) =>
+          TICKERS.map((ticker) => ({
+            ticker,
+            source,
+            feed: Keypair.generate().publicKey.toBase58(),
+            feedHash: "a".repeat(64),
+          })),
+        ),
+      ),
+    );
+    const code = await checkFeedsMain(
+      ["--feeds-file", file],
+      { TIINGO_API_KEY: "test-placeholder" },
+      io,
+      fakeDeps(fakeClient()),
+    );
+    expect(code).toBe(EXIT_BLOCKED);
+    expect(io.stderr.join("\n")).toMatch(
+      /blocked: needs keys \(.*TIINGO_API_KEY.*TWELVEDATA_API_KEY/,
+    );
+  });
+
+  it("live without a feeds file is a usage error (blocked), with devnet confirmed first", async () => {
+    const io = capture();
+    const code = await checkFeedsMain(
+      ["--feeds-file", "/nonexistent/feeds.json"],
+      { TIINGO_API_KEY: TIINGO, TWELVEDATA_API_KEY: TWELVE },
+      io,
+      fakeDeps(fakeClient()),
+    );
+    expect(code).toBe(EXIT_FAILED);
+    expect(io.stderr.join("\n")).toMatch(/error/);
+  });
+
+  it("live: passes when accounts and Config match the definitions and the sources agree", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "feeds-live-"));
+    const pins = new Map<string, { pubkey: string; hash: string }>();
+    const created = defs.map((def) => {
+      const feed = Keypair.generate().publicKey.toBase58();
+      const feedHash = computeFeedHash(DEVNET_QUEUE, def);
+      pins.set(`${def.ticker}:${SOURCES.indexOf(def.source)}`, { pubkey: feed, hash: feedHash });
+      return { ticker: def.ticker, source: def.source, feed, feedHash };
+    });
+    const file = join(dir, "feeds.json");
+    writeFileSync(file, feedsFileJson(created));
+    const hashes = new Map(created.map((c) => [c.feed, c.feedHash]));
+    const client = fakeClient({
+      feedHashOf: (feed) => Promise.resolve(hashes.get(feed.toBase58()) ?? ""),
+      fetchUpdate: () =>
+        Promise.resolve({
+          ixs: [],
+          luts: [],
+          oracles: [{ oracle: "o1", value: "100.00", error: null }],
+        }),
+    });
+    const config: LiveDeps["config"] = () => ({
+      feed: (ticker, slot) => Promise.resolve(pins.get(`${ticker}:${slot}`) ?? null),
+    });
+    const io = capture();
+    const code = await checkFeedsMain(
+      ["--feeds-file", file],
+      { TIINGO_API_KEY: TIINGO, TWELVEDATA_API_KEY: TWELVE },
+      io,
+      fakeDeps(client, DEVNET_GENESIS_HASH, config),
+    );
+    expect(io.stderr).toEqual([]);
+    expect(code).toBe(EXIT_OK);
+    expect(io.stdout.join("\n")).not.toMatch(new RegExp(`${TIINGO}|${TWELVE}`));
   });
 });
