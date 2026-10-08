@@ -55,6 +55,7 @@ import {
 } from "automation";
 import { fakeSourcesHttp } from "automation/testing";
 
+import { runFaucetChecks } from "./faucet";
 import { Ledger, UNITS_PER_CENT, UNITS_PER_USDC } from "./ledger";
 
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
@@ -853,6 +854,7 @@ async function main(): Promise<void> {
   if (final.pairsOutstanding.toString() !== "0" || (await amount(addresses.vault)) !== 0n) {
     throw new Error("vault must be empty once every winning token is redeemed");
   }
+  await runFaucetChecks({ connection, admin, step });
   say(`lifecycle ok in ${Math.round((Date.now() - started) / 1000)}s`);
 }
 
