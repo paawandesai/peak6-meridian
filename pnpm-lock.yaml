@@ -218,6 +218,9 @@ importers:
       node-cron:
         specifier: 4.6.0
         version: 4.6.0
+      switchboard-scripts:
+        specifier: workspace:*
+        version: link:../../scripts/switchboard
       zod:
         specifier: 4.6.5
         version: 4.6.5

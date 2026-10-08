@@ -39,6 +39,8 @@ export interface SignerDeps {
   readonly morning: Omit<MorningDeps, "alerter" | "state" | "log">;
   /** The settlement job, built with the loaded key as its signer. */
   readonly settlement: JobSpec;
+  /** Runs once at startup (e.g. the payer balance check); a failure is logged, never fatal. */
+  readonly startupCheck?: () => Promise<void>;
 }
 
 export interface ServiceDeps {
@@ -73,8 +75,6 @@ export interface HealthReport {
     readonly name: string;
     readonly cron?: string;
     readonly signer?: string;
-    /** A stand-in that does no real work yet. */
-    readonly placeholder?: boolean;
     readonly scheduled: boolean;
     readonly disabled?: string;
   }[];
@@ -153,6 +153,9 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
     };
   } else {
     const { signerDeps, authority } = await readConfigWithRetry(deps, deps.signer);
+    await signerDeps.startupCheck?.().catch((error: unknown) => {
+      deps.log("warn", "startup_check_failed", { error: describeError(error) });
+    });
     specs.push(signerDeps.settlement);
     if (deps.signer.publicKey.equals(authority)) {
       morningDeps = signerDeps.morning;
@@ -202,7 +205,6 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
         name: job.name,
         cron: job.cron,
         ...(job.signer === undefined ? {} : { signer: job.signer }),
-        ...(job.placeholder === true ? { placeholder: true } : {}),
         scheduled: true,
       })),
       ...disabled.map((name) => ({ name, scheduled: false, disabled: degraded ?? "" })),

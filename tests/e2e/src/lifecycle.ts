@@ -43,7 +43,16 @@ import {
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { z } from "zod";
 
-import { chainMarketOps, fetchPrevClose, RunState, runMorning, silentLogger } from "automation";
+import {
+  assertCluster,
+  buildRuntime,
+  chainMarketOps,
+  fetchPrevClose,
+  RunState,
+  runMorning,
+  settleNow,
+  silentLogger,
+} from "automation";
 import { fakeSourcesHttp } from "automation/testing";
 
 import { runFaucetChecks } from "./faucet";
@@ -738,6 +747,94 @@ async function main(): Promise<void> {
     }
   });
   await check("redeem");
+
+  // M2-04 AC1, AC3, AC7: `settle-now` settles every other open market (all closed by now) on this
+  // validator with a payer that is not the automation key, through the local oracle signed by
+  // the Config admin; a second run finds nothing to do. Data sources are mocked (no network).
+  await step(
+    "settle-now settles all remaining open markets with a non-automation payer",
+    async () => {
+      const closes = fixture.closes;
+      const outcomes = async (): Promise<{ open: number; settled: number }> => {
+        const all = await program.account.market.all();
+        return {
+          open: all.filter((m) => "open" in m.account.status).length,
+          settled: all.filter((m) => "settled" in m.account.status).length,
+        };
+      };
+      const before = await outcomes();
+      const sentSignatures: string[] = [];
+      const run = () =>
+        settleNow({
+          argv: ["--payer", "trader-a"],
+          cluster: "localnet",
+          rpcUrl: env.ANCHOR_PROVIDER_URL,
+          assertCluster,
+          getGenesisHash: () => connection.getGenesisHash(),
+          loadKeypair: () => a.keypair, // trader-a: funded, and not the automation key (the admin)
+          runtime: async ({ cluster, payer }) => {
+            const runtime = buildRuntime(
+              {
+                rpcUrl: env.ANCHOR_PROVIDER_URL,
+                programId,
+                tiingoApiKey: "test-key",
+                twelveDataApiKey: "test-key",
+                adminKeypair: admin,
+              },
+              cluster,
+              payer,
+            );
+            const http = fakeSourcesHttp({ closes, date: fixture.tradingDate });
+            return {
+              ...runtime,
+              verifyClose: (ticker, date) =>
+                fetchPrevClose(
+                  { http, tiingoApiKey: "test-key", twelveDataApiKey: "test-key" },
+                  ticker,
+                  date,
+                ),
+              executor: {
+                currentSlot: () => runtime.executor.currentSlot(),
+                send: async (tx, extra) => {
+                  const sent = await runtime.executor.send(tx, extra);
+                  sentSignatures.push(sent.signature);
+                  return sent;
+                },
+              },
+            };
+          },
+          now: () => new Date(),
+          out: (line) => say(`          ${line}`),
+        });
+      const first = await run();
+      const after = await outcomes();
+      if (first.failed !== 0 || first.settled !== before.open || after.open !== 0) {
+        throw new Error(`settle-now: ${JSON.stringify({ first, before, after })}`);
+      }
+      // One transaction per ticker: all open markets of a ticker settled in one go (AC1).
+      if (sentSignatures.length !== Object.keys(closes).length) {
+        throw new Error(
+          `expected one transaction per ticker, sent ${String(sentSignatures.length)}`,
+        );
+      }
+      // Every market got the rule's outcome: YES iff the settle price is at or above the strike.
+      for (const { account } of await program.account.market.all()) {
+        const price = BigInt(account.settlePriceScaled.toString());
+        const strike = BigInt(account.strikeCents.toString()) * 10n ** 16n;
+        const expectYes = price >= strike;
+        if ("yes" in account.outcome !== expectYes) {
+          throw new Error("a market settled with the wrong outcome");
+        }
+      }
+      sentSignatures.forEach((s) => say(`          tx ${s}`));
+      // Re-run: nothing open, nothing sent (AC3).
+      const sentBefore = sentSignatures.length;
+      const second = await run();
+      if (second.settled !== 0 || second.failed !== 0 || sentSignatures.length !== sentBefore) {
+        throw new Error(`settle-now re-run must send nothing: ${JSON.stringify(second)}`);
+      }
+    },
+  );
 
   // ---- final balances (AC3: exact) -------------------------------------------------------------
   let sum = 0n;

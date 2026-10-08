@@ -502,6 +502,73 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
   );
 
   it(
+    "AC1 with a changed .so, --allow-upgrade still sends nothing when the automation authority or the upgrade authority is wrong",
+    async () => {
+      const soPath = join(copyRoot, "target", "deploy", "meridian.so");
+      const elf = readFileSync(soPath);
+      const at = elf.indexOf(Buffer.from("rithmetic overflow"));
+      expect(at).toBeGreaterThan(0);
+      elf[at] = "X".charCodeAt(0); // differs from what is on chain now
+      writeFileSync(soPath, elf);
+      const stranger = track(newKeypairFile(work, "stranger.json"));
+
+      const slotBefore = await programSlot();
+      const sigsBefore = await adminSigs();
+      solanaCalls.length = 0;
+      // Config identity is asserted before the program step: a wrong AUTOMATION_PUBKEY sends nothing.
+      await expectRejects(
+        run({ allowUpgrade: true, automation: stranger.keypair.publicKey }),
+        /automation authority is .*expected/,
+      );
+      expect(solanaCalls).toEqual([]);
+
+      // ProgramData's upgrade authority is another key: no buffer account is written.
+      const setAuthority = (current: Actor, next: Actor) =>
+        execFileSync(
+          "solana",
+          [
+            "program",
+            "set-upgrade-authority",
+            programId.toBase58(),
+            "--upgrade-authority",
+            current.path,
+            "--new-upgrade-authority",
+            next.path,
+            "--keypair",
+            admin.path, // fee payer in both directions
+            "--url",
+            validator.rpcUrl,
+            "--commitment",
+            "confirmed",
+          ],
+          { cwd: copyRoot, stdio: "ignore" },
+        );
+      setAuthority(admin, stranger);
+      try {
+        const slotMid = await programSlot();
+        const adminSigsMid = await adminSigs();
+        solanaCalls.length = 0;
+        await expectRejects(
+          run({ allowUpgrade: true }),
+          /upgrade authority is .*not the admin.*Nothing was sent/s,
+        );
+        expect(solanaCalls).toEqual([]);
+        expect(await programSlot()).toBe(slotMid);
+        expect(await adminSigs()).toBe(adminSigsMid);
+      } finally {
+        setAuthority(stranger, admin);
+      }
+      expect(await programSlot()).toBe(slotBefore);
+      expect(await adminSigs()).toBeGreaterThanOrEqual(sigsBefore);
+
+      // Restore the ELF the later tests expect on chain.
+      elf[at] = "r".charCodeAt(0);
+      writeFileSync(soPath, elf);
+    },
+    5 * MINUTE,
+  );
+
+  it(
     "AC6 with placeholder feeds, settle_market fails closed",
     async () => {
       const config = await readOnChainConfig(program);
