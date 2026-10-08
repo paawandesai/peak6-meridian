@@ -41,6 +41,9 @@ import {
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { z } from "zod";
 
+import { chainMarketOps, fetchPrevClose, RunState, runMorning, silentLogger } from "automation";
+import { fakeSourcesHttp } from "automation/testing";
+
 import { Ledger, UNITS_PER_CENT, UNITS_PER_USDC } from "./ledger";
 
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
@@ -349,6 +352,44 @@ async function main(): Promise<void> {
   );
   const market = await program.account.market.fetch(addresses.market);
   const closeTs = Number(market.closeTs.toString());
+
+  // M2-03 AC2: the scheduled morning job, run against this validator for the day whose markets
+  // the CLI just created, finds them all and creates nothing. Fixed clock (08:00 ET on the
+  // trading date) and mocked data sources: no network.
+  await step("morning job re-run on the same day creates nothing (NFR-05)", async () => {
+    const alerts: string[] = [];
+    const http = fakeSourcesHttp({ closes: fixture.closes, date: "2026-10-05" });
+    const result = await runMorning({
+      now: () => new Date("2026-10-06T12:00:00Z"),
+      sleep: () => Promise.resolve(),
+      prevClose: (ticker, date) =>
+        fetchPrevClose(
+          { http, tiingoApiKey: "test-key", twelveDataApiKey: "test-key" },
+          ticker,
+          date,
+        ),
+      marketOps: await chainMarketOps(
+        program,
+        new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+        SystemProgram.programId,
+      ),
+      alerter: {
+        send: (alert) => {
+          alerts.push(alert.summary);
+          return Promise.resolve(true);
+        },
+      },
+      state: new RunState(),
+      log: silentLogger,
+    });
+    if (result.status !== "ok" || result.created !== 0 || result.existed !== first.created) {
+      throw new Error(`morning job re-run: ${JSON.stringify(result)}`);
+    }
+    if (alerts.length > 0 || (await program.account.market.all()).length !== marketCount) {
+      throw new Error("morning job re-run must not alert or add markets");
+    }
+    say(`          ${result.created} created, ${result.existed} already existed`);
+  });
   if (env.E2E_SEED_ONLY !== undefined) {
     await fundDevWallets(usdcMint);
     say(`seeded ${marketCount} markets for program ${programId.toBase58()}`);
