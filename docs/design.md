@@ -215,7 +215,7 @@ Figures are illustrative; the totals include positions not shown. Annotations: (
 - Works at 1280 px and 390 px; no horizontal scroll at 390 px except the book table.
 - Keyboard: every action reachable by Tab, visible 2 px focus ring (`--mer-focus`), Enter/Space activate, Esc closes popovers.
 - Every coloured state has a text label (§3). WCAG AA contrast for all token pairs.
-- Lighthouse accessibility ≥ 90 on Markets and Trade (NFR-16).
+- Lighthouse accessibility ≥ 90 on Markets and Trade (NFR-16), measured by a one-off `npx lighthouse` run that adds no dependency (see "Tooling for UI checks" in docs/tickets/M1.md).
 - `prefers-reduced-motion`: no animated bars or countdown ticks beyond the text update.
 - No `dangerouslySetInnerHTML` on external data; no server secrets in client bundles (M1-12 AC3 test keeps passing).
 
