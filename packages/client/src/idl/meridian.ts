@@ -193,13 +193,29 @@ export type Meridian = {
     },
     {
       name: "adminSettleOverride";
-      docs: ["Admin settlement with a manual price after the delay (FR-09). Stub until M1-07."];
+      docs: ["Admin settlement with a manual price after the delay (FR-09)."];
       discriminator: [92, 131, 189, 52, 161, 70, 203, 95];
       accounts: [
+        {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "market";
+          writable: true;
+        },
         {
           name: "admin";
           docs: ["The admin."];
           signer: true;
+          relations: ["config"];
         },
       ];
       args: [
@@ -622,13 +638,34 @@ export type Meridian = {
     },
     {
       name: "localOracleSet";
-      docs: ["Test-only oracle writer; never in devnet builds (D-028, AB-22). Stub until M1-07."];
+      docs: ["Test-only oracle writer; never in devnet builds (D-028, AB-22)."];
       discriminator: [91, 149, 169, 250, 188, 137, 130, 242];
       accounts: [
         {
-          name: "authority";
-          docs: ["The local oracle writer (test only)."];
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "localFeed";
+          writable: true;
+        },
+        {
+          name: "admin";
+          docs: ["The admin writes the local oracle (test only)."];
+          writable: true;
           signer: true;
+          relations: ["config"];
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
         },
       ];
       args: [
@@ -866,9 +903,7 @@ export type Meridian = {
     },
     {
       name: "redeem";
-      docs: [
-        "Pair redeem before settlement, winner redeem after (FR-10). Stub until M1-04 / M1-07.",
-      ];
+      docs: ["Pair redeem before settlement, winner redeem after (FR-10)."];
       discriminator: [184, 12, 86, 149, 70, 196, 97, 225];
       accounts: [
         {
@@ -1109,9 +1144,35 @@ export type Meridian = {
     },
     {
       name: "settleMarket";
-      docs: ["Permissionless settlement from the two oracle feeds (FR-08). Stub until M1-07."];
+      docs: ["Permissionless settlement from the two oracle feeds (FR-08)."];
       discriminator: [193, 153, 95, 216, 166, 6, 144, 217];
       accounts: [
+        {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "market";
+          writable: true;
+        },
+        {
+          name: "feedTiingo";
+          docs: [
+            "Feed for source slot 0 (Tiingo). Owner, address and feed hash are checked against the",
+            "config by the oracle adapter.",
+          ];
+        },
+        {
+          name: "feedTwelveData";
+          docs: ["Feed for source slot 1 (Twelve Data). Checked like `feed_tiingo`."];
+        },
         {
           name: "payer";
           docs: ["Anyone: settlement is permissionless (D-030)."];
@@ -1200,6 +1261,10 @@ export type Meridian = {
     {
       name: "config";
       discriminator: [155, 12, 170, 224, 30, 250, 204, 130];
+    },
+    {
+      name: "localFeed";
+      discriminator: [179, 103, 3, 86, 167, 100, 43, 11];
     },
     {
       name: "market";
@@ -1761,6 +1826,46 @@ export type Meridian = {
           {
             name: "yes";
             type: "u64";
+          },
+        ];
+      };
+    },
+    {
+      name: "localFeed";
+      docs: [
+        'Feed written by `local_oracle_set` (D-028). PDA seeds: `["local_feed", symbol, [source_slot]]`.',
+        "Exists only in builds with the `local-oracle` feature (AB-22).",
+      ];
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "ticker";
+            type: {
+              array: ["u8", 8];
+            };
+          },
+          {
+            name: "sourceSlot";
+            type: "u8";
+          },
+          {
+            name: "value";
+            docs: ["Price with 18 fractional digits."];
+            type: "i128";
+          },
+          {
+            name: "slot";
+            type: "u64";
+          },
+          {
+            name: "updatedAt";
+            docs: ["Unix time of the write, from the clock."];
+            type: "i64";
+          },
+          {
+            name: "bump";
+            type: "u8";
           },
         ];
       };

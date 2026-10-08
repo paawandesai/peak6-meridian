@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
 # End-to-end smoke on a local validator (`make e2e`).
 #
-# M1-01 placeholder (replaced by the full lifecycle in M1-10): deploy the local build under a
-# throwaway program ID and call `version`.
+# Deploys the local build under a throwaway program ID, then runs the lifecycle smoke
+# (tests/e2e/src/lifecycle.ts): config with local feeds, create-markets twice, the four trade
+# intents, settlement with the local oracle, settle_funds and redeem, with the invariants
+# asserted after every step and exact P&L. The market closes a few seconds after creation
+# (E2E_CLOSE_IN_SECS), so no clock warp is needed.
+#
+# `scripts/e2e.sh --dev` (make dev) stops after seeding the config and markets and then runs the
+# app until interrupted; the validator stays up on :8899.
 #
 # Environment (all optional):
 #   E2E_PAYER_KEYPAIR  existing payer keypair file; a throwaway one is created when unset/missing
 #   E2E_RPC_PORT       validator RPC port (default 8899; the websocket port is this plus one)
 #   E2E_FAUCET_PORT    validator faucet port (default 9900)
+#   E2E_CLOSE_IN_SECS  seconds between market creation and close (default 150)
 set -euo pipefail
+
+MODE="e2e"
+if [ "${1:-}" = "--dev" ]; then
+  MODE="dev"
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -90,5 +102,22 @@ log "throwaway program ID $(solana-keygen pubkey "$PROGRAM_KEYPAIR")"
 make build-local
 anchor deploy --provider.cluster "$RPC_URL" --provider.wallet "$PAYER"
 
-ANCHOR_PROVIDER_URL="$RPC_URL" ANCHOR_WALLET="$PAYER" pnpm --filter e2e run version
+PROGRAM_ID="$(solana-keygen pubkey "$PROGRAM_KEYPAIR")"
+export ANCHOR_PROVIDER_URL="$RPC_URL" ANCHOR_WALLET="$PAYER" E2E_PROGRAM_ID="$PROGRAM_ID"
+
+if [ "$MODE" = "dev" ]; then
+  # Seed: config with local feeds and a day's markets that stay open for 8 hours. The seed
+  # prints SEED_USDC_MINT=<mint>; the app needs it with the throwaway program ID and the RPC URL.
+  E2E_SEED_ONLY=1 E2E_CLOSE_IN_SECS=28800 pnpm --filter e2e run lifecycle | tee "$WORK/seed.log"
+  USDC_MINT="$(sed -n 's/^SEED_USDC_MINT=//p' "$WORK/seed.log" | tail -n 1)"
+  [ -n "$USDC_MINT" ] || die "the seed did not report the USDC mint"
+  export NEXT_PUBLIC_CLUSTER=localnet NEXT_PUBLIC_RPC_URL="$RPC_URL"
+  export NEXT_PUBLIC_PROGRAM_ID="$PROGRAM_ID" NEXT_PUBLIC_USDC_MINT="$USDC_MINT"
+  log "validator $RPC_URL, program $PROGRAM_ID, USDC mint $USDC_MINT"
+  log "starting the app on http://localhost:3000 (Ctrl-C stops the app and the validator)"
+  pnpm --filter app dev
+  exit 0
+fi
+
+pnpm --filter e2e run lifecycle
 log "PASS"
