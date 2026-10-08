@@ -7,6 +7,10 @@
 //! layout below is the crate's `#[repr(C)]` struct at 0.13.x; [`parse_pull_feed`] checks the
 //! discriminator and the exact account length, so a layout change fails closed.
 //!
+//! Owner check: a feed must be owned by the Switchboard On-Demand program. Both the mainnet and
+//! the devnet program ids are accepted in every build; the feed account itself is pinned by key
+//! in `Config`, so a feed of the "other" network cannot be substituted.
+//!
 //! Checks for one feed (domain.md § Settlement rules 2 and 3), in order: owner, pinned account,
 //! pinned feed hash, usable value, updated at or after `close_ts`, at most `max_staleness_slots`
 //! old. A reading is trusted only after all of them pass.
