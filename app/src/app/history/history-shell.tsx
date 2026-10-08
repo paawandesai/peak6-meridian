@@ -3,7 +3,7 @@
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useMemo } from "react";
 
-import { loadWalletEvents } from "./history-chain";
+import { loadWalletEvents, openOrdersAddresses } from "./history-chain";
 import { HistoryView } from "./history-view";
 import { AppHeader } from "@/components/app-header";
 import { FaucetButton } from "@/components/faucet-button";
@@ -22,13 +22,16 @@ function Page() {
   const config = useMemo(() => loadPublicConfig(), []);
   const markets = useAsync(() => reader.listMarkets(), [reader]);
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
-  const events = useAsync(
-    () =>
-      publicKey === null
-        ? Promise.resolve([])
-        : loadWalletEvents(connection, publicKey, config.programId),
-    [connection, publicKey, config],
-  );
+  const events = useAsync(async () => {
+    if (publicKey === null) return [];
+    const all = await reader.listMarkets();
+    return loadWalletEvents(
+      connection,
+      publicKey,
+      config.programId,
+      openOrdersAddresses(all, publicKey, config.programId),
+    );
+  }, [reader, connection, publicKey, config]);
   return (
     <>
       <AppHeader

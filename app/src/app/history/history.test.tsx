@@ -177,11 +177,13 @@ describe("loadWalletEvents", () => {
     meta: { logMessages: logs },
   });
   const rpcWith = (
-    sigs: { signature: string; err: unknown; blockTime?: number | null }[],
+    sigs: { signature: string; err: unknown; slot?: number; blockTime?: number | null }[],
     txs: unknown[],
   ): HistoryRpc =>
     ({
-      getSignaturesForAddress: vi.fn().mockResolvedValue(sigs),
+      getSignaturesForAddress: vi
+        .fn()
+        .mockResolvedValue(sigs.map((entry, i) => ({ slot: 100 - i, ...entry }))),
       getTransactions: vi.fn().mockResolvedValue(txs),
     }) as unknown as HistoryRpc;
 
