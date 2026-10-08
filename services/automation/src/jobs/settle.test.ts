@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkBalance,
+  MAX_QUIET_ATTEMPTS,
+  QUIET_RETRY_MS,
   createSettlementJob,
   isoDate,
   RETRY_EVERY_MS,
@@ -10,6 +12,8 @@ import {
   SETTLE_DELAY_SECS,
   SETTLEMENT_CRON,
 } from "./settle";
+import { TransactionInstruction } from "@solana/web3.js";
+
 import { SettleWorld } from "../testing";
 
 const CLOSE_TS = 1_791_316_800; // 2026-10-06 16:00 ET (20:00Z)
@@ -145,6 +149,53 @@ describe("runSettlement: settling (AC1, AC4)", () => {
   });
 });
 
+describe("runSettlement: the re-update is a fresh update (AC5)", () => {
+  it("asks the oracle again at the current slot, and no settle goes out into a stale value", async () => {
+    const w = new SettleWorld({
+      markets: Array.from({ length: 60 }, (_, i) => ({ ticker: "META", strike: 300 + i })),
+      closeTs: CLOSE_TS,
+      start: new Date((CLOSE_TS + SETTLE_DELAY_SECS) * 1_000),
+    });
+    // Record the slot each update was built for; give every build its own instruction copies.
+    const slotOf = new WeakMap<object, number>();
+    const requestSlots: number[] = [];
+    const base = w.adapter();
+    const deps = w.deps({
+      adapter: {
+        kind: base.kind,
+        build: async (request) => {
+          requestSlots.push(request.slot);
+          const built = await base.build(request);
+          const ixs = built.ixs.map((ix) => new TransactionInstruction({ ...ix }));
+          ixs.forEach((ix) => slotOf.set(ix, request.slot));
+          return { ...built, ixs };
+        },
+      },
+    });
+    w.executor.advancePerSend = (index) => (index === 1 ? 60 : 1); // a long gap after the first settle
+    const result = await runSettlement(deps);
+    expect(result.status).toBe("ok");
+
+    // The oracle was asked again, and for a later slot than the first time.
+    expect(requestSlots.length).toBeGreaterThan(1);
+    expect(requestSlots[1]).toBeGreaterThan((requestSlots[0] ?? 0) + 50);
+    // Every settle was sent within the program's 30-slot staleness window of the update that
+    // carried the freshest value before it (measured at the slot the settle is sent).
+    let updateSlot = 0;
+    let slotBeforeSend = 1_000;
+    for (const sent of w.executor.sent) {
+      if (sent.tx.role === "update") {
+        updateSlot = slotOf.get(sent.tx.instructions[0] ?? {}) ?? -1;
+        expect(updateSlot).toBeGreaterThan(0);
+      } else {
+        expect(slotBeforeSend - updateSlot).toBeLessThanOrEqual(30);
+      }
+      slotBeforeSend = sent.slot;
+    }
+    expect(w.executor.sent.filter((s) => s.tx.role === "update").length).toBeGreaterThan(1);
+  });
+});
+
 describe("runSettlement: wrong date, retries and the alert (AC2, AB-03)", () => {
   it("a date mismatch sends no transaction, retries every 30 s for 15 min, then alerts once", async () => {
     const w = world([{ ticker: "META", strike: 680 }]);
@@ -165,22 +216,44 @@ describe("runSettlement: wrong date, retries and the alert (AC2, AB-03)", () => 
     expect(w.state.failures).toHaveLength(1);
   });
 
-  it("does not alert again when later runs keep failing, and recovers quietly", async () => {
+  it("after the alert, retries quietly every 15 minutes, at most 8 times, with no new alert", async () => {
     const w = world([{ ticker: "META", strike: 680 }]);
     w.sourceDate = "2026-10-05";
     await runSettlement(w.deps());
     const alerts = w.alerter.alerts.length;
     const incidents = w.incidents.length;
     const sleeps = w.clock.sleeps.length;
-    // The next minute's tick: one quiet attempt, no 15-minute wait, no new alert.
-    const second = await runSettlement(w.deps());
-    expect(second.status).toBe("failed");
-    expect(w.clock.sleeps.length).toBe(sleeps);
+    // The very next minute's tick does nothing: no verification, no API calls.
+    const calls = w.verifyCalls.length;
+    expect((await runSettlement(w.deps())).status).toBe("idle");
+    expect(w.verifyCalls.length).toBe(calls);
+    // Every 15 minutes there is one quiet attempt (no 15-minute wait, no new alert) ...
+    for (let attempt = 1; attempt <= MAX_QUIET_ATTEMPTS; attempt += 1) {
+      await w.clock.sleep(QUIET_RETRY_MS);
+      const before = w.verifyCalls.length;
+      expect((await runSettlement(w.deps())).status).toBe("failed");
+      expect(w.verifyCalls.length).toBe(before + 1);
+    }
+    expect(w.clock.sleeps.length).toBe(sleeps + MAX_QUIET_ATTEMPTS);
     expect(w.alerter.alerts.length).toBe(alerts);
     expect(w.incidents.length).toBe(incidents);
-    // The sources catch up: it settles on the next tick.
+    // ... and then it stops: the group is left to the settle-now CLI, with one log line.
+    await w.clock.sleep(QUIET_RETRY_MS);
+    const after = w.verifyCalls.length;
+    expect((await runSettlement(w.deps())).status).toBe("idle");
+    expect(w.verifyCalls.length).toBe(after);
+    expect(w.logger.lines.filter((l) => l.event === "settlement_gave_up")).toHaveLength(1);
+  });
+
+  it("settles on the next quiet attempt once the sources catch up, and forgets the incident", async () => {
+    const w = world([{ ticker: "META", strike: 680 }]);
+    w.sourceDate = "2026-10-05";
+    await runSettlement(w.deps());
     w.sourceDate = "2026-10-06";
+    await w.clock.sleep(QUIET_RETRY_MS);
     expect(await runSettlement(w.deps())).toMatchObject({ status: "ok", settled: 1 });
+    expect(w.memory.alerted.size).toBe(0);
+    expect(w.memory.quietAttempts.size).toBe(0);
   });
 
   it("settles on a later retry when the sources catch up, with no alert", async () => {

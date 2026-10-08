@@ -81,6 +81,21 @@ function tryFit(
   }
 }
 
+/** The oracle update alone as one transaction (legacy if it fits, else versioned). */
+export function planUpdateTx(
+  payer: PublicKey,
+  updateIxs: readonly TransactionInstruction[],
+  luts: readonly AddressLookupTableAccount[],
+): PlannedTx {
+  const fit =
+    tryFit(payer, "update", false, updateIxs, [], 0) ??
+    tryFit(payer, "update", true, updateIxs, luts, 0);
+  if (fit === null) {
+    throw new Error("the oracle update alone does not fit in a transaction");
+  }
+  return fit;
+}
+
 /**
  * Packs `update` followed by `settles` into the fewest transactions that fit, per the order in
  * the module comment. Throws when even a single instruction cannot fit.
@@ -103,12 +118,7 @@ export function planSettlement(params: {
     return { shape: "single-v0", txs: [v0] };
   }
 
-  const update =
-    tryFit(payer, "update", false, updateIxs, [], 0) ??
-    tryFit(payer, "update", true, updateIxs, luts, 0);
-  if (update === null) {
-    throw new Error("the oracle update alone does not fit in a transaction");
-  }
+  const update = planUpdateTx(payer, updateIxs, luts);
   const txs: PlannedTx[] = [update];
   let batch: TransactionInstruction[] = [];
   const flush = (): void => {
@@ -177,6 +187,12 @@ export interface TxExecutor {
   ): Promise<{ signature: string; slot: number }>;
 }
 
+/** A freshly built oracle update: new values at the current slot, and who signs it. */
+export interface RefreshedUpdate {
+  readonly tx: PlannedTx;
+  readonly signers: readonly Keypair[];
+}
+
 export interface SendReport {
   readonly signatures: readonly string[];
   /** Times the feed update had to be sent again because the slot budget ran out. */
@@ -185,14 +201,19 @@ export interface SendReport {
 
 /**
  * Sends `plan`. For a split plan every settle transaction is preceded by a slot check against
- * `budgetSlots`: when more slots have passed since the last update confirmed, the update is sent
- * again first, so a settle is never sent into a stale value.
+ * `budgetSlots`: when more slots have passed since the last update landed, `refreshUpdate`
+ * builds a NEW update (the oracle is asked again, the local oracle is written at the current
+ * slot) and that is sent first. Re-sending the old payload would carry the old slot or an old
+ * signed response and leave the value as stale as before. So a settle is never sent into a
+ * stale value.
  */
 export async function sendPlan(params: {
   readonly plan: SettlementPlan;
   readonly executor: TxExecutor;
   readonly signers: readonly Keypair[];
   readonly budgetSlots: number;
+  /** Builds a fresh update transaction (new oracle answer at the current slot). */
+  readonly refreshUpdate: () => Promise<RefreshedUpdate>;
   /** Safety bound on re-updates in one plan. */
   readonly maxReUpdates?: number;
 }): Promise<SendReport> {
@@ -220,7 +241,8 @@ export async function sendPlan(params: {
       if (reUpdates >= maxReUpdates) {
         throw new Error("the oracle update keeps going stale before the settle transactions land");
       }
-      const again = await executor.send(update, signers);
+      const fresh = await params.refreshUpdate();
+      const again = await executor.send(fresh.tx, fresh.signers);
       signatures.push(again.signature);
       updatedAt = again.slot;
       reUpdates += 1;

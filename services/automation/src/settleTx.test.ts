@@ -9,6 +9,7 @@ import {
   planSettlement,
   sendPlan,
   type PlannedTx,
+  type SettlementPlan,
 } from "./settleTx";
 import { FakeExecutor, loadUpdateFixture, SettleWorld } from "./testing";
 
@@ -163,6 +164,22 @@ describe("planSettlement: the three shapes (AC4, AC5)", () => {
   });
 });
 
+/**
+ * A refresher like the job's: it builds a NEW update transaction at the executor's current slot
+ * (a copy of the planned one, tagged with the slot it was built at in `builtAt`).
+ */
+function refresher(executor: FakeExecutor, plan: SettlementPlan, builtAt: Map<PlannedTx, number>) {
+  return () => {
+    const base = plan.txs[0];
+    if (base === undefined) {
+      return Promise.reject(new Error("no update in the plan"));
+    }
+    const fresh: PlannedTx = { ...base, instructions: [...base.instructions] };
+    builtAt.set(fresh, executor.slot);
+    return Promise.resolve({ tx: fresh, signers: [] });
+  };
+}
+
 /** Records at which slot each transaction was sent. */
 async function splitPlan(markets = 40) {
   const { w, update, settleIxs } = await setup(markets, 2);
@@ -181,7 +198,14 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
   it("sends the update, then the settles, when the slots stay within the budget", async () => {
     const { w, plan } = await splitPlan();
     const executor = new FakeExecutor(w.program.programId);
-    const report = await sendPlan({ plan, executor, signers: [], budgetSlots: BUDGET });
+    const builtAt = new Map<PlannedTx, number>();
+    const report = await sendPlan({
+      plan,
+      executor,
+      signers: [],
+      budgetSlots: BUDGET,
+      refreshUpdate: refresher(executor, plan, builtAt),
+    });
     expect(report.reUpdates).toBe(0);
     expect(executor.sent.map((s) => s.tx.role)).toEqual(plan.txs.map((t) => t.role));
   });
@@ -192,8 +216,20 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
     // The first send is the update (1 slot); the next send takes 40 slots: the second settle
     // transaction would run 40 slots after the update, so the update must go out again first.
     executor.advancePerSend = (index) => (index === 1 ? 40 : 1);
-    const report = await sendPlan({ plan, executor, signers: [], budgetSlots: BUDGET });
+    const builtAt = new Map<PlannedTx, number>();
+    const report = await sendPlan({
+      plan,
+      executor,
+      signers: [],
+      budgetSlots: BUDGET,
+      refreshUpdate: refresher(executor, plan, builtAt),
+    });
     expect(report.reUpdates).toBe(1);
+    // The second update is a NEW transaction built at the later slot, not the old payload again.
+    const updates = executor.sent.filter((s) => s.tx.role === "update");
+    expect(updates).toHaveLength(2);
+    expect(updates[1]?.tx).not.toBe(plan.txs[0]);
+    expect(builtAt.get(updates[1]?.tx as PlannedTx)).toBeGreaterThan(updates[0]?.slot ?? Infinity);
     const roles = executor.sent.map((s) => s.tx.role);
     expect(roles.slice(0, 4)).toEqual(["update", "settle", "update", "settle"]);
     // Every settle was sent within the budget of the update that preceded it.
@@ -214,7 +250,14 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
     const executor = new FakeExecutor(w.program.programId);
     executor.advancePerSend = () => 50;
     await expect(
-      sendPlan({ plan, executor, signers: [], budgetSlots: BUDGET, maxReUpdates: 1 }),
+      sendPlan({
+        plan,
+        executor,
+        signers: [],
+        budgetSlots: BUDGET,
+        maxReUpdates: 1,
+        refreshUpdate: refresher(executor, plan, new Map()),
+      }),
     ).rejects.toThrow(/keeps going stale/);
     expect(executor.sent.filter((s) => s.tx.role === "update").length).toBeLessThanOrEqual(2);
   });
@@ -235,7 +278,14 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
             return send(tx, signers);
           };
           try {
-            await sendPlan({ plan, executor, signers: [], budgetSlots: BUDGET, maxReUpdates: 50 });
+            await sendPlan({
+              plan,
+              executor,
+              signers: [],
+              budgetSlots: BUDGET,
+              maxReUpdates: 50,
+              refreshUpdate: refresher(executor, plan, new Map()),
+            });
           } catch {
             // Giving up is allowed; sending a stale settle is not.
           }
@@ -263,7 +313,15 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
     });
     const executor = new FakeExecutor(w.program.programId);
     executor.advancePerSend = () => 500;
-    expect(await sendPlan({ plan, executor, signers: [], budgetSlots: BUDGET })).toMatchObject({
+    expect(
+      await sendPlan({
+        plan,
+        executor,
+        signers: [],
+        budgetSlots: BUDGET,
+        refreshUpdate: () => Promise.reject(new Error("unused")),
+      }),
+    ).toMatchObject({
       reUpdates: 0,
       signatures: ["sig-0"],
     });
@@ -272,13 +330,25 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
   it("an empty plan sends nothing", async () => {
     const executor = new FakeExecutor(Keypair.generate().publicKey);
     expect(
-      await sendPlan({ plan: { shape: "single", txs: [] }, executor, signers: [], budgetSlots: 1 }),
+      await sendPlan({
+        plan: { shape: "single", txs: [] },
+        executor,
+        signers: [],
+        budgetSlots: 1,
+        refreshUpdate: () => Promise.reject(new Error("unused")),
+      }),
     ).toEqual({
       signatures: [],
       reUpdates: 0,
     });
     expect(
-      await sendPlan({ plan: { shape: "split", txs: [] }, executor, signers: [], budgetSlots: 1 }),
+      await sendPlan({
+        plan: { shape: "split", txs: [] },
+        executor,
+        signers: [],
+        budgetSlots: 1,
+        refreshUpdate: () => Promise.reject(new Error("unused")),
+      }),
     ).toEqual({
       signatures: [],
       reUpdates: 0,

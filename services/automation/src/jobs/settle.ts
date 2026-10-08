@@ -22,7 +22,7 @@ import type { PrevCloseResult } from "../prevCloses";
 import type { JobSpec } from "../scheduler";
 import type { OracleUpdateAdapter } from "../switchboard";
 import { type RunState } from "../state";
-import { planSettlement, sendPlan, type TxExecutor } from "../settleTx";
+import { planSettlement, planUpdateTx, sendPlan, type TxExecutor } from "../settleTx";
 
 /** The job checks for due markets every minute. */
 export const SETTLEMENT_CRON = "* * * * *";
@@ -30,6 +30,14 @@ export const SETTLEMENT_CRON = "* * * * *";
 export const SETTLE_DELAY_SECS = 300;
 export const RETRY_EVERY_MS = 30_000;
 export const RETRY_WINDOW_MS = 15 * 60_000;
+/**
+ * After the 15-minute window and the alert, a still-failing ticker is retried quietly this
+ * often, at most [`MAX_QUIET_ATTEMPTS`] times (two hours), then left to `settle-now`. Every
+ * attempt calls both data APIs, so retrying every minute forever could burn the Twelve Data
+ * daily quota and starve the next morning's job.
+ */
+export const QUIET_RETRY_MS = 15 * 60_000;
+export const MAX_QUIET_ATTEMPTS = 8;
 /** Slots kept free of `max_staleness_slots` when sending the second transaction of a split. */
 export const SLOT_MARGIN = 10;
 /** Alert when the payer holds less than this (devnet fees are tiny; 0.05 SOL covers many runs). */
@@ -97,7 +105,18 @@ export interface SettleDeps {
 
 export class SettleMemory {
   readonly alerted = new Set<string>();
+  /** When each alerted group was last attempted, and how many quiet attempts it has had. */
+  readonly lastAttemptMs = new Map<string, number>();
+  readonly quietAttempts = new Map<string, number>();
+  readonly gaveUp = new Set<string>();
   lowBalanceAlerted = false;
+
+  forget(group: string): void {
+    this.alerted.delete(group);
+    this.lastAttemptMs.delete(group);
+    this.quietAttempts.delete(group);
+    this.gaveUp.delete(group);
+  }
 }
 
 export interface SettleResult {
@@ -141,6 +160,26 @@ export async function runSettlement(deps: SettleDeps): Promise<SettleResult> {
   const memory = deps.memory ?? new SettleMemory();
   const startedAt = deps.now();
   const initial = dueGroups(await deps.chain.openMarkets(), startedAt.getTime(), options);
+  // Groups already alerted are retried quietly: not before QUIET_RETRY_MS has passed, and only
+  // MAX_QUIET_ATTEMPTS times (then `settle-now` is the way).
+  for (const key of [...initial.keys()]) {
+    if (!memory.alerted.has(key)) {
+      continue;
+    }
+    const attempts = memory.quietAttempts.get(key) ?? 0;
+    if (attempts >= MAX_QUIET_ATTEMPTS) {
+      if (!memory.gaveUp.has(key)) {
+        memory.gaveUp.add(key);
+        deps.log("error", "settlement_gave_up", { group: key, quietAttempts: attempts });
+      }
+      initial.delete(key);
+    } else if (startedAt.getTime() - (memory.lastAttemptMs.get(key) ?? 0) < QUIET_RETRY_MS) {
+      initial.delete(key);
+    } else {
+      memory.quietAttempts.set(key, attempts + 1);
+      memory.lastAttemptMs.set(key, startedAt.getTime());
+    }
+  }
   if (initial.size === 0) {
     return { status: "idle", settled: 0, attempts: 0, failures: [] };
   }
@@ -162,15 +201,18 @@ export async function runSettlement(deps: SettleDeps): Promise<SettleResult> {
       if (markets === undefined || markets.length === 0) {
         pending.delete(key); // settled meanwhile (by us or by anyone: it is permissionless)
         lastError.delete(key);
-        memory.alerted.delete(key);
+        memory.forget(key);
         continue;
+      }
+      if (attempts > 1 && memory.alerted.has(key)) {
+        continue; // an alerted group is not retried inside another group's 15-minute window
       }
       try {
         await settleGroup(deps, memory, key, markets);
         settled += markets.length;
         pending.delete(key);
         lastError.delete(key);
-        memory.alerted.delete(key);
+        memory.forget(key);
       } catch (error) {
         const reason = describeError(error);
         lastError.set(key, reason);
@@ -208,12 +250,16 @@ export async function runSettlement(deps: SettleDeps): Promise<SettleResult> {
   if (fresh.length > 0) {
     for (const f of fresh) {
       memory.alerted.add(f.group);
+      memory.lastAttemptMs.set(f.group, deps.now().getTime());
+      memory.quietAttempts.set(f.group, 0);
     }
     const tickers = [...new Set(fresh.map((f) => f.group.split(":")[0] ?? ""))];
     const reasons = fresh.map((f) => `${f.group}: ${f.reason}`);
     await deps.alerter.send({
       kind: "settlement_failed",
-      summary: `could not settle ${fresh.map((f) => f.group).join(", ")} after ${String(attempts)} attempts`,
+      summary:
+        `could not settle ${fresh.map((f) => f.group).join(", ")} after ${String(attempts)} attempts; ` +
+        "it is retried quietly every 15 minutes for two hours, or settle it now with the settle-now CLI",
       details: { groups: fresh.map((f) => f.group), reasons, attempts },
     });
     await deps.incidents.post({
@@ -300,6 +346,16 @@ async function settleGroup(
     executor: deps.executor,
     signers: update.signers,
     budgetSlots: Math.max(1, pinned.maxStalenessSlots - SLOT_MARGIN),
+    // A re-update asks the oracle again at the current slot; it never replays the old payload.
+    refreshUpdate: async () => {
+      const fresh = await deps.adapter.build({
+        ticker: first.ticker,
+        closeCents: close.value.closeCents,
+        feeds,
+        slot: await deps.executor.currentSlot(),
+      });
+      return { tx: planUpdateTx(deps.payer, fresh.ixs, fresh.luts), signers: fresh.signers };
+    },
   });
   deps.log("info", "settled", {
     group: key,
