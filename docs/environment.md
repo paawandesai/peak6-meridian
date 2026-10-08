@@ -23,8 +23,8 @@
 | `FAUCET_PUBKEY` | scripts (deploy) | Faucet public key used as test-USDC mint authority (no secret needed by deploy) | M2 | `<base58 pubkey>` |
 | `FAUCET_MIN_LAMPORTS` | app (server) | Faucet key balance floor in integer lamports; below it the faucet returns 503 and alerts | no (default 100000000) | `100000000` |
 | `FAUCET_ALERT_COOLDOWN_SEC` | app (server) | Per-instance cooldown between low-balance alerts | no (default 3600) | `3600` |
-| `MERIDIAN_DEVNET_IDL` | tests | Path to the `make build-devnet` IDL (`target/idl/meridian.json`) for the AB-22 check; the M2-01 test sets it itself and fails if the file is missing | tests only | `target/idl/meridian.json` |
 | `FAUCET_AMOUNT_USDC` | app (server) | Faucet amount per claim | no (default 1000) | `1000` |
+| `MERIDIAN_DEVNET_IDL` | tests | Path to the `make build-devnet` IDL (`target/idl/meridian.json`) for the AB-22 check; the M2-01 test sets it itself and fails if the file is missing | tests only | `target/idl/meridian.json` |
 | `SWITCHBOARD_QUEUE` | automation, scripts | Switchboard devnet queue pubkey | devnet | `<queue pubkey>` |
 | `SWITCHBOARD_FEEDS_JSON` | automation, scripts | Feed pubkeys per ticker and source | devnet | `{"AAPL":["<tiingo feed>","<twelvedata feed>"],...}` |
 | `TIINGO_API_KEY` | automation, app server, quant, ops-agent, feed jobs | Tiingo API | devnet | `test-tiingo-key` |
