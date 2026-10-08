@@ -485,10 +485,23 @@ async function main(): Promise<void> {
     );
   }
   await step(`wait for close_ts (${closeTs - now}s)`, async () => {
-    const deadline = Date.now() + (closeTs - now + 120) * 1_000;
-    while ((await chainTime()) < closeTs) {
-      if (Date.now() > deadline) {
-        throw new Error("cluster clock did not reach close_ts");
+    // The cluster clock follows its slots, so a loaded validator runs behind wall time. Keep
+    // waiting while it advances; fail only when it stops for a full minute.
+    const STALL_MS = 60_000;
+    let last = now;
+    let lastAdvance = Date.now();
+    for (;;) {
+      const current = await chainTime();
+      if (current >= closeTs) {
+        return;
+      }
+      if (current > last) {
+        last = current;
+        lastAdvance = Date.now();
+      } else if (Date.now() - lastAdvance > STALL_MS) {
+        throw new Error(
+          `cluster clock stalled at ${current}, ${closeTs - current}s before close_ts`,
+        );
       }
       await new Promise((r) => setTimeout(r, 1_000));
     }
