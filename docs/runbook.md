@@ -79,3 +79,47 @@ Restart AO desktop/daemon if needed: `$AO stop` then `$AO start` (or relaunch th
 
 - Operator heartbeat: every 30–60 minutes while unblocked work remains
 - Grok Bot routine **Meridian worker stage monitor**: every 5 minutes weekdays **8:02 AM–8:57 PM** America/Chicago
+
+## Rehearsal
+
+The Thursday devnet rehearsal (M2-12; the day's markets settle at 16:05 ET). Script: `tests/e2e/src/lifecycle.ts --cluster devnet`, run as `pnpm --filter e2e run rehearsal --phase <markets|trade|redeem>`. It never creates a Config, mint or deploy; those are M2-01 (`make deploy-devnet`). All times ET (`America/New_York`).
+
+**Who:** the operator, or an AO worker the operator names. Whoever runs a step writes one line per step in `docs/log.md`: who, UTC and ET time, step, outcome, explorer links. No secrets, keypair contents or RPC URLs with API keys in the log or the MR.
+
+**Environment** (`.env`, gitignored; see `docs/environment.md`): `SOLANA_CLUSTER=devnet`, `SOLANA_RPC_URL`, `ADMIN_KEYPAIR_PATH` (pays fees, funds SOL), `MERIDIAN_PROGRAM_ID` (if not the default). `FAUCET_KEYPAIR` only for `--fund direct`; `ANCHOR_WALLET` (automation keypair file) only for `--phase markets`. The script verifies the cluster by genesis hash before reading any key; it refuses a non-devnet RPC and exits with nothing sent.
+
+### Timeline
+
+| ET | Step | Who / how |
+|---|---|---|
+| before 08:00 | Check devnet: `make deploy-devnet` re-run sends no tx (program, mint, Config current), automation service up (Railway, M2-11) or started per the fallback below | operator |
+| 08:00 | Morning job creates the day's markets | automation |
+| by 08:00 | If no markets exist yet, use **Fallback B** (must be done before 09:00) | operator / AO worker |
+| 09:30–15:00 | `--phase trade`: funds trader-a/b, runs Buy YES, Sell YES, Buy NO, Sell NO on the lowest open META strike, checks vault/escrow invariants after each step, saves `target/rehearsal/state.json` and the trader keypairs (gitignored, mode 0600) | operator |
+| 16:00 | Markets close | |
+| 16:05 | Settlement by the automation service (Switchboard) | automation |
+| ≤16:15 | Check every market settled within 10 min of close (**AC2**). If not, diagnose (automation logs, `docs/runbook.md`, alerts) and open a fix ticket before Friday | operator |
+| after settlement | `--phase redeem`: settle_funds, redeem, exact P&L check against the independent model | operator |
+
+`--phase trade` flags: `--symbol META` (default), `--strike-cents N`, `--state-dir DIR`, `--fund direct|none`. It needs an open market with at least 180 s before close, and an empty book. It refuses to trade twice into the same state dir.
+
+### Funding the traders
+
+- **Faucet not deployed (default):** `--fund direct` mints 1,000 test-USDC to each trader with the `FAUCET_KEYPAIR` mint authority and sends 0.1 SOL from the admin.
+- **Faucet deployed (M2-09):** use `--fund none`. The script prints both trader wallet addresses and creates their USDC token accounts, then fails with a clear message until each wallet has at least 0.03 SOL and 1,000 test-USDC. Send the SOL, claim the USDC through the app faucet (import `target/rehearsal/trader-a.json` / `trader-b.json` into a wallet, or send from a funded wallet), then re-run the same command.
+
+### Fallback A: AO worker runs the automation service (Railway tokens or M2-11 late)
+
+An AO worker session runs `pnpm --filter automation start` against devnet with `TZ=America/New_York` and the devnet env (`AUTOMATION_KEYPAIR`, `SOLANA_RPC_URL`, `SOLANA_CLUSTER=devnet`, API keys from the forwarded env) from before 08:00 until at least 16:15 ET, and the operator records in `docs/log.md` which session ran it (session ID, start and stop times). The app and faucet run locally against devnet (`make dev` with the devnet env) until M2-11 lands. Check the process is alive at 15:55 ET, because settlement at 16:05 depends on it.
+
+### Fallback B: markets not created by 08:00 ET
+
+The operator or an AO worker creates the day's markets before 09:00 ET with the create-markets CLI path:
+
+1. Write the previous closes for the trading date, from both Tiingo and Twelve Data (they must agree within 5 bps), to a file such as `target/rehearsal/prev_closes.json`: `{"tradingDate":"YYYY-MM-DD","closes":{"AAPL":23000,...,"TSLA":25000}}` (integer cents, all seven tickers).
+2. `ANCHOR_WALLET=<automation keypair file> pnpm --filter e2e run rehearsal --phase markets --prev-closes target/rehearsal/prev_closes.json`. Safe to re-run: markets that exist are skipped.
+3. Log it in `docs/log.md`: who, time, number created, explorer links.
+
+### Testing the script without devnet
+
+Against a local validator: `SOLANA_CLUSTER=localnet` with a loopback `SOLANA_RPC_URL`, the markets seeded by `E2E_SEED_ONLY=1 ... pnpm --filter e2e run lifecycle` (use `E2E_CLOSE_IN_SECS` of about 420), then `--phase trade`, then `--phase redeem --local-settle` (the local oracle settles; the flag is refused on devnet). Unit tests: `pnpm --filter e2e run test`.
