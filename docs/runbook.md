@@ -86,7 +86,7 @@ The Thursday devnet rehearsal (M2-12; the day's markets settle at 16:05 ET). Scr
 
 **Who:** the operator, or an AO worker the operator names. Whoever runs a step writes one line per step in `docs/log.md`: who, UTC and ET time, step, outcome, explorer links. No secrets, keypair contents or RPC URLs with API keys in the log or the MR.
 
-**Environment** (`.env`, gitignored; see `docs/environment.md`): `SOLANA_CLUSTER=devnet`, `SOLANA_RPC_URL`, `ADMIN_KEYPAIR_PATH` (pays fees, funds SOL), `MERIDIAN_PROGRAM_ID` (if not the default). `FAUCET_KEYPAIR` only for `--fund direct`; `ANCHOR_WALLET` (automation keypair file) only for `--phase markets`. The script verifies the cluster by genesis hash before reading any key; it refuses a non-devnet RPC and exits with nothing sent.
+**Environment** (`.env`, gitignored; see `docs/environment.md`): `SOLANA_CLUSTER=devnet`, `SOLANA_RPC_URL`, `ADMIN_KEYPAIR_PATH` (pays fees, funds SOL), `MERIDIAN_PROGRAM_ID` (if not the default). `FAUCET_URL` for `--fund faucet` (the default); `FAUCET_KEYPAIR` only for `--fund direct`; `ANCHOR_WALLET` (automation keypair file) only for `--phase markets`. The script verifies the cluster by genesis hash before reading any key; it refuses a non-devnet RPC and exits with nothing sent.
 
 ### Timeline
 
@@ -101,12 +101,13 @@ The Thursday devnet rehearsal (M2-12; the day's markets settle at 16:05 ET). Scr
 | ≤16:15 | Check every market settled within 10 min of close (**AC2**). If not, diagnose (automation logs, `docs/runbook.md`, alerts) and open a fix ticket before Friday | operator |
 | after settlement | `--phase redeem`: settle_funds, redeem, exact P&L check against the independent model | operator |
 
-`--phase trade` flags: `--symbol META` (default), `--strike-cents N`, `--state-dir DIR`, `--fund direct|none`. It needs an open market with at least 180 s before close, and an empty book. It refuses to trade twice into the same state dir.
+`--phase trade` flags: `--symbol META` (default), `--strike-cents N`, `--state-dir DIR`, `--fund faucet|direct|none`. It needs an open market with at least 180 s before close, and an empty book. It refuses to trade twice into the same state dir.
 
 ### Funding the traders
 
-- **Faucet not deployed (default):** `--fund direct` mints 1,000 test-USDC to each trader with the `FAUCET_KEYPAIR` mint authority and sends 0.1 SOL from the admin.
-- **Faucet deployed (M2-09):** use `--fund none`. The script prints both trader wallet addresses and creates their USDC token accounts, then fails with a clear message until each wallet has at least 0.03 SOL and 1,000 test-USDC. Send the SOL, claim the USDC through the app faucet (import `target/rehearsal/trader-a.json` / `trader-b.json` into a wallet, or send from a funded wallet), then re-run the same command.
+- **Faucet (default, `--fund faucet`):** needs `FAUCET_URL` (the running app, e.g. `http://localhost:3000` from `make dev` with the devnet env, or the Railway/Vercel URL) and the app's `USDC_MINT` equal to the Config's mint. The admin sends 0.1 SOL to each trader and the script claims test-USDC for each wallet through `POST /api/faucet` (M2-09). The faucet allows one claim per wallet per 24 h and mints `FAUCET_AMOUNT_USDC` (default 1,000); a 429 is accepted if the wallet already holds 1,000. If a wallet is short, the script says so and stops: top it up by hand or use `--fund direct`.
+- **App not running (`--fund direct`):** mints 1,000 test-USDC to each trader with the `FAUCET_KEYPAIR` mint authority and sends 0.1 SOL from the admin.
+- **By hand (`--fund none`):** the script prints both trader wallet addresses and creates their USDC token accounts, then fails until each wallet has at least 0.03 SOL and 1,000 test-USDC. Fund them (the app faucet with the wallet imported from `target/rehearsal/trader-a.json` / `trader-b.json`, or a transfer), then re-run the same command.
 
 ### Fallback A: AO worker runs the automation service (Railway tokens or M2-11 late)
 
@@ -123,3 +124,10 @@ The operator or an AO worker creates the day's markets before 09:00 ET with the 
 ### Testing the script without devnet
 
 Against a local validator: `SOLANA_CLUSTER=localnet` with a loopback `SOLANA_RPC_URL`, the markets seeded by `E2E_SEED_ONLY=1 ... pnpm --filter e2e run lifecycle` (use `E2E_CLOSE_IN_SECS` of about 420), then `--phase trade`, then `--phase redeem --local-settle` (the local oracle settles; the flag is refused on devnet). Unit tests: `pnpm --filter e2e run test`.
+
+## Faucet (M2-09)
+
+- The server faucet (`POST /api/faucet`) mints test-USDC with `FAUCET_KEYPAIR`, which is the mint authority, and pays rent from its own SOL: about 0.004 SOL per claim (two 1-byte marker accounts plus the recipient's token account). Keep that key funded on devnet (`solana airdrop`, or a transfer from the admin key).
+- Below `FAUCET_MIN_LAMPORTS` (default 0.1 SOL) the endpoint answers 503 and posts one alert to `ALERT_WEBHOOK_URL` per instance per `FAUCET_ALERT_COOLDOWN_SEC`. Top up the key; no restart is needed.
+- A claim limit of one per wallet per 24 h is enforced on chain by marker accounts; there is nothing to reset. A refused wallet (429) simply waits: the gap is at least 24 h minus about 90 s, and up to about 48 h.
+- A "faucet misconfigured" error means `FAUCET_KEYPAIR` is not the mint authority of `USDC_MINT`; fix the environment and redeploy.

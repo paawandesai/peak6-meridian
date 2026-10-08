@@ -38,7 +38,7 @@ describe("arguments", () => {
     expect(args).toMatchObject({
       phase: "trade",
       symbol: "META",
-      fund: "direct",
+      fund: "faucet",
       localSettle: false,
     });
     expect(args.strikeCents).toBeUndefined();

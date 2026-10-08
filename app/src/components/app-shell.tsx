@@ -1,5 +1,6 @@
 "use client";
 
+import { FaucetButton } from "./faucet-button";
 import { MarketsView } from "./markets-view";
 import { Providers } from "./providers";
 import { UsdcBalance } from "./usdc-balance";
@@ -12,6 +13,7 @@ export function AppShell() {
         <h1 className="text-xl font-bold">Meridian</h1>
         <div className="flex items-center gap-4 text-sm">
           <UsdcBalance />
+          <FaucetButton />
           <WalletButton />
         </div>
       </header>

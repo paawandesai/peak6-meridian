@@ -45,6 +45,7 @@ import {
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { z } from "zod";
 
+import { claimFromFaucet } from "./faucet-claim";
 import { Ledger, UNITS_PER_CENT, UNITS_PER_USDC } from "./ledger";
 import {
   assertFunded,
@@ -74,6 +75,7 @@ const envSchema = z.object({
   SOLANA_RPC_URL: z.string().url(),
   ADMIN_KEYPAIR_PATH: z.string().min(1),
   FAUCET_KEYPAIR: z.string().optional(),
+  FAUCET_URL: z.string().url().optional(),
   ANCHOR_WALLET: z.string().optional(),
   MERIDIAN_PROGRAM_ID: z.string().optional(),
 });
@@ -294,6 +296,58 @@ async function fundTraders(ctx: Ctx, traders: Trader[], usdcMint: PublicKey): Pr
         }
       }
     });
+    return;
+  }
+  if (ctx.args.fund === "faucet") {
+    const faucetUrl = ctx.env.FAUCET_URL;
+    if (faucetUrl === undefined) {
+      throw new Error(
+        "--fund faucet needs FAUCET_URL (the app, e.g. http://localhost:3000); or use --fund direct / none",
+      );
+    }
+    await step(
+      ctx,
+      "fund trader-a and trader-b: SOL from the admin, test-USDC from the faucet",
+      async (sigs) => {
+        for (const trader of traders) {
+          const have = BigInt(await connection.getBalance(trader.keypair.publicKey, "confirmed"));
+          if (have < TRADER_MIN_LAMPORTS) {
+            const tx = new Transaction().add(
+              SystemProgram.transfer({
+                fromPubkey: admin.publicKey,
+                toPubkey: trader.keypair.publicKey,
+                lamports: TRADER_SOL_LAMPORTS,
+              }),
+            );
+            await send(ctx, tx, [admin], sigs);
+          }
+          if (
+            (await connection.getAccountInfo(trader.usdc, "confirmed")) === null ||
+            (await amount(ctx, trader.usdc)) < TRADER_USDC_BASE_UNITS
+          ) {
+            const claim = await claimFromFaucet(
+              fetch,
+              faucetUrl,
+              trader.keypair.publicKey.toBase58(),
+            );
+            if (claim.kind === "claimed") sigs.push(claim.signature);
+          }
+        }
+      },
+    );
+    for (const trader of traders) {
+      assertFunded(
+        trader.name,
+        {
+          lamports: BigInt(await connection.getBalance(trader.keypair.publicKey, "confirmed")),
+          usdc:
+            (await connection.getAccountInfo(trader.usdc, "confirmed")) === null
+              ? 0n
+              : await amount(ctx, trader.usdc),
+        },
+        "the faucet allows one claim per wallet per 24 h (and may mint less than 1,000): top the wallet up by hand or use --fund direct",
+      );
+    }
     return;
   }
   // Manual funding (the faucet button of M2-09, or any mint-authority holder): the script only

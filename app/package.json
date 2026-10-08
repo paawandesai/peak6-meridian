@@ -16,6 +16,7 @@
   "dependencies": {
     "@coral-xyz/anchor": "0.31.1",
     "@meridian/client": "workspace:*",
+    "@solana/spl-token": "0.4.15",
     "@solana/wallet-adapter-base": "0.9.28",
     "@solana/wallet-adapter-phantom": "0.9.30",
     "@solana/wallet-adapter-react": "0.15.40",
@@ -28,7 +29,6 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@solana/spl-token": "0.4.15",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/dom": "10.4.2",
     "@testing-library/jest-dom": "7.0.1",

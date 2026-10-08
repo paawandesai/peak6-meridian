@@ -21,8 +21,12 @@ export type RehearsalArgs = {
   readonly phase: Phase;
   readonly symbol: string;
   readonly strikeCents: bigint | undefined;
-  /** `direct`: fund traders with the FAUCET_KEYPAIR mint authority; `none`: they are funded by hand/faucet. */
-  readonly fund: "direct" | "none";
+  /**
+   * `faucet` (default): SOL from the admin, test-USDC from the app faucet (FAUCET_URL);
+   * `direct`: USDC minted with the FAUCET_KEYPAIR mint authority (no app needed);
+   * `none`: the wallets are funded by hand; the script only checks.
+   */
+  readonly fund: "faucet" | "direct" | "none";
   readonly prevCloses: string | undefined;
   readonly stateDir: string | undefined;
   /** Local validator only: settle with the local oracle, as the M1-10 lifecycle does. */
@@ -56,7 +60,7 @@ export function parseRehearsalArgs(argv: readonly string[]): RehearsalArgs {
   const phase = z
     .enum(PHASES, { error: `--phase must be one of ${PHASES.join(", ")}` })
     .parse(values.phase);
-  const fund = z.enum(["direct", "none"]).default("direct").parse(values.fund);
+  const fund = z.enum(["faucet", "direct", "none"]).default("faucet").parse(values.fund);
   const strike = values["strike-cents"];
   if (phase === "markets" && values["prev-closes"] === undefined) {
     throw new Error("--phase markets needs --prev-closes <file> (the previous closes JSON)");
