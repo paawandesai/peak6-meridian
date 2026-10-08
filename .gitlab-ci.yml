@@ -462,6 +462,45 @@ e2e:
       fi
     - make e2e
 
+# ---- e2e:ui (M2-13, human review) ---------------------------------------------------------
+# Playwright smoke: local validator + app + injected test wallet (tests/e2e/playwright). Tagged
+# `heavy` and in the `meridian-heavy` resource group like `e2e` (validator ~1.4 GB RSS plus
+# `next dev` plus Chromium); needs the same prebuilt local-oracle artifacts as `e2e`, else it
+# builds locally. Chromium is downloaded per run (not cached yet).
+e2e:ui:
+  stage: e2e
+  extends: .on-e2e-change
+  needs:
+    - job: build
+      optional: true
+    - job: test:rust
+      optional: true
+    - job: test:js-py
+  resource_group: meridian-heavy
+  timeout: 2 hours
+  tags:
+    - heavy
+  variables:
+    TOOLCHAIN: apt rust solana anchor node
+    CACHE_GROUP: sbf
+  cache:
+    - *cache-toolchain
+    - *cache-cargo
+    - *cache-pnpm
+  script:
+    - make install-rust install-js
+    - pnpm --filter e2e exec playwright install --with-deps chromium
+    - |
+      if [ -f target/deploy/meridian.so ] && [ -f target/idl/meridian.json ]; then
+        export E2E_PREBUILT=1
+      fi
+    - make e2e-ui
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - tests/e2e/playwright-report/
+
 # ---- schedules ----------------------------------------------------------------------------
 # Fails when docs/log.md has not changed for 24 hours. The operator creates the schedule with
 # the variable HEARTBEAT=1.
