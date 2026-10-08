@@ -12,6 +12,8 @@
     clippy::result_large_err
 )]
 
+pub mod orders;
+
 use std::path::PathBuf;
 
 use anchor_lang::prelude::Pubkey;
@@ -367,10 +369,14 @@ use meridian::state::{
 };
 use solana_sdk::account::Account as SdkAccount;
 
-/// 2026-10-06 09:00 ET (13:00 UTC): a plausible "now" for tests.
-pub const BASE_UNIX_TS: i64 = 1_791_032_400;
+// The ET instants below were computed with a real `America/New_York` conversion
+// (Python zoneinfo), not by adding fixed offsets; update them the same way.
+/// 2026-10-06 09:00 ET (13:00 UTC, a Tuesday): a plausible "now" for tests.
+pub const BASE_UNIX_TS: i64 = 1_791_291_600;
 /// 2026-10-06 16:00 ET (20:00 UTC): the normal close of [`BASE_TRADING_DATE`].
-pub const BASE_CLOSE_TS: i64 = 1_791_057_600;
+pub const BASE_CLOSE_TS: i64 = 1_791_316_800;
+/// 2026-11-27 13:00 ET (18:00 UTC): the early close of the day after Thanksgiving.
+pub const EARLY_CLOSE_TS: i64 = 1_795_802_400;
 /// The trading date matching [`BASE_CLOSE_TS`].
 pub const BASE_TRADING_DATE: u32 = 20_261_006;
 /// META $680.

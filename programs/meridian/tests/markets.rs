@@ -20,8 +20,8 @@ use anchor_lang::solana_program::program_option::COption;
 use anchor_spl::token::spl_token::error::TokenError;
 use common::{
     assert_meridian_error, assert_token_error, config_pda, expect_failure, expect_success,
-    find_event, symbol, MarketAddresses, MarketArgs, MarketHarness, User, BASE_CLOSE_TS,
-    BASE_TRADING_DATE, BASE_UNIX_TS, FUNDING_LAMPORTS,
+    find_event, symbol, MarketAddresses, MarketArgs, MarketHarness, User, BASE_TRADING_DATE,
+    BASE_UNIX_TS, EARLY_CLOSE_TS, FUNDING_LAMPORTS,
 };
 use meridian::errors::MeridianError;
 use meridian::events::{MarketCreated, PairsMinted, Paused, Redeemed, Unpaused};
@@ -151,7 +151,7 @@ fn create_strike_market_accepts_every_configured_ticker_and_the_strike_ladder() 
         ticker: symbol("TSLA"),
         strike_cents: 25_000,
         trading_date: 20_261_127,
-        close_ts: BASE_CLOSE_TS + 52 * 86_400 - 3 * 3_600,
+        close_ts: EARLY_CLOSE_TS,
     };
     let addresses = h.create_market(&tsla);
     assert_market_created(&h, &addresses, &tsla);

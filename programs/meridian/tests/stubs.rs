@@ -1,7 +1,7 @@
 //! M1-02 AC3: every instruction from architecture.md § Interfaces exists in the IDL built by
 //! `make build-local`, and every one not implemented yet returns `MeridianError::NotImplemented`.
 //! Implemented so far: config (M1-02); markets, mint/redeem (pair mode) and pause (M1-04);
-//! settlement, override, winner redeem and the local oracle (M1-07).
+//! settlement, override, winner redeem and the local oracle (M1-07); orders (M1-05).
 
 // Test code: the program rules on unwrap/panic/arithmetic do not apply here.
 #![allow(
@@ -17,7 +17,7 @@ use anchor_lang::solana_program::hash::hash;
 use anchor_lang::{InstructionData, ToAccountMetas};
 use common::{assert_meridian_error, Harness};
 use meridian::errors::MeridianError;
-use meridian::state::{OrderKind, Side};
+use meridian::state::OrderKind;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::Signer;
 
@@ -87,21 +87,6 @@ fn idl_lists_every_instruction_of_the_interface() {
 fn stub_instructions() -> Vec<(&'static str, Vec<u8>)> {
     vec![
         (
-            "place_order",
-            meridian::instruction::PlaceOrder {
-                side: Side::Bid,
-                price: 62,
-                qty: 10,
-                kind: OrderKind::Limit,
-            }
-            .data(),
-        ),
-        (
-            "cancel_order",
-            meridian::instruction::CancelOrder { order_id: 1 }.data(),
-        ),
-        ("settle_funds", meridian::instruction::SettleFunds {}.data()),
-        (
             "buy_no",
             meridian::instruction::BuyNo {
                 qty: 10,
@@ -132,6 +117,9 @@ fn every_stub_is_covered_by_this_test() {
         "settle_market",
         "admin_settle_override",
         "local_oracle_set",
+        "place_order",
+        "cancel_order",
+        "settle_funds",
     ];
     let mut covered: Vec<&str> = stub_instructions()
         .into_iter()
@@ -148,7 +136,7 @@ fn every_stub_is_covered_by_this_test() {
 fn every_stub_returns_not_implemented() {
     let mut harness = Harness::new();
     let signer = harness.funded_keypair();
-    let accounts = meridian::accounts::PlaceOrder {
+    let accounts = meridian::accounts::BuyNo {
         user: signer.pubkey(),
     }
     .to_account_metas(None);
