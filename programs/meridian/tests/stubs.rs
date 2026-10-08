@@ -1,7 +1,8 @@
 //! M1-02 AC3: every instruction from architecture.md § Interfaces exists in the IDL built by
 //! `make build-local`, and every one not implemented yet returns `MeridianError::NotImplemented`.
 //! Implemented so far: config (M1-02); markets, mint/redeem (pair mode) and pause (M1-04);
-//! orders (M1-05); buy_no / sell_no (M1-06).
+//! orders (M1-05); buy_no / sell_no (M1-06); settlement, override, winner redeem and the local
+//! oracle (M1-07). No stubs remain: the list below is empty and stays as the guard for new ones.
 
 // Test code: the program rules on unwrap/panic/arithmetic do not apply here.
 #![allow(
@@ -14,11 +15,10 @@
 mod common;
 
 use anchor_lang::solana_program::hash::hash;
-use anchor_lang::{AnchorSerialize, InstructionData, ToAccountMetas};
-use common::{assert_meridian_error, symbol, Harness};
+use anchor_lang::InstructionData;
+use common::{assert_meridian_error, Harness};
 use meridian::errors::MeridianError;
 use solana_sdk::instruction::Instruction;
-use solana_sdk::signature::Signer;
 
 /// Every instruction of the local build, in architecture.md order.
 const EXPECTED_INSTRUCTIONS: [&str; 17] = [
@@ -84,25 +84,7 @@ fn idl_lists_every_instruction_of_the_interface() {
 
 /// `(name, data)` of every stub instruction with valid arguments.
 fn stub_instructions() -> Vec<(&'static str, Vec<u8>)> {
-    let ticker = symbol("META");
-    let mut local_oracle_set = hash(b"global:local_oracle_set").to_bytes()[..8].to_vec();
-    (ticker, 0u8, 68_000i128 * 10_000_000_000_000_000, 1u64)
-        .serialize(&mut local_oracle_set)
-        .expect("borsh");
-    vec![
-        (
-            "settle_market",
-            meridian::instruction::SettleMarket {}.data(),
-        ),
-        (
-            "admin_settle_override",
-            meridian::instruction::AdminSettleOverride {
-                settle_price_cents: 68_123,
-            }
-            .data(),
-        ),
-        ("local_oracle_set", local_oracle_set),
-    ]
+    Vec::new()
 }
 
 #[test]
@@ -122,6 +104,9 @@ fn every_stub_is_covered_by_this_test() {
         "settle_funds",
         "buy_no",
         "sell_no",
+        "settle_market",
+        "admin_settle_override",
+        "local_oracle_set",
     ];
     let mut covered: Vec<&str> = stub_instructions()
         .into_iter()
@@ -138,10 +123,8 @@ fn every_stub_is_covered_by_this_test() {
 fn every_stub_returns_not_implemented() {
     let mut harness = Harness::new();
     let signer = harness.funded_keypair();
-    let accounts = meridian::accounts::SettleMarket {
-        payer: signer.pubkey(),
-    }
-    .to_account_metas(None);
+    // Stub instructions are called with no accounts: they fail before reading any.
+    let accounts = Vec::new();
     for (name, data) in stub_instructions() {
         let instruction = Instruction {
             program_id: meridian::ID,
@@ -159,8 +142,8 @@ fn every_stub_returns_not_implemented() {
 
 #[test]
 fn stub_discriminators_match_their_names() {
-    // The hand-built local_oracle_set data above relies on Anchor's discriminator rule; prove
-    // it against a generated one.
+    // Hand-built instruction data (local_oracle_set in settlement.rs) relies on Anchor's
+    // discriminator rule; prove it against a generated one.
     let generated = meridian::instruction::SettleFunds {}.data();
     assert_eq!(
         &generated[..8],

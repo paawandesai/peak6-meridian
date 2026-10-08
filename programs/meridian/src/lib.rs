@@ -9,6 +9,7 @@ use anchor_lang::prelude::*;
 pub mod errors;
 pub mod events;
 pub mod instructions;
+pub mod oracle;
 pub mod state;
 
 pub use instructions::*;
@@ -105,12 +106,12 @@ pub mod meridian {
         instructions::sell_no::handle_sell_no(ctx, qty, price)
     }
 
-    /// Permissionless settlement from the two oracle feeds (FR-08). Stub until M1-07.
+    /// Permissionless settlement from the two oracle feeds (FR-08).
     pub fn settle_market(ctx: Context<SettleMarket>) -> Result<()> {
         instructions::settle_market::handle_settle_market(ctx)
     }
 
-    /// Admin settlement with a manual price after the delay (FR-09). Stub until M1-07.
+    /// Admin settlement with a manual price after the delay (FR-09).
     pub fn admin_settle_override(
         ctx: Context<AdminSettleOverride>,
         settle_price_cents: u64,
@@ -118,7 +119,7 @@ pub mod meridian {
         instructions::admin_settle_override::handle_admin_settle_override(ctx, settle_price_cents)
     }
 
-    /// Pair redeem before settlement, winner redeem after (FR-10). Stub until M1-04 / M1-07.
+    /// Pair redeem before settlement, winner redeem after (FR-10).
     pub fn redeem(ctx: Context<Redeem>, yes_qty: u64, no_qty: u64) -> Result<()> {
         instructions::redeem::handle_redeem(ctx, yes_qty, no_qty)
     }
@@ -133,7 +134,7 @@ pub mod meridian {
         instructions::unpause::handle_unpause(ctx)
     }
 
-    /// Test-only oracle writer; never in devnet builds (D-028, AB-22). Stub until M1-07.
+    /// Test-only oracle writer; never in devnet builds (D-028, AB-22).
     #[cfg(feature = "local-oracle")]
     pub fn local_oracle_set(
         ctx: Context<LocalOracleSet>,
