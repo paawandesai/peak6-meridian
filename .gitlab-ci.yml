@@ -60,7 +60,7 @@ default:
   # Warm paths finish in minutes; only `build` (cold cargo cache) gets a long timeout.
   timeout: 30 minutes
   before_script:
-    - 'export CI_JOBS=$(( $(nproc) < CI_MAX_JOBS ? $(nproc) : CI_MAX_JOBS ))'
+    - "export CI_JOBS=$(( $(nproc) < CI_MAX_JOBS ? $(nproc) : CI_MAX_JOBS ))"
     - export CARGO_BUILD_JOBS=$CI_JOBS RUST_TEST_THREADS=$CI_JOBS VITEST_FLAGS="--maxWorkers=$CI_JOBS"
     - scripts/ci/link-cache.sh
     - scripts/toolchain.sh $TOOLCHAIN
