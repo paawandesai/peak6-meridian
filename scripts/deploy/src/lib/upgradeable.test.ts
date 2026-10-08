@@ -85,6 +85,13 @@ describe("onChainElfMatches", () => {
     );
   });
 
+  it("does not match when the on-chain ELF is a longer, older build (padding-aware)", () => {
+    const old = Uint8Array.from([1, 2, 3, 4, 5, 6]);
+    const shorter = Uint8Array.from([1, 2, 3, 4]);
+    expect(onChainElfMatches(programDataAccount(1n, null, old, 2), shorter)).toBe(false);
+    expect(onChainElfMatches(programDataAccount(1n, null, shorter, 9), old)).toBe(false);
+  });
+
   it("does not match a changed byte or a longer local ELF", () => {
     const elf = Uint8Array.from([1, 2, 3, 4]);
     const data = programDataAccount(1n, null, elf, 4);

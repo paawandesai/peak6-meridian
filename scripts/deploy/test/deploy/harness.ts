@@ -10,23 +10,22 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 
-export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 /** Directories and files the isolated copy needs to build and test the program. */
 const COPIED = [
   "programs",
   "crates",
   "tests/security/program",
-  "tests/fixtures/switchboard",
+  "tests/fixtures",
   "oracle",
   "Cargo.toml",
   "Cargo.lock",
@@ -59,9 +58,12 @@ export function removeDir(dir: string): void {
   rmSync(dir, { recursive: true, force: true });
 }
 
-/** `git status` for tracked files only; compared before and after to prove nothing leaked. */
-export function trackedStatus(): string {
-  return run("git", ["status", "--porcelain", "--untracked-files=no"]);
+/**
+ * `git status` plus `git diff` of tracked files, taken before and after a run and compared (never
+ * an absolute state: a developer's working tree may be dirty) to prove nothing leaked.
+ */
+export function treeSnapshot(): string {
+  return `${run("git", ["status", "--porcelain", "--untracked-files=no"])}\n${run("git", ["diff", "HEAD"])}`;
 }
 
 /** sha256 of a file, or null when it does not exist. */
@@ -81,25 +83,14 @@ export function sharedArtifactHashes(): Record<string, string | null> {
   };
 }
 
-/**
- * Where the isolated copy builds: its own cargo target directory, kept between runs under the
- * user cache so dependencies are not rebuilt every time (never the repository's `target/`).
- */
-export function isolatedTargetDir(): string {
-  return (
-    process.env.MERIDIAN_DEPLOY_TEST_TARGET ??
-    join(homedir(), ".cache", "meridian", "deploy-test-target")
-  );
-}
-
-export type IsolatedBuild = {
+export type IsolatedCopy = {
   /** Root of the temporary copy (sources as in the working tree, uncommitted edits included). */
   readonly root: string;
   /** The throwaway program ID the copy was synced to. */
   readonly programId: PublicKey;
 };
 
-/** Copies the program sources from the working tree into `root`. */
+/** Copies the build inputs from the working tree into `root`. */
 function copySources(root: string): void {
   for (const entry of COPIED) {
     const from = join(REPO_ROOT, entry);
@@ -113,13 +104,14 @@ function copySources(root: string): void {
 }
 
 /**
- * Builds the devnet program (`anchor build`, default features, no test oracle) in a temporary
- * copy of the sources with its own `CARGO_TARGET_DIR`, under a throwaway program ID
- * (`anchor keys sync`, as scripts/e2e.sh does). The real tree and its `target/` are never
- * touched. The throwaway keypair is written to `keypairPath`. The copy is removed on
- * EXIT/INT/TERM and by `removeIsolatedCopy`.
+ * Prepares a temporary copy of the build inputs under a throwaway program ID, as scripts/e2e.sh
+ * does: the throwaway keypair goes to the copy's `target/deploy/meridian-keypair.json` (the only
+ * path `anchor keys sync` reads) and `anchor keys sync` rewrites `declare_id!`, Anchor.toml and
+ * (at build time) the IDL address in the copy only. The copy keeps its own default `target/`,
+ * so the real tree and its `target/` are never touched; it is removed on EXIT/INT/TERM and by
+ * `removeDir`. The script itself builds in the copy (`buildDevnet`).
  */
-export function buildDevnetInIsolatedCopy(root: string, keypairPath: string): IsolatedBuild {
+export function prepareIsolatedCopy(root: string, keypairPath: string): IsolatedCopy {
   mkdirSync(root, { recursive: true });
   const cleanup = () => removeDir(root);
   process.on("exit", cleanup);
@@ -130,21 +122,14 @@ export function buildDevnetInIsolatedCopy(root: string, keypairPath: string): Is
     });
   }
   copySources(root);
-  // The copy's `target` is a link to the isolated cache, so `anchor keys sync` (which reads
-  // target/deploy/meridian-keypair.json) and cargo both use the same directory.
-  const targetDir = isolatedTargetDir();
-  mkdirSync(join(targetDir, "deploy"), { recursive: true });
-  symlinkSync(targetDir, join(root, "target"), "dir");
-  const env = { ...process.env, CARGO_TARGET_DIR: join(root, "target") };
-  const keypair = join(targetDir, "deploy", "meridian-keypair.json");
+  const keypair = join(root, "target", "deploy", "meridian-keypair.json");
+  mkdirSync(dirname(keypair), { recursive: true });
   const inCopy = (command: string, args: string[]) =>
-    execFileSync(command, args, { cwd: root, env, encoding: "utf8", maxBuffer: 1 << 28 });
+    execFileSync(command, args, { cwd: root, encoding: "utf8", maxBuffer: 1 << 28 });
   inCopy("solana-keygen", ["new", "--no-bip39-passphrase", "-s", "--force", "-o", keypair]);
   inCopy("anchor", ["keys", "sync"]);
-  inCopy("anchor", ["build"]);
   copyFileSync(keypair, keypairPath);
   const programId = new PublicKey(inCopy("solana-keygen", ["pubkey", keypair]).trim());
-  rmSync(keypair, { force: true });
   return { root, programId };
 }
 

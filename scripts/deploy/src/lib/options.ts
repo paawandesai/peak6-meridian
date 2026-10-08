@@ -49,7 +49,8 @@ Options:
   --out <file>      deployment record (default deployments/devnet.json)
   --feeds <file>    pin real feeds: { "AAPL": [{pubkey, hash}, {pubkey, hash}], ... }
   --queue <pubkey>  Switchboard queue (overrides SWITCHBOARD_QUEUE)
-  --skip-build      do not run make build-devnet (use the existing target/ artifacts)
+  --repo-root <dir> read sources and build artifacts from <dir> (default: this repository)
+  --skip-build      do not run the devnet build first (use the existing target/ artifacts)
   --help
 `;
 
@@ -91,6 +92,7 @@ export function parseOptions(
       out: { type: "string" },
       feeds: { type: "string" },
       queue: { type: "string" },
+      "repo-root": { type: "string" },
       "skip-build": { type: "boolean" },
       help: { type: "boolean" },
     },
@@ -116,19 +118,21 @@ export function parseOptions(
     }
     queue = new PublicKey(queueText);
   }
+  const root =
+    values["repo-root"] === undefined ? repoRoot : resolvePath(repoRoot, values["repo-root"]);
   return {
-    repoRoot,
+    repoRoot: root,
     rpcUrl: e.SOLANA_RPC_URL,
     solanaCluster: e.SOLANA_CLUSTER,
-    adminKeypairPath: resolvePath(repoRoot, e.ADMIN_KEYPAIR_PATH),
-    programKeypairPath: resolvePath(repoRoot, e.PROGRAM_KEYPAIR_PATH),
+    adminKeypairPath: resolvePath(root, e.ADMIN_KEYPAIR_PATH),
+    programKeypairPath: resolvePath(root, e.PROGRAM_KEYPAIR_PATH),
     faucet: new PublicKey(e.FAUCET_PUBKEY),
     automation: new PublicKey(e.AUTOMATION_PUBKEY),
     meridianProgramId: e.MERIDIAN_PROGRAM_ID,
     usdcMintEnv: e.USDC_MINT === undefined ? undefined : new PublicKey(e.USDC_MINT),
     queue,
-    outPath: resolvePath(repoRoot, values.out ?? "deployments/devnet.json"),
-    feedsPath: values.feeds === undefined ? undefined : resolvePath(repoRoot, values.feeds),
+    outPath: resolvePath(root, values.out ?? "deployments/devnet.json"),
+    feedsPath: values.feeds === undefined ? undefined : resolvePath(root, values.feeds),
     skipBuild: values["skip-build"] === true,
   };
 }

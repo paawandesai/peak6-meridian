@@ -6,7 +6,7 @@ import { runDeploy } from "./lib/deploy";
 import { parseOptions, USAGE } from "./lib/options";
 
 async function main(): Promise<void> {
-  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
   const options = parseOptions(process.env, process.argv.slice(2), repoRoot);
   if (options === "help") {
     process.stdout.write(USAGE);

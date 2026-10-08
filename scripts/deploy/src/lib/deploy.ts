@@ -5,6 +5,7 @@ import { assertCluster, findConfigPda } from "@meridian/client";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { computeFeedHash, loadFeedDefinitions } from "switchboard-scripts";
 
+import { assertNoLocalOracle, sha256Hex } from "./artifacts";
 import {
   createProgram,
   createUsdcMint,
@@ -106,9 +107,17 @@ async function loadFeeds(options: Options, connection: Connection): Promise<Feed
   return feeds;
 }
 
-async function ensureProgram(ctx: Context, soPath: string): Promise<PublicKey> {
+async function ensureProgram(
+  ctx: Context,
+  soPath: string,
+  expectedSha: string,
+): Promise<PublicKey> {
   const { connection, admin, programId, options, log, actions } = ctx;
   const elf = readFileSync(soPath);
+  // The `.so` deployed is exactly the one verified after the build.
+  if (sha256Hex(elf) !== expectedSha) {
+    throw new Error(`${soPath} changed after it was verified; rebuild and run again`);
+  }
   const info = await connection.getAccountInfo(programId, "confirmed");
   const common = [
     "--program-id",
@@ -143,7 +152,7 @@ async function ensureProgram(ctx: Context, soPath: string): Promise<PublicKey> {
       );
     }
     if (onChainElfMatches(data.bytes, elf)) {
-      log(`program ${programId.toBase58()} is up to date`);
+      log(`program ${programId.toBase58()} is up to date (same ELF, no deploy)`);
     } else {
       log(`upgrading program ${programId.toBase58()} (${elf.length} bytes)`);
       await runCommand("solana", ["program", "deploy", soPath, ...common], {
@@ -151,6 +160,9 @@ async function ensureProgram(ctx: Context, soPath: string): Promise<PublicKey> {
       });
       actions.push("upgrade-program");
     }
+  }
+  if (actions.length > 0) {
+    await waitForProgramVisible(connection, programId);
   }
   const after = await connection.getAccountInfo(programId, "confirmed");
   if (after === null) {
@@ -164,6 +176,22 @@ async function ensureProgram(ctx: Context, soPath: string): Promise<PublicKey> {
     );
   }
   return final.header.authority;
+}
+
+/**
+ * A (re)deployed program is invoked from the slot after the deploy lands, and `initialize_config`
+ * follows the deploy immediately: wait (bounded, 20 s) until the clock has moved two slots past
+ * the deploy so the first Config transaction does not simulate against "Program is not deployed".
+ */
+async function waitForProgramVisible(connection: Connection, programId: PublicKey): Promise<void> {
+  const start = await connection.getSlot("confirmed");
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if ((await connection.getSlot("confirmed")) >= start + 2) {
+      return;
+    }
+    await new Promise((resolvePause) => setTimeout(resolvePause, 400));
+  }
+  throw new Error(`the cluster did not advance after deploying ${programId.toBase58()}`);
 }
 
 async function readProgramData(connection: Connection, programAccountData: Uint8Array) {
@@ -265,21 +293,28 @@ function buildRecord(
   };
 }
 
+/** The devnet build (`anchor build`, default features: no test oracle), run in `repoRoot`. */
+export async function buildDevnet(
+  repoRoot: string,
+  log: (line: string) => void = () => undefined,
+): Promise<void> {
+  log("building the devnet program (anchor build)");
+  await runCommand("anchor", ["build"], { cwd: repoRoot });
+}
+
 /**
- * Deploys the devnet build: guards, program (deploy or upgrade), test-USDC mint, Config.
- * Idempotent; every guard runs before the first transaction.
+ * Deploys the devnet build. Order: build, guards (program ID, AB-22 IDL check, cluster, feeds),
+ * test-USDC mint, program, Config, record. Idempotent. Every guard runs before the first
+ * transaction, and the mint is created before the deploy so that no other transaction sits
+ * between the deploy and `initialize_config` (which is first-come).
  */
 export async function runDeploy(
   options: Options,
   log: (line: string) => void = (line) => process.stdout.write(`${line}\n`),
 ): Promise<DeployResult> {
-  const connection = new Connection(options.rpcUrl, "confirmed");
-  const cluster = await assertCluster({
-    cluster: options.solanaCluster,
-    rpcUrl: options.rpcUrl,
-    getGenesisHash: () => connection.getGenesisHash(),
-  });
-  log(`cluster: ${cluster}`);
+  if (!options.skipBuild) {
+    await buildDevnet(options.repoRoot, log);
+  }
 
   const admin = readKeypairFile(options.adminKeypairPath);
   const programKeypair = readKeypairFile(options.programKeypairPath);
@@ -288,32 +323,28 @@ export async function runDeploy(
     join(options.repoRoot, "programs", "meridian", "src", "lib.rs"),
     "utf8",
   );
+  const idlText = readFileSync(join(options.repoRoot, "target", "idl", "meridian.json"), "utf8");
   assertProgramIds({
     keypair: programId,
     declared: declaredIdFromLibRs(libRs),
+    idl: idlAddress(idlText),
     env: options.meridianProgramId,
   });
+  assertNoLocalOracle(idlText);
+  const soPath = join(options.repoRoot, "target", "deploy", "meridian.so");
+  const soSha = sha256Hex(readFileSync(soPath));
+
+  const connection = new Connection(options.rpcUrl, "confirmed");
+  const cluster = await assertCluster({
+    cluster: options.solanaCluster,
+    rpcUrl: options.rpcUrl,
+    getGenesisHash: () => connection.getGenesisHash(),
+  });
+  log(`cluster: ${cluster}`);
 
   const feeds = options.feedsPath === undefined ? undefined : await loadFeeds(options, connection);
 
-  if (!options.skipBuild) {
-    log("building the devnet program (make build-devnet)");
-    await runCommand("make", ["build-devnet"], { cwd: options.repoRoot });
-  }
-  const idlPath = join(options.repoRoot, "target", "idl", "meridian.json");
-  assertProgramIds({
-    keypair: programId,
-    declared: declaredIdFromLibRs(libRs),
-    idl: idlAddress(readFileSync(idlPath, "utf8")),
-    env: options.meridianProgramId,
-  });
-
   const ctx: Context = { options, connection, admin, programId, log, actions: [] };
-  const upgradeAuthority = await ensureProgram(
-    ctx,
-    join(options.repoRoot, "target", "deploy", "meridian.so"),
-  );
-
   const program = createProgram(connection, admin, programId);
   const before = await readOnChainConfig(program);
   if (before !== null) {
@@ -322,7 +353,14 @@ export async function runDeploy(
   const record = readRecord(options.outPath);
   const mint = await ensureMint(ctx, before, record);
 
-  const steps = planConfig(before, {
+  const upgradeAuthority = await ensureProgram(ctx, soPath, soSha);
+
+  // Re-read after the deploy: Config may only exist now, and `before` is stale if it did not.
+  const current = before ?? (await readOnChainConfig(program));
+  if (current !== null) {
+    assertConfigAdmin(current, admin.publicKey);
+  }
+  const steps = planConfig(current, {
     admin: admin.publicKey,
     automationAuthority: options.automation,
     usdcMint: mint,
@@ -337,7 +375,7 @@ export async function runDeploy(
     log("config is up to date");
   }
 
-  const config = steps.length === 0 ? before : await readOnChainConfig(program);
+  const config = steps.length === 0 ? current : await readOnChainConfig(program);
   if (config === null) {
     throw new Error("the Config is missing after initialize_config");
   }

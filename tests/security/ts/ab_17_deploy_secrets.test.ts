@@ -35,17 +35,16 @@ function problems(value: unknown, path: string): string[] {
 }
 
 describe("AB-17 deployment records hold public keys only", () => {
+  // M2-01 commits no record: the first live run (OQ-5) creates deployments/devnet.json.
   const records = trackedFiles().filter((path) => /^deployments\/.*\.json$/.test(path));
 
-  it("deployments/devnet.json is tracked", () => {
-    expect(records).toContain("deployments/devnet.json");
-  });
-
-  it.each(records)("%s has no key bytes, no secret-named field and valid public keys", (path) => {
-    const json: unknown = JSON.parse(readRepoFile(path));
-    expect(problems(json, path)).toEqual([]);
-    const programId = (json as { programId?: unknown }).programId;
-    expect(typeof programId === "string" && isPublicKey(programId)).toBe(true);
+  it("any tracked deployment record has no key bytes, no secret-named field and valid keys", () => {
+    for (const path of records) {
+      const json: unknown = JSON.parse(readRepoFile(path));
+      expect(problems(json, path)).toEqual([]);
+      const programId = (json as { programId?: unknown }).programId;
+      expect(typeof programId === "string" && isPublicKey(programId)).toBe(true);
+    }
   });
 
   it("detects key material in a record", () => {
@@ -57,12 +56,14 @@ describe("AB-17 deployment records hold public keys only", () => {
 
 describe("AB-17 the deploy script never reads secret keys it does not need", () => {
   const sources = trackedFiles().filter(
-    (path) => /^scripts\/(lib\/[^/]+|deploy-devnet)\.ts$/.test(path) && !path.endsWith(".test.ts"),
+    (path) =>
+      /^scripts\/deploy\/src\/(lib\/[^/]+|deploy-devnet)\.ts$/.test(path) &&
+      !path.endsWith(".test.ts"),
   );
 
   it("finds the script sources", () => {
-    expect(sources).toContain("scripts/deploy-devnet.ts");
-    expect(sources).toContain("scripts/lib/deploy.ts");
+    expect(sources).toContain("scripts/deploy/src/deploy-devnet.ts");
+    expect(sources).toContain("scripts/deploy/src/lib/deploy.ts");
   });
 
   it("never mentions FAUCET_KEYPAIR or AUTOMATION_KEYPAIR in code (only public keys are taken)", () => {
@@ -74,8 +75,8 @@ describe("AB-17 the deploy script never reads secret keys it does not need", () 
     expect(offenders).toEqual([]);
   });
 
-  it("reads secret key bytes in one place only (lib/keypair.ts)", () => {
+  it("reads secret key bytes in one place only (src/lib/keypair.ts)", () => {
     const users = sources.filter((path) => /secretKey|fromSecretKey/.test(readRepoFile(path)));
-    expect(users).toEqual(["scripts/lib/keypair.ts"]);
+    expect(users).toEqual(["scripts/deploy/src/lib/keypair.ts"]);
   });
 });

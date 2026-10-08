@@ -39,6 +39,14 @@ describe("parseOptions", () => {
     expect(options.skipBuild).toBe(true);
   });
 
+  it("--repo-root redirects relative paths to the given root", () => {
+    const options = parseOptions(env(), ["--repo-root", "/copy", "--out", "rec.json"], "/repo");
+    if (options === "help") throw new Error("unexpected help");
+    expect(options.repoRoot).toBe("/copy");
+    expect(options.outPath).toBe("/copy/rec.json");
+    expect(options.programKeypairPath).toBe("/copy/keys/program.json");
+  });
+
   it("takes the queue from SWITCHBOARD_QUEUE when --queue is absent", () => {
     const queue = key();
     const options = parseOptions({ ...env(), SWITCHBOARD_QUEUE: queue }, [], "/repo");

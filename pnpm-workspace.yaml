@@ -3,7 +3,7 @@ packages:
   - services/automation
   - packages/client
   - packages/bigint-buffer-js
-  - scripts
+  - scripts/deploy
   - scripts/switchboard
   - tests/security/ts
   - tests/e2e

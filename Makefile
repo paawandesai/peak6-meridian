@@ -67,14 +67,14 @@ test: build-local
 	pnpm -r --filter '!security-tests-ts' run test
 	pnpm --filter app run build
 	uv run --locked pytest services
-	$(MAKE) test-deploy-devnet
 
 ## M2-01: the deploy script against a local validator, serial and isolated: the devnet build runs
-## in a temporary copy of the sources with its own cargo target dir, so the shared target/ (the
-## local-oracle build the other suites use) and the tracked files are never touched. `make test`
-## runs it last. Needs solana-test-validator, anchor and cargo.
+## in a temporary copy of the sources (its own target/), so the shared target/ (the local-oracle
+## build the other suites use) and the tracked files are never touched. NOT part of `make test`:
+## a cold devnet SBF build is too heavy for every run. Run it before pushing any change to
+## programs/, crates/, scripts/deploy or Anchor.toml. Needs solana-test-validator, anchor, cargo.
 test-deploy-devnet:
-	pnpm --filter meridian-scripts run test:deploy
+	pnpm --filter deploy run test:deploy
 
 ## Abuse-case tests (tests/security, one file per AB ID). The Rust ones run the local build.
 test-security: build-local
@@ -104,7 +104,7 @@ eval-live:
 ## cluster by genesis hash. Needs the environment in docs/environment.md (§ Devnet deploy).
 ## Extra flags: make deploy-devnet DEPLOY_ARGS="--feeds deployments/feeds.devnet.json".
 deploy-devnet:
-	pnpm --filter meridian-scripts run deploy-devnet $(DEPLOY_ARGS)
+	pnpm --filter deploy run deploy-devnet $(DEPLOY_ARGS)
 
 ## End-to-end smoke on a local validator.
 e2e:

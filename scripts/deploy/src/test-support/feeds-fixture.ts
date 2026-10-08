@@ -14,7 +14,7 @@ import { SOURCE_ORDER, TICKER_ORDER } from "../lib/feeds-file";
 /** A made-up Switchboard queue used only to compute fixture feed hashes. */
 export const FIXTURE_QUEUE = new PublicKey(Buffer.alloc(32, 7));
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 export const FEEDS_FIXTURE_PATH = join(
   REPO_ROOT,
   "tests",

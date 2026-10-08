@@ -22,17 +22,18 @@ import {
 } from "@meridian/client";
 import { createMint, getMint, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { type Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Connection } from "@solana/web3.js";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { createProgram, readOnChainConfig } from "../lib/chain-io";
-import { runDeploy } from "../lib/deploy";
-import { bytesToHex, TICKER_ORDER } from "../lib/feeds-file";
-import { type Options } from "../lib/options";
-import { readRecord } from "../lib/record";
-import { FEEDS_FIXTURE_PATH, FIXTURE_QUEUE } from "../test-support/feeds-fixture";
+import { createProgram, readOnChainConfig } from "../../src/lib/chain-io";
+import { runDeploy } from "../../src/lib/deploy";
+import { bytesToHex, TICKER_ORDER } from "../../src/lib/feeds-file";
+import { type Options } from "../../src/lib/options";
+import { readRecord } from "../../src/lib/record";
+import { FEEDS_FIXTURE_PATH, FIXTURE_QUEUE } from "../../src/test-support/feeds-fixture";
 import {
   airdrop,
-  buildDevnetInIsolatedCopy,
+  prepareIsolatedCopy,
   makeTempDir,
   newKeypairFile,
   REPO_ROOT,
@@ -40,7 +41,8 @@ import {
   sharedArtifactHashes,
   signatureCount,
   startValidator,
-  trackedStatus,
+  sha256Of,
+  treeSnapshot,
   type Validator,
 } from "./harness";
 
@@ -72,7 +74,7 @@ let faucetPubkey: PublicKey;
 let statusBefore = "";
 let artifactsBefore: Record<string, string | null> = {};
 let copyRoot = "";
-let trackedRecordBefore = "";
+let recordShaBefore: string | null = null;
 
 function track(actor: Actor): Actor {
   secretNeedles.push(
@@ -105,25 +107,26 @@ function options(rpcUrl: string, overrides: Partial<Options> = {}): Options {
 const log = (line: string) => logs.push(line);
 
 beforeAll(() => {
-  statusBefore = trackedStatus();
+  statusBefore = treeSnapshot();
   artifactsBefore = sharedArtifactHashes();
-  trackedRecordBefore = readFileSync(join(REPO_ROOT, TRACKED_RECORD), "utf8");
+  recordShaBefore = sha256Of(join(REPO_ROOT, TRACKED_RECORD));
   admin = track(newKeypairFile(work, "admin.json"));
   automation = track(newKeypairFile(work, "automation.json"));
   faucetPubkey = newKeypairFile(work, "faucet.json").keypair.publicKey; // only the pubkey is used
   programIdKeypair = { path: join(work, "program.json"), keypair: undefined as unknown as Keypair };
-  const built = buildDevnetInIsolatedCopy(join(work, "copy"), programIdKeypair.path);
-  copyRoot = built.root;
-  programId = built.programId;
+  const copy = prepareIsolatedCopy(join(work, "copy"), programIdKeypair.path);
+  copyRoot = copy.root;
+  programId = copy.programId;
   const secret = JSON.parse(readFileSync(programIdKeypair.path, "utf8")) as number[];
   secretNeedles.push(JSON.stringify(secret), secret.join(","));
-}, 40 * MINUTE);
+}, 10 * MINUTE);
 
 afterAll(() => {
   try {
-    // The real tree is never modified: tracked files and the shared artifacts are unchanged.
-    expect(trackedStatus()).toBe(statusBefore);
+    // The real tree is never modified: tracked files, the shared artifacts and the record.
+    expect(treeSnapshot()).toBe(statusBefore);
     expect(sharedArtifactHashes()).toEqual(artifactsBefore);
+    expect(sha256Of(join(REPO_ROOT, TRACKED_RECORD))).toBe(recordShaBefore);
   } finally {
     removeDir(work);
   }
@@ -151,48 +154,6 @@ function errorCode(error: unknown): string {
   return /Error Code: (\w+)/.exec(logsText)?.[1] ?? logsText;
 }
 
-describe("AC3 the devnet build has no local_oracle_set (AB-22)", () => {
-  it(
-    "target/idl/meridian.json from make build-devnet lacks it, checked by ab_22_devnet_build",
-    () => {
-      // The isolated copy's IDL (absolute: cargo test runs with the package directory as cwd).
-      const idlPath = join(copyRoot, "target", "idl", "meridian.json");
-      // Fails (does not skip) when the build produced no IDL.
-      expect(existsSync(idlPath)).toBe(true);
-      const names = (
-        JSON.parse(readFileSync(idlPath, "utf8")) as { instructions: { name: string }[] }
-      ).instructions.map((i) => i.name);
-      expect(names).toContain("settle_market");
-      expect(names).not.toContain("local_oracle_set");
-      const output = execFileSync(
-        "cargo",
-        [
-          "test",
-          "--package",
-          "security-tests",
-          "--locked",
-          "--test",
-          "ab_22_devnet_build",
-          "devnet_idl_has_no_local_oracle_set",
-          "--",
-          "--include-ignored",
-        ],
-        {
-          cwd: REPO_ROOT,
-          env: { ...process.env, MERIDIAN_DEVNET_IDL: idlPath },
-          encoding: "utf8",
-          stdio: "pipe",
-        },
-      );
-      // Run for real: the one #[ignore]d test passed; the file's other three were filtered out.
-      expect(output).toContain(
-        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out",
-      );
-    },
-    25 * MINUTE,
-  );
-});
-
 describe("guards run before any transaction (validator 1)", () => {
   let validator: Validator;
   let other: Actor;
@@ -204,24 +165,33 @@ describe("guards run before any transaction (validator 1)", () => {
   }, 5 * MINUTE);
   afterAll(async () => validator.stop());
 
-  it("a program keypair that differs from declare_id! fails before any tx", async () => {
-    const wrong = newKeypairFile(work, "wrong-program.json");
-    const before = await signatureCount(validator.connection, admin.keypair.publicKey);
-    await expectRejects(
-      runDeploy(options(validator.rpcUrl, { programKeypairPath: wrong.path }), log),
-      /declare_id!.*Nothing was sent/s,
-    );
-    // ...and so does MERIDIAN_PROGRAM_ID naming another program.
-    await expectRejects(
-      runDeploy(
-        options(validator.rpcUrl, { meridianProgramId: wrong.keypair.publicKey.toBase58() }),
-        log,
-      ),
-      /MERIDIAN_PROGRAM_ID/,
-    );
-    expect(await signatureCount(validator.connection, admin.keypair.publicKey)).toBe(before);
-    expect(await validator.connection.getAccountInfo(programId)).toBeNull();
-  });
+  it(
+    "the script builds the devnet program itself, then a program keypair that differs from declare_id! fails before any tx",
+    async () => {
+      const wrong = newKeypairFile(work, "wrong-program.json");
+      const before = await signatureCount(validator.connection, admin.keypair.publicKey);
+      // skipBuild: false: the script runs the cold devnet build in the isolated copy (nothing is
+      // pre-built by the test), then fails at the program-ID guard.
+      await expectRejects(
+        runDeploy(
+          options(validator.rpcUrl, { programKeypairPath: wrong.path, skipBuild: false }),
+          log,
+        ),
+        /declare_id!.*Nothing was sent/s,
+      );
+      // ...and so does MERIDIAN_PROGRAM_ID naming another program.
+      await expectRejects(
+        runDeploy(
+          options(validator.rpcUrl, { meridianProgramId: wrong.keypair.publicKey.toBase58() }),
+          log,
+        ),
+        /MERIDIAN_PROGRAM_ID/,
+      );
+      expect(await signatureCount(validator.connection, admin.keypair.publicKey)).toBe(before);
+      expect(await validator.connection.getAccountInfo(programId)).toBeNull();
+    },
+    40 * MINUTE,
+  );
 
   it("the cluster guard refuses a local validator that is not devnet", async () => {
     const before = await signatureCount(validator.connection, admin.keypair.publicKey);
@@ -297,6 +267,48 @@ describe("guards run before any transaction (validator 1)", () => {
   );
 });
 
+describe("AC3 the devnet build has no local_oracle_set (AB-22)", () => {
+  it(
+    "target/idl/meridian.json from make build-devnet lacks it, checked by ab_22_devnet_build",
+    () => {
+      // The isolated copy's IDL (absolute: cargo test runs with the package directory as cwd).
+      const idlPath = join(copyRoot, "target", "idl", "meridian.json");
+      // Fails (does not skip) when the build produced no IDL.
+      expect(existsSync(idlPath)).toBe(true);
+      const names = (
+        JSON.parse(readFileSync(idlPath, "utf8")) as { instructions: { name: string }[] }
+      ).instructions.map((i) => i.name);
+      expect(names).toContain("settle_market");
+      expect(names).not.toContain("local_oracle_set");
+      const output = execFileSync(
+        "cargo",
+        [
+          "test",
+          "--package",
+          "security-tests",
+          "--locked",
+          "--test",
+          "ab_22_devnet_build",
+          "devnet_idl_has_no_local_oracle_set",
+          "--",
+          "--include-ignored",
+        ],
+        {
+          cwd: copyRoot,
+          env: { ...process.env, MERIDIAN_DEVNET_IDL: idlPath },
+          encoding: "utf8",
+          stdio: "pipe",
+        },
+      );
+      // Run for real: the one #[ignore]d test passed; the file's other three were filtered out.
+      expect(output).toMatch(
+        /^test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out;/m,
+      );
+    },
+    25 * MINUTE,
+  );
+});
+
 describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", () => {
   let validator: Validator;
   let program: Program<Meridian>;
@@ -326,9 +338,10 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
     "AC1 first run deploys, creates the mint (replacing the absent recorded one) and a 7-slot config",
     async () => {
       const result = await run();
+      // The mint comes first so no other transaction sits between deploy and initialize_config.
       expect(result.actions).toEqual([
-        "deploy-program",
         "create-mint",
+        "deploy-program",
         "initialize_config",
         "update_config",
       ]);
@@ -364,6 +377,38 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
       expect(readFileSync(record, "utf8")).toBe(recordText);
     },
     5 * MINUTE,
+  );
+
+  it(
+    "AC1 a re-run with unchanged inputs sends no transaction at all (spy on the sender); a changed .so upgrades exactly once",
+    async () => {
+      const send = vi.spyOn(Connection.prototype, "sendRawTransaction");
+      try {
+        const before = await adminSigs();
+        const same = await run();
+        expect(same.actions).toEqual([]);
+        expect(send).not.toHaveBeenCalled();
+        expect(await adminSigs()).toBe(before);
+
+        // A different, still valid ELF: flip one letter of a unique error-message literal.
+        const soPath = join(copyRoot, "target", "deploy", "meridian.so");
+        const elf = readFileSync(soPath);
+        const at = elf.indexOf(Buffer.from("Arithmetic overflow"));
+        expect(at).toBeGreaterThan(0);
+        elf[at] = "a".charCodeAt(0);
+        writeFileSync(soPath, elf);
+
+        const upgraded = await run();
+        expect(upgraded.actions).toEqual(["upgrade-program"]);
+        const again = await run();
+        expect(again.actions).toEqual([]);
+        // The upgrade authority is unchanged and the Config untouched.
+        expect(again.record.upgradeAuthority).toBe(admin.keypair.publicKey.toBase58());
+      } finally {
+        send.mockRestore();
+      }
+    },
+    10 * MINUTE,
   );
 
   it(
@@ -527,20 +572,24 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
       let output = "";
       let code = 0;
       try {
-        execFileSync(process.execPath, ["--import", "tsx", "deploy-devnet.ts", "--skip-build"], {
-          cwd: join(REPO_ROOT, "scripts"),
-          env: {
-            ...process.env,
-            SOLANA_RPC_URL: validator.rpcUrl,
-            SOLANA_CLUSTER: "devnet",
-            ADMIN_KEYPAIR_PATH: admin.path,
-            PROGRAM_KEYPAIR_PATH: programIdKeypair.path,
-            FAUCET_PUBKEY: faucetPubkey.toBase58(),
-            AUTOMATION_PUBKEY: automation.keypair.publicKey.toBase58(),
+        execFileSync(
+          process.execPath,
+          ["--import", "tsx", "src/deploy-devnet.ts", "--skip-build", "--repo-root", copyRoot],
+          {
+            cwd: join(REPO_ROOT, "scripts", "deploy"),
+            env: {
+              ...process.env,
+              SOLANA_RPC_URL: validator.rpcUrl,
+              SOLANA_CLUSTER: "devnet",
+              ADMIN_KEYPAIR_PATH: admin.path,
+              PROGRAM_KEYPAIR_PATH: programIdKeypair.path,
+              FAUCET_PUBKEY: faucetPubkey.toBase58(),
+              AUTOMATION_PUBKEY: automation.keypair.publicKey.toBase58(),
+            },
+            encoding: "utf8",
+            stdio: "pipe",
           },
-          encoding: "utf8",
-          stdio: "pipe",
-        });
+        );
       } catch (error) {
         const failure = error as { status?: number; stdout?: string; stderr?: string };
         code = failure.status ?? -1;
@@ -566,7 +615,7 @@ describe("AC4 no secrets and no changes to tracked files", () => {
     }
   });
 
-  it("the tracked deployments/devnet.json was not touched by the tests", () => {
-    expect(readFileSync(join(REPO_ROOT, TRACKED_RECORD), "utf8")).toBe(trackedRecordBefore);
+  it("deployments/devnet.json is exactly as before the run (existing or absent)", () => {
+    expect(sha256Of(join(REPO_ROOT, TRACKED_RECORD))).toBe(recordShaBefore);
   });
 });

@@ -1,15 +1,15 @@
 {
-  "name": "meridian-scripts",
+  "name": "deploy",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Devnet deployment scripts: program, test-USDC mint and config (M2-01)",
+  "description": "Devnet deployment commands: program, test-USDC mint and config (M2-01)",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
-    "test:deploy": "vitest run --config vitest.integration.config.ts",
-    "deploy-devnet": "tsx --env-file-if-exists=../.env deploy-devnet.ts"
+    "test:deploy": "vitest run --config vitest.deploy.config.ts",
+    "deploy-devnet": "tsx --env-file-if-exists=../../.env src/deploy-devnet.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.31.1",

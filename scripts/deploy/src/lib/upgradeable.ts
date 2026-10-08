@@ -47,15 +47,29 @@ export function programDataHeader(data: Uint8Array): ProgramDataHeader | null {
   };
 }
 
+function trimmedLength(bytes: Uint8Array, from: number): number {
+  let end = bytes.length;
+  while (end > from && bytes[end - 1] === 0) {
+    end -= 1;
+  }
+  return end - from;
+}
+
 /**
- * True when the ELF stored on chain starts with exactly the bytes of `localElf`. ProgramData
- * accounts are allocated at `--max-len`, so the stored ELF is followed by zero padding.
+ * True when the ELF stored on chain equals `localElf`. ProgramData accounts are allocated at
+ * `--max-len`, so the stored ELF is followed by zero padding: both sides are compared after
+ * trimming trailing zeros, which also means an older, longer build never matches a shorter one.
  */
 export function onChainElfMatches(programData: Uint8Array, localElf: Uint8Array): boolean {
-  if (programData.length < PROGRAM_DATA_HEADER_LEN + localElf.length) {
+  if (programData.length < PROGRAM_DATA_HEADER_LEN) {
     return false;
   }
-  for (let i = 0; i < localElf.length; i += 1) {
+  const onChainLength = trimmedLength(programData, PROGRAM_DATA_HEADER_LEN);
+  const localLength = trimmedLength(localElf, 0);
+  if (onChainLength !== localLength) {
+    return false;
+  }
+  for (let i = 0; i < localLength; i += 1) {
     if (programData[PROGRAM_DATA_HEADER_LEN + i] !== localElf[i]) {
       return false;
     }
