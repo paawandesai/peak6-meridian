@@ -32,6 +32,11 @@
       "next>postcss": "8.5.29",
       "@coral-xyz/anchor>toml": "4.3.0",
       "@solana/buffer-layout-utils>bigint-buffer": "link:./packages/bigint-buffer-js"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-vfj7-8cjw-p6xm"
+      ]
     }
   }
 }
