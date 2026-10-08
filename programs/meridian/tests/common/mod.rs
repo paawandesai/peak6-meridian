@@ -861,3 +861,7 @@ pub fn assert_token_error(result: &TransactionResult, expected: spl_token::error
         failure.meta.logs
     );
 }
+
+// ---- M1-07: settlement ------------------------------------------------------------------------
+
+pub mod settlement;

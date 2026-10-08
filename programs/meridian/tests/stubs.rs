@@ -1,7 +1,7 @@
 //! M1-02 AC3: every instruction from architecture.md § Interfaces exists in the IDL built by
 //! `make build-local`, and every one not implemented yet returns `MeridianError::NotImplemented`.
 //! Implemented so far: config (M1-02); markets, mint/redeem (pair mode) and pause (M1-04);
-//! orders (M1-05); buy_no / sell_no (M1-06).
+//! settlement, override, winner redeem and the local oracle (M1-07).
 
 // Test code: the program rules on unwrap/panic/arithmetic do not apply here.
 #![allow(
@@ -14,8 +14,8 @@
 mod common;
 
 use anchor_lang::solana_program::hash::hash;
-use anchor_lang::{AnchorSerialize, InstructionData, ToAccountMetas};
-use common::{assert_meridian_error, symbol, Harness};
+use anchor_lang::InstructionData;
+use common::{assert_meridian_error, Harness};
 use meridian::errors::MeridianError;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::Signer;
@@ -84,25 +84,8 @@ fn idl_lists_every_instruction_of_the_interface() {
 
 /// `(name, data)` of every stub instruction with valid arguments.
 fn stub_instructions() -> Vec<(&'static str, Vec<u8>)> {
-    let ticker = symbol("META");
-    let mut local_oracle_set = hash(b"global:local_oracle_set").to_bytes()[..8].to_vec();
-    (ticker, 0u8, 68_000i128 * 10_000_000_000_000_000, 1u64)
-        .serialize(&mut local_oracle_set)
-        .expect("borsh");
-    vec![
-        (
-            "settle_market",
-            meridian::instruction::SettleMarket {}.data(),
-        ),
-        (
-            "admin_settle_override",
-            meridian::instruction::AdminSettleOverride {
-                settle_price_cents: 68_123,
-            }
-            .data(),
-        ),
-        ("local_oracle_set", local_oracle_set),
-    ]
+    // Every instruction is implemented (M1-02 … M1-07); a future stub goes here.
+    Vec::new()
 }
 
 #[test]
@@ -117,6 +100,9 @@ fn every_stub_is_covered_by_this_test() {
         "redeem",
         "pause",
         "unpause",
+        "settle_market",
+        "admin_settle_override",
+        "local_oracle_set",
         "place_order",
         "cancel_order",
         "settle_funds",
@@ -138,10 +124,7 @@ fn every_stub_is_covered_by_this_test() {
 fn every_stub_returns_not_implemented() {
     let mut harness = Harness::new();
     let signer = harness.funded_keypair();
-    let accounts = meridian::accounts::SettleMarket {
-        payer: signer.pubkey(),
-    }
-    .to_account_metas(None);
+    let accounts = vec![anchor_lang::prelude::AccountMeta::new(signer.pubkey(), true)];
     for (name, data) in stub_instructions() {
         let instruction = Instruction {
             program_id: meridian::ID,
