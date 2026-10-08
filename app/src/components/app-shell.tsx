@@ -1,6 +1,7 @@
 "use client";
 
 import { AppHeader } from "./app-header";
+import { FaucetButton } from "./faucet-button";
 import { MarketsView } from "./markets-view";
 import { Providers } from "./providers";
 import { useReader } from "./reader-context";
@@ -19,7 +20,9 @@ function Shell() {
         nowSecs={nowSecs}
         markets={markets.status === "ready" ? markets.value : null}
         config={config.status === "ready" ? config.value : null}
-      />
+      >
+        <FaucetButton />
+      </AppHeader>
       <main className="mx-auto max-w-3xl px-mer-4 py-mer-6">
         <h2 className="sr-only">Markets</h2>
         <MarketsView />

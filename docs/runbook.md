@@ -79,3 +79,10 @@ Restart AO desktop/daemon if needed: `$AO stop` then `$AO start` (or relaunch th
 
 - Operator heartbeat: every 30–60 minutes while unblocked work remains
 - Grok Bot routine **Meridian worker stage monitor**: every 5 minutes weekdays **8:02 AM–8:57 PM** America/Chicago
+
+## Faucet (M2-09)
+
+- The server faucet (`POST /api/faucet`) mints test-USDC with `FAUCET_KEYPAIR`, which is the mint authority, and pays rent from its own SOL: about 0.004 SOL per claim (two 1-byte marker accounts plus the recipient's token account). Keep that key funded on devnet (`solana airdrop`, or a transfer from the admin key).
+- Below `FAUCET_MIN_LAMPORTS` (default 0.1 SOL) the endpoint answers 503 and posts one alert to `ALERT_WEBHOOK_URL` per instance per `FAUCET_ALERT_COOLDOWN_SEC`. Top up the key; no restart is needed.
+- A claim limit of one per wallet per 24 h is enforced on chain by marker accounts; there is nothing to reset. A refused wallet (429) simply waits: the gap is at least 24 h minus about 90 s, and up to about 48 h.
+- A "faucet misconfigured" error means `FAUCET_KEYPAIR` is not the mint authority of `USDC_MINT`; fix the environment and redeploy.

@@ -187,3 +187,69 @@ export function parseTradingDate(value: number): { year: number; month: number; 
 function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
+
+// ---- display-only formatters (UI-02 AC6 / AC6b; OQ-15 approved) --------------------------------
+// These are the only lossy or locale-style conversions in this file: they round DOWN (toward −∞
+// for signed amounts) so a displayed figure never overstates a gain or understates a loss, and
+// they never feed a transaction. `formatUsdc` / `parseUsdc` keep their exact, throwing behaviour.
+
+const MINUS = "−";
+
+export type SignMode = "auto" | "always";
+
+/**
+ * Settle price (18 fractional digits) → whole cents, rounding **down**. The one lossy conversion:
+ * it floors because settlement is exact (`close_scaled >= strike_cents × 10^16`) and strikes are
+ * whole cents, so a displayed price can never contradict the outcome ($179.996 settles NO and
+ * shows $179.99, never $180.00). Throws on a negative.
+ */
+export function scaledToCentsFloor(scaled: bigint): bigint {
+  if (scaled < 0n) throw new UnitError(`a settle price cannot be negative: ${scaled}`);
+  return scaled / STRIKE_CENTS_TO_SCALED;
+}
+
+/** `1234567` → `"1,234,567"`. */
+function group(digits: string): string {
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/** Cents (signed, exact) → `$1,250.00`, `−$1.20`, or with `"always"` `+$3.80`. Zero is `$0.00`. */
+export function formatUsdCents(cents: bigint, sign: SignMode = "auto"): string {
+  const negative = cents < 0n;
+  const abs = negative ? -cents : cents;
+  const body = `$${group((abs / 100n).toString())}.${(abs % 100n).toString().padStart(2, "0")}`;
+  if (negative) return `${MINUS}${body}`;
+  return sign === "always" && abs !== 0n ? `+${body}` : body;
+}
+
+/** Floor division toward −∞. */
+function floorDiv(a: bigint, b: bigint): bigint {
+  const q = a / b;
+  return a % b !== 0n && a < 0n !== b < 0n ? q - 1n : q;
+}
+
+/** A test-USDC balance in base units → `1,250.00 test-USDC`, rounded down to whole cents. */
+export function formatUsdcBalance(baseUnits: bigint): string {
+  const cents = floorDiv(baseUnits < 0n ? 0n : baseUnits, BASE_UNITS_PER_CENT);
+  return `${formatUsdCents(cents).slice(1)} test-USDC`;
+}
+
+/**
+ * A per-contract price in base units to one decimal of a cent, rounded down, a zero decimal
+ * dropped: `42¢`, `42.5¢`. Average entry passes `(total_cost, qty)`.
+ */
+export function formatPriceTenths(baseUnits: bigint, perQty: bigint = 1n): string {
+  if (perQty <= 0n) throw new UnitError(`quantity must be positive: ${perQty}`);
+  const tenths = floorDiv(baseUnits * 10n, perQty * BASE_UNITS_PER_CENT);
+  const whole = tenths / 10n;
+  const decimal = tenths % 10n;
+  return decimal === 0n ? `${whole}¢` : `${whole}.${decimal}¢`;
+}
+
+/**
+ * Base units → dollars and cents like `formatUsdCents`, floored toward −∞ to the cent, so a gain
+ * is never overstated and a loss never understated (`−$1.2049` shows `−$1.21`).
+ */
+export function formatUsdSigned(baseUnits: bigint, sign: SignMode = "auto"): string {
+  return formatUsdCents(floorDiv(baseUnits, BASE_UNITS_PER_CENT), sign);
+}
