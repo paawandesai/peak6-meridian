@@ -1,1 +1,129 @@
 @import "tailwindcss";
+
+/*
+ * Design tokens (docs/design.md §4). Light is the default; `prefers-color-scheme: dark` swaps
+ * values. Component code uses only these names (through the Tailwind theme below), never raw
+ * hex. `globals.test.ts` checks this file against design.md and the contrast of every pair.
+ */
+:root {
+  /* colour */
+  --mer-paper: #f7f9fc; /* page background: cool, not cream */
+  --mer-surface: #ffffff; /* panels */
+  --mer-ink: #13233a; /* primary text (navy ink, AA 15.0:1 on paper, 15.8:1 on white) */
+  --mer-ink-muted: #4a5b72; /* secondary text (AA 6.6:1 on paper, 6.9:1 on white) */
+  --mer-rule: #d5dde8; /* non-essential dividers and ladder rails only (1.3:1, decorative) */
+  --mer-control-border: #6b7c93; /* borders of inputs, buttons, the intent control (non-text AA: 4.0:1 on paper, 4.3:1 on surface) */
+  --mer-yes: #1e5bb8; /* YES (AA 6.5:1 on white, 6.1:1 on paper) */
+  --mer-no: #a4500a; /* NO amber-brown (AA 5.6:1 on white, 5.3:1 on paper) */
+  --mer-on-yes: #ffffff; /* text on a solid YES fill (6.5:1) */
+  --mer-on-no: #ffffff; /* text on a solid NO fill (5.6:1) */
+  --mer-gain: #146c43; /* +P&L, pass */
+  --mer-loss: #b42318; /* −P&L, fail */
+  --mer-warn: #8a5a00; /* closing soon, stale, override pending */
+  --mer-focus: #1e5bb8; /* 2px focus ring + 2px offset */
+  /* space (4px base) */
+  --mer-space-1: 4px;
+  --mer-space-2: 8px;
+  --mer-space-3: 12px;
+  --mer-space-4: 16px;
+  --mer-space-6: 24px;
+  --mer-space-8: 32px;
+  /* type: system stacks, 1.25 scale, tabular numbers for all prices */
+  --mer-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mer-font-num: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --mer-text-xs: 0.75rem;
+  --mer-text-sm: 0.875rem;
+  --mer-text-md: 1rem;
+  --mer-text-lg: 1.25rem;
+  --mer-text-xl: 1.5625rem;
+  --mer-text-2xl: 1.953rem;
+  --mer-radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mer-paper: #0e1726;
+    --mer-surface: #15213a;
+    --mer-ink: #e6edf7;
+    --mer-ink-muted: #a3b2c7;
+    --mer-rule: #2a3a55;
+    --mer-control-border: #7c8da6;
+    --mer-yes: #7faef5;
+    --mer-on-yes: #0e1726;
+    --mer-on-no: #0e1726;
+    --mer-no: #f2a766;
+    --mer-gain: #5cc98d;
+    --mer-loss: #f28b82;
+    --mer-warn: #e8c26a;
+    --mer-focus: #7faef5;
+  }
+}
+
+/* Tailwind v4 theme names: bg-mer-paper, text-mer-ink, border-mer-control-border, ... */
+@theme inline {
+  --color-mer-paper: var(--mer-paper);
+  --color-mer-surface: var(--mer-surface);
+  --color-mer-ink: var(--mer-ink);
+  --color-mer-ink-muted: var(--mer-ink-muted);
+  --color-mer-rule: var(--mer-rule);
+  --color-mer-control-border: var(--mer-control-border);
+  --color-mer-yes: var(--mer-yes);
+  --color-mer-no: var(--mer-no);
+  --color-mer-on-yes: var(--mer-on-yes);
+  --color-mer-on-no: var(--mer-on-no);
+  --color-mer-gain: var(--mer-gain);
+  --color-mer-loss: var(--mer-loss);
+  --color-mer-warn: var(--mer-warn);
+  --color-mer-focus: var(--mer-focus);
+  --spacing-mer-1: var(--mer-space-1);
+  --spacing-mer-2: var(--mer-space-2);
+  --spacing-mer-3: var(--mer-space-3);
+  --spacing-mer-4: var(--mer-space-4);
+  --spacing-mer-6: var(--mer-space-6);
+  --spacing-mer-8: var(--mer-space-8);
+  --font-sans: var(--mer-font-sans);
+  --font-num: var(--mer-font-num);
+  --text-mer-xs: var(--mer-text-xs);
+  --text-mer-sm: var(--mer-text-sm);
+  --text-mer-md: var(--mer-text-md);
+  --text-mer-lg: var(--mer-text-lg);
+  --text-mer-xl: var(--mer-text-xl);
+  --text-mer-2xl: var(--mer-text-2xl);
+  --radius-mer: var(--mer-radius);
+}
+
+body {
+  background: var(--mer-paper);
+  color: var(--mer-ink);
+  font-family: var(--mer-font-sans);
+}
+
+/* One visible focus ring for every focusable element: 2px, 2px offset (design.md §4, §6). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--mer-focus);
+  outline-offset: 2px;
+}
+
+/* All prices and money use tabular figures. */
+.mer-num {
+  font-family: var(--mer-font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A slow spinner for "Settling…"; the word is always present, so motion is never the only cue. */
+.mer-spin {
+  display: inline-block;
+  animation: mer-spin 1.2s linear infinite;
+}
+@keyframes mer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,9 +1,10 @@
 "use client";
 
-import { formatUsdc } from "@meridian/client";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useState } from "react";
 import { z } from "zod";
+
+import { formatUsdcBalance } from "@/lib/display";
 
 const successSchema = z.object({ signature: z.string(), amount_base_units: z.string() });
 const errorSchema = z.object({ error: z.string() });
@@ -36,7 +37,7 @@ export function FaucetButton() {
         const ok = successSchema.parse(body);
         setState({
           status: "done",
-          text: `Received ${formatUsdc(BigInt(ok.amount_base_units))} test-USDC.`,
+          text: `Received ${formatUsdcBalance(BigInt(ok.amount_base_units))}.`,
         });
       } else {
         setState({ status: "failed", text: errorSchema.parse(body).error });

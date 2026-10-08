@@ -216,3 +216,29 @@ Append-only. The operator appends entries and never edits or deletes human entri
 **Why:** The evaluator's demo path (Buy NO in one signature → settle → redeem → invariants) has to be obvious at a glance, and a retail trader has to know what they win or lose before they sign.
 **Alternatives rejected:** Adding a component library or design framework; leaving the M1/M2 pages as they are.
 **How to reverse:** Revert the UI tickets; the existing pages still meet FR-16 to FR-19.
+
+
+### D-049 · By: human · 2026-10-08
+**Decision:** OQ-15 option **(a)**: the five display-only money helpers (`scaledToCentsFloor`, `formatUsdCents`, `formatUsdcBalance`, `formatPriceTenths`, `formatUsdSigned`; design.md §3) go in `packages/client/src/units.ts`, added once by UI-02 with fast-check tests. This is the single additive exception to "UI tickets may not touch `packages/client`". Answered by Paawan 2026-10-08 13:45 CT.
+**Why:** One source for money strings, with floor rounding so a displayed price never contradicts an outcome. **Alternatives rejected:** (b) a separate client ticket first; (c) formatting in `app/` (breaks "amounts only through client helpers"). **How to reverse:** Move the helpers into `app/` and update the UI tickets' file lists.
+
+
+### D-050 · By: human · 2026-10-08
+**Decision:** OQ-14: the UI always shows the open/closed state **and when each happens**, on every market and strike: the open time and the close time in ET, a state badge (Open / Closing soon / Closed / Settling / Settled) and a countdown to the next transition. There is no pre-open gate that the program does not enforce: "open time" is the market's real creation time (from its `MarketCreated` event or creation transaction block time) and close is `close_ts`, so the display is never wrong. A real 09:30 ET open needs an on-chain `open_ts`; that is proposed as its own ticket for Paawan (M2-14 in `docs/tickets/M2.md`, not approved, not started) and is not faked in the UI. Applies to UI-03 and the Trade page (M2-06 / UI-04). Answered by Paawan 2026-10-08 13:45 CT.
+**Why:** Showing only what the program enforces keeps the UI truthful; the user still sees both times and the next transition. **Alternatives rejected:** (a) as originally written, Open from creation with no times shown; (b) an on-chain `open_ts` now (a program change, held as M2-14); a UI-only 09:30 gate (would show a state the program does not enforce). **How to reverse:** Approve M2-14 and switch "open time" to `open_ts`.
+
+
+### D-051 · By: human · 2026-10-08
+**Decision:** M2-11 deploys from GitLab CI on `main` only, using the protected, masked CI variables `VERCEL_TOKEN` and `RAILWAY_TOKEN` on project 2084. `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are unset, so the job links or creates the Vercel project by name. No tokens go in the box environment. Budget: Vercel free tier, Railway ≤ $5/month (brief.md). Any `.gitlab-ci.yml` change needs Paawan's review and is never merged by the gate. Answered by Paawan 2026-10-08.
+**Why:** Keeps deploy credentials in protected CI variables instead of agent sessions, and keeps CI changes human-reviewed. **Alternatives rejected:** tokens in the box env or local `.env`; deploys from feature branches. **How to reverse:** Move the tokens elsewhere and update M2-11 and `docs/environment.md`.
+
+
+### D-052 · By: human · 2026-10-08
+**Decision:** M2-12 (MR !33) is merged with its live devnet rehearsal (AC1) deferred to follow-up issue #28 ("M2-12 follow-up: live devnet rehearsal run (AC1)", labels M2 and blocked). The AC1 checkbox stays unticked until the live run's signatures, explorer links and `docs/log.md` line are attached to #28. Decided by Paawan 2026-10-08 13:53 CT.
+**Why:** The script, the local-validator evidence and the runbook are done and reviewed; the live run is blocked on OQ-5 (keypairs) and OQ-11 (Switchboard keys), and holding the code behind it blocks nothing else. **Alternatives rejected:** keeping !33 open until the live run. **How to reverse:** Not applicable; the follow-up issue carries the remaining AC1 evidence.
+
+
+### D-053 · By: human · 2026-10-08
+**Decision:** OQ-5 and OQ-11 resolved by Paawan, 2026-10-08 14:37 CT. (1) The devnet program, admin (upgrade authority), automation and faucet keypairs are generated on the box and stored in masked, protected GitLab CI variables, with an encrypted backup on the box; nothing is committed. (2) The data API keys (`TIINGO_API_KEY`, `TWELVEDATA_API_KEY`, `FINNHUB_API_KEY`) are supplied as CI variables and passed to Switchboard through `variableOverrides` at request time, never embedded in feed JSON. (3) The program ID is **re-keyed**, because M1 discarded the original keypair for `3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq`: the new program ID is `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm` (set in `declare_id!` and `Anchor.toml` by the M2-01 live MR).
+**Public keys:** program `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`; admin and upgrade authority `6cp7ExvkgtdQuMyJXv26wg8Z2MBJT2idPdTkXx13F5Se`; automation `7JFyYPJyhJokQ3wMKHwJwb35MFj87snz52nTUS6qeEMy`; faucet `32eaD4Hp5WQ4UeD8S7eFVCVtxBvZuBpQzE4Byt7JLju7`. All are at 0 SOL until Paawan funds them on devnet. Key material and file contents are never recorded here.
+**Why:** Unblocks the live M2-01 deploy and the Switchboard feeds (M2-02) without secrets in the repo or in agent environments. **Alternatives rejected:** keeping the old program ID (its keypair no longer exists); embedding API keys in feed job definitions (public on chain). **How to reverse:** Re-key again (new `declare_id!`, `anchor keys sync`, rebuild, redeploy) and rotate the CI variables.

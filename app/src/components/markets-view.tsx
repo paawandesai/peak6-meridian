@@ -12,8 +12,21 @@ import {
 
 const STATUS_STYLE = {
   Open: "bg-emerald-100 text-emerald-800",
+  ClosingSoon: "bg-amber-100 text-amber-800",
   Closed: "bg-amber-100 text-amber-800",
+  Settling: "bg-amber-100 text-amber-800",
+  SettlementDelayed: "bg-amber-100 text-amber-800",
   Settled: "bg-slate-200 text-slate-700",
+} as const;
+
+/** Plain-word label for each status (UI-03 replaces this table with `StateBadge`). */
+const STATUS_TEXT = {
+  Open: "Open",
+  ClosingSoon: "Closing soon",
+  Closed: "Closed",
+  Settling: "Settling…",
+  SettlementDelayed: "Settlement delayed",
+  Settled: "Settled",
 } as const;
 
 function MarketTable({ markets, nowSecs }: { markets: readonly MarketRow[]; nowSecs: number }) {
@@ -36,7 +49,7 @@ function MarketTable({ markets, nowSecs }: { markets: readonly MarketRow[]; nowS
               <td className="py-1.5">{formatTradingDate(market.tradingDate)}</td>
               <td className="py-1.5">
                 <span className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLE[status]}`}>
-                  {status}
+                  {STATUS_TEXT[status]}
                 </span>
               </td>
               <td className="py-1.5 text-right font-mono">

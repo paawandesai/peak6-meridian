@@ -31,7 +31,7 @@ describe("FaucetButton", () => {
     const fetchMock = stubFetch(200, { signature: "sig", amount_base_units: "1000000000" });
     render(<FaucetButton />);
     fireEvent.click(screen.getByRole("button", { name: "Get test-USDC" }));
-    expect(await screen.findByText("Received 1000.000000 test-USDC.")).toBeInTheDocument();
+    expect(await screen.findByText("Received 1,000.00 test-USDC.")).toBeInTheDocument();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/faucet");
     expect(JSON.parse(String(init.body))).toEqual({ wallet: KEY.toBase58() });
