@@ -52,4 +52,8 @@ PRD/docs verification (local `.ao-ops/prd-docs-verification.md`):
 - M1-11 already on main: MR !10 → `a1c486a`.
 - **OQ-10 accepted** by Paawan (~10:17 CT): six LiteSVM-only `.cargo/audit.toml` ignores → **D-047**. NFR-10/AB-16 unchanged; remove ignores at Agave ≥ 2.2.
 - Docs MR: `ops/oq-10-accept` (decisions + status + audit.toml header).
+
+## 2026-10-07 20:40 CT · operator
+- **D-048** (By: human): UI clarity/usability track approved by Paawan. Orchestrator designs with `/design` (UI-01 → `docs/design.md`, no code); Sonnet workers implement UI-02+; Cursor reviews against ticket + design.md. Never blocks M2/M3 exits or the 16:05 ET settlements; code freeze Sun 2026-10-11 09:00 CT.
+
 2026-10-07 — UI-01 design spec drafted by the orchestrator with the frontend-design plugin (/design command not available in session); docs/design.md + UI-02..UI-08 tickets added to docs/tickets/M1.md (D-048). Docs only.

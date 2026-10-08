@@ -209,3 +209,10 @@ Append-only. The operator appends entries and never edits or deletes human entri
 - Same family as OQ-6 / OQ-7 Solana 2.1 pin warnings; remove these ignores when the workspace moves to Agave ≥ 2.2.
 - Product and PRD security goals are unchanged by this acceptance.
 **Why:** Upstream Solana 2.1.21 / Anchor 0.31.1 line has no fixed versions; silencing is limited to the test harness path already documented in `.cargo/audit.toml`. **Alternatives rejected:** fail CI until Agave ≥ 2.2; replace LiteSVM. **How to reverse:** Drop the six entries from `.cargo/audit.toml` once Agave ≥ 2.2 (or another fixed line) is adopted, and re-run `make audit`.
+
+
+### D-048 · By: human · 2026-10-08
+**Decision:** A UI clarity and usability pass, designed by the orchestrator with Claude Code `/design`, refines D-001. The stack stays the same: Next.js 15 App Router + React 19 + Tailwind + Solana wallet-adapter; no component library, no new UI framework. The goal is faster comprehension for the personas in requirements.md, not decoration. Spec lives in `docs/design.md` (UI-01); implementation is UI-02+ worker tickets, reviewed by Cursor against the ticket and `docs/design.md`. The track never blocks or delays an M2/M3 exit criterion or the Thu/Fri 16:05 ET settlements; cuts are recorded as Tier 2 entries. Approved by Paawan 2026-10-07 ~20:32 CT.
+**Why:** The evaluator's demo path (Buy NO in one signature → settle → redeem → invariants) has to be obvious at a glance, and a retail trader has to know what they win or lose before they sign.
+**Alternatives rejected:** Adding a component library or design framework; leaving the M1/M2 pages as they are.
+**How to reverse:** Revert the UI tickets; the existing pages still meet FR-16 to FR-19.
