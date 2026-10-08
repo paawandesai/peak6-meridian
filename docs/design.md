@@ -138,6 +138,8 @@ CSS custom properties in `app/src/app/globals.css`, exposed to Tailwind v4 throu
   --mer-control-border: #6B7C93; /* borders of inputs, buttons, the intent control (non-text AA: 4.0:1 on paper, 4.3:1 on surface) */
   --mer-yes: #1E5BB8;        /* YES (AA on white 6.3:1) */
   --mer-no: #A4500A;         /* NO amber-brown (AA on white 5.6:1) */
+  --mer-on-yes: #FFFFFF;     /* text on a solid YES fill (6.5:1) */
+  --mer-on-no: #FFFFFF;      /* text on a solid NO fill (5.6:1) */
   --mer-gain: #146C43;       /* +P&L, pass */
   --mer-loss: #B42318;       /* −P&L, fail */
   --mer-warn: #8A5A00;       /* closing soon, stale, override pending */
@@ -157,12 +159,13 @@ CSS custom properties in `app/src/app/globals.css`, exposed to Tailwind v4 throu
     --mer-paper: #0E1726; --mer-surface: #15213A; --mer-ink: #E6EDF7;
     --mer-ink-muted: #A3B2C7; --mer-rule: #2A3A55; --mer-control-border: #7C8DA6;
     --mer-yes: #7FAEF5;
+    --mer-on-yes: #0E1726; --mer-on-no: #0E1726;
     --mer-no: #F2A766; --mer-gain: #5CC98D; --mer-loss: #F28B82;
     --mer-warn: #E8C26A; --mer-focus: #7FAEF5;
   }
 }
 ```
-Interactive controls (inputs, buttons, the four-intent segmented control, the wallet button) draw their boundary with `--mer-control-border`, never `--mer-rule`, so they meet the 3:1 non-text contrast of WCAG 1.4.11. `--mer-rule` is for decorative dividers and ladder rails only. Contrast values above are targets; UI-02 verifies each pair with an automated contrast test and adjusts hex values if any pair is below WCAG AA.
+Solid YES and NO fills (the Settled badges) take their text from `--mer-on-yes` and `--mer-on-no`, never from white or `--mer-ink` by default: dark-mode white on `--mer-yes` is only 2.3:1, while `--mer-on-yes` (#0E1726) gives 7.9:1 and `--mer-on-no` 9.0:1. UI-02 AC2 tests those pairs too. Interactive controls (inputs, buttons, the four-intent segmented control, the wallet button) draw their boundary with `--mer-control-border`, never `--mer-rule`, so they meet the 3:1 non-text contrast of WCAG 1.4.11. `--mer-rule` is for decorative dividers and ladder rails only. Contrast values above are targets; UI-02 verifies each pair with an automated contrast test and adjusts hex values if any pair is below WCAG AA.
 
 Principle: spend the boldness in one place. The **strike ladder** is the memorable element (a vertical ladder per ticker with a horizontal probability bar per strike and the live price drawn as a line between strikes). Everything else stays quiet: no gradients, no card shadows, one radius, rules instead of boxes where possible.
 
