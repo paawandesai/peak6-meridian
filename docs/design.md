@@ -67,11 +67,13 @@ Rule for everything below: **text plus colour, never colour alone.** Every colou
 | Open | `Open` and `now < close_ts − 15 min` | Open | neutral outline |
 | Closing soon | `Open` and `close_ts − 15 min ≤ now < close_ts` | Closes in 12:04 | warn tint + live countdown |
 | Closed | `now ≥ close_ts`, not settled, before close + 5 min | Closed, settling at close + 5 min (16:05 ET; 13:05 ET on early-close days) | muted |
-| Settling | after close + 5 min, not settled | Settling… (attempt n) | muted + spinner with text |
+| Settling | `Open` and `now ≥ close_ts + 5 min` (on-chain `Market` plus the clock) | Settling… (with ` (attempt n)` only when the attempt count is supplied, see below) | muted + spinner with text |
 | Settled YES | `Settled`, outcome YES | Settled YES at $181.42 (see "Settle price display" below) | YES hue, solid |
 | Settled NO | `Settled`, outcome NO | Settled NO at $178.10 | NO hue, solid |
-| Override pending | settle failed, override draft exists | Override pending, available at {HH:mm} ET | warn outline |
+| Override pending | an override draft exists (supplied, see below) | Override pending, available at {HH:mm} ET | warn outline |
 | Paused | global pause flag | Paused: trading and minting stopped; cancel, withdraw and redeem still work | danger outline, banner on every page |
+
+Data sources for the states: the app reads only on-chain state (`Market`, `Config`) and the clock. From those it derives Open, Closing soon, Closed, Settling (the badge reads `Settling…` with no attempt number), Settled YES/NO and Paused (`Config.paused`). The settlement attempt count lives in `services/automation` and override drafts in `services/ops-agent`; neither is readable by the app today. `StateBadge` therefore takes them as optional props (`attempt?: number`, `overridePending?: { availableAt }`): UI-02 tests those variants through props, UI-03 renders only the derivable states and passes neither, and `Override pending` and the attempt number appear in the app only once an M2/M3 ticket exposes that data (the /status and admin tickets, UI-07 and UI-08, consume it then).
 
 Pre-open (09:00 to 09:30 ET): checked against the program, which has no 09:30 gate: `Market` has no open time, and `mint_pair` and order placement are blocked only by pause and `now ≥ close_ts` (AB-11). The 09:30 "open" in domain.md's daily schedule is automation timing (markets exist by 09:00), not an on-chain state. The UI therefore shows `Open` and allows every intent from creation, and adds no pre-open badge or Trade restriction (a UI-only rule the program does not enforce would mislead and could be bypassed anyway). Confirmation requested under Open questions.
 
