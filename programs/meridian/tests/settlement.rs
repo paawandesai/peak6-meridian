@@ -106,9 +106,13 @@ fn recorded_fixture_settles_a_market() {
     const FIXTURE: &str =
         include_str!("../../../tests/fixtures/switchboard/pull_feed_meta_tiingo.json");
     let json: serde_json::Value = serde_json::from_str(FIXTURE).unwrap();
-    let data = BASE64_STANDARD
+    let mut data = BASE64_STANDARD
         .decode(json["account"]["data"][0].as_str().unwrap())
         .unwrap();
+    // The fixture's update time is relative to its own recorded close; re-stamp it to 301 s after
+    // this harness's close so the test does not depend on the harness's calendar date.
+    data[LAST_UPDATE_TS_OFFSET..LAST_UPDATE_TS_OFFSET + 8]
+        .copy_from_slice(&(BASE_CLOSE_TS + 301).to_le_bytes());
     let mut s = SettlementHarness::with_strike(68_000);
     // The fixture is the Tiingo feed: pin its hash (0xab…) and place it at the pinned key.
     let (key, _) = s.pinned("META", 0);

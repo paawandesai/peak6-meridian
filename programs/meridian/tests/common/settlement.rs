@@ -26,7 +26,7 @@ pub const SETTLE_DELAY_SECS: i64 = 300;
 
 /// Byte offsets inside a `PullFeedAccountData` account (see `meridian::oracle`).
 const FEED_HASH_OFFSET: usize = 8 + 2_112;
-const LAST_UPDATE_TS_OFFSET: usize = 8 + 2_208;
+pub const LAST_UPDATE_TS_OFFSET: usize = 8 + 2_208;
 const RESULT_VALUE_OFFSET: usize = 8 + 2_256;
 const RESULT_SLOT_OFFSET: usize = 8 + 2_360;
 
