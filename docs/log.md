@@ -61,3 +61,49 @@ PRD/docs verification (local `.ao-ops/prd-docs-verification.md`):
 
 ## 2026-10-07 23:25 CT · orchestrator
 - **M2 tickets** M2-01..M2-13 drafted by the orchestrator (Tier 2, Paawan notified; By: orchestrator); UI-04/05/06/08 design ACs folded into M2-06/07/08/10. MR !24.
+
+## YYYY-MM-DD HH:MM ET · <who>
+<!-- M2-12 live devnet rehearsal evidence template (issue #28) -->
+<!-- Replace placeholders with actual values; delete this template when filled -->
+M2-12 live devnet rehearsal: pre-flight
+- Deployment verified: make deploy-devnet (dry-run, no tx sent)
+- Automation service: <Railway|Fallback A worker session ID>
+- Markets created: <08:00 automation|Fallback B manual, N markets created>
+- Next: trade phase
+
+## YYYY-MM-DD HH:MM ET · <who>
+M2-12 live devnet rehearsal: trade phase
+- Command: pnpm --filter e2e run rehearsal --phase trade --fund <faucet|direct|none>
+- Symbol: META, strike: $XXX.XX
+- Outcome: <SUCCESS|FAILED: reason>
+- Trader wallets: <trader-a-pubkey>, <trader-b-pubkey>
+- Explorer links (devnet):
+  - Fund trader-a SOL: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Fund trader-b SOL: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Buy YES: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Sell YES: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Buy NO: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Sell NO: https://explorer.solana.com/tx/<sig>?cluster=devnet
+- State saved: target/rehearsal/state.json
+- Next: await settlement at 16:05 ET
+
+## YYYY-MM-DD HH:MM ET · <who>
+M2-12 live devnet rehearsal: settlement verification (AC2)
+- Markets closed: 16:00 ET
+- Settlement time: <HH:MM ET>
+- Within 10 min of close: <YES|NO>
+- All markets settled from Switchboard: <YES|NO: details>
+- If delayed/failed: <diagnosis, fix ticket opened>
+- Next: redeem phase
+
+## YYYY-MM-DD HH:MM ET · <who>
+M2-12 live devnet rehearsal: redeem phase
+- Command: pnpm --filter e2e run rehearsal --phase redeem
+- Outcome: <SUCCESS: P&L exact match|FAILED: reason>
+- Explorer links (devnet):
+  - Settle funds trader-a: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Settle funds trader-b: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Redeem trader-a: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Redeem trader-b: https://explorer.solana.com/tx/<sig>?cluster=devnet
+- P&L verification: <details of exact match against ledger.ts model>
+- M2-12 AC1 complete: <YES|NO>
