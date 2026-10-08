@@ -1,4 +1,5 @@
 export * from "./calendar";
+export * from "./cli/createMarkets";
 export * from "./money";
 export * from "./prevCloses";
 export * from "./strikes";

@@ -3,7 +3,7 @@
  * seven MAG7 tickers (952 bytes) cannot ride in one 1,232-byte transaction: each call carries
  * at most six ticker slots, and slots not listed keep their value (empty after initialise).
  */
-import { BN } from "@coral-xyz/anchor";
+import { BN } from "./bn";
 import { PublicKey } from "@solana/web3.js";
 
 import { SYMBOL_LEN, symbolBytes } from "./pda";

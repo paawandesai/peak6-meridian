@@ -6,6 +6,7 @@ export function clientInfo(): { readonly name: string; readonly program: string 
   return { name: "@meridian/client", program: PROGRAM_NAME };
 }
 
+export * from "./bn";
 export * from "./config";
 export * from "./intents";
 export type { Meridian } from "./idl/meridian";

@@ -7,9 +7,10 @@
  * Prices are whole cents. For the NO intents `priceCents` is the NO price the user sees; the
  * program takes the YES price (NO price = 100 − YES price).
  */
-import { BN, type Program } from "@coral-xyz/anchor";
+import { type Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, type TransactionInstruction } from "@solana/web3.js";
 
+import { BN } from "./bn";
 import type { Meridian } from "./idl/meridian";
 import { findConfigPda, findOpenOrdersPda, type MarketAddresses } from "./pda";
 import { MAX_PRICE_CENTS, MIN_PRICE_CENTS, PAIR_PRICE_CENTS } from "./units";
