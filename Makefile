@@ -13,7 +13,16 @@ export NEXT_TELEMETRY_DISABLED := 1
 PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
-	client lint typecheck test test-security coverage audit eval-live e2e dev
+	client lint lint-rust lint-js-py typecheck test test-rust-unit test-js-py-unit test-security \
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live e2e dev
+
+# CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
+# PNPM_R_FLAGS=--workspace-concurrency=1.
+VITEST_FLAGS ?=
+PNPM_R_FLAGS ?=
+# CI: the `build` job runs build-local once and passes target/deploy + target/idl to later jobs as
+# artifacts; those jobs set MERIDIAN_PREBUILT=1 so the tests don't run anchor build again.
+BUILD_LOCAL := $(if $(MERIDIAN_PREBUILT),,build-local)
 
 help:
 	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e dev"
@@ -49,9 +58,13 @@ client: build-local
 	cp target/types/meridian.ts packages/client/src/idl/meridian.ts
 	pnpm exec prettier --write packages/client/src/idl
 
-lint:
+lint: lint-rust lint-js-py
+
+lint-rust:
 	cargo fmt --all -- --check
 	cargo clippy --workspace --all-targets --locked -- -D warnings
+
+lint-js-py:
 	pnpm exec eslint . --max-warnings 0
 	pnpm exec prettier --check .
 	uv run --locked ruff check .
@@ -61,23 +74,36 @@ typecheck:
 	pnpm -r run typecheck
 	uv run --locked mypy
 
-## Unit and integration tests.
-test: build-local
+## Unit and integration tests (CI runs the Rust and JS/Python halves as separate jobs).
+test: test-rust-unit test-js-py-unit
+
+test-rust-unit: $(BUILD_LOCAL)
 	cargo test --workspace --exclude security-tests --locked
-	pnpm -r --filter '!security-tests-ts' run test
+
+test-js-py-unit:
+	pnpm -r $(PNPM_R_FLAGS) --filter '!security-tests-ts' run test $(VITEST_FLAGS)
 	pnpm --filter app run build
 	uv run --locked pytest services
 
 ## Abuse-case tests (tests/security, one file per AB ID). The Rust ones run the local build.
-test-security: build-local
+test-security: test-rust-security test-js-py-security
+
+test-rust-security: $(BUILD_LOCAL)
 	cargo test --package security-tests --locked
-	pnpm --filter security-tests-ts run test
+
+test-js-py-security:
+	pnpm --filter security-tests-ts run test $(VITEST_FLAGS)
 	uv run --locked pytest tests/security/py
+
+## Compile (don't run) the Rust test binaries; the CI `build` job warms the cargo cache with it.
+test-rust-build:
+	cargo test --workspace --exclude security-tests --locked --no-run
+	cargo test --package security-tests --locked --no-run
 
 ## Coverage gate: 80% lines for meridian-book, each TS package and each Python package.
 coverage:
 	cargo llvm-cov --package meridian-book --locked --fail-under-lines 80
-	pnpm -r run coverage
+	pnpm -r $(PNPM_R_FLAGS) run coverage $(VITEST_FLAGS)
 	uv run --locked pytest services/quant --cov=meridian_quant --cov-fail-under=80
 	uv run --locked pytest services/ops-agent --cov=meridian_ops_agent --cov-fail-under=80
 
