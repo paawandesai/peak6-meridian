@@ -86,7 +86,7 @@ Settle price display: `settle_price_scaled` has 18 fractional digits and `packag
 
 Money strings: `formatUsdc` returns a bare 6-decimal string (`"181.420000"`) and throws on negatives, so it cannot produce the strings in this spec. The same UI-02 exception therefore adds two **display-only** formatters next to `scaledToCentsFloor` in `units.ts`, so every money string in the app has one source and no component formats money itself:
 - `formatUsdCents(cents: bigint, sign: "auto" | "always" = "auto"): string` renders whole cents as `$181.42`, with thousands separators (`$1,250.00`). Negatives print `−$1.20` (U+2212, never a hyphen). With `"always"` non-zero amounts carry the sign (`+$3.80`, `−$1.20`); zero prints `$0.00`. The `Pnl` component uses `"always"`; prices, costs and payouts use `"auto"`.
-- `formatUsdcBalance(baseUnits: bigint): string` renders a USDC balance as `1,250.00 USDC`, rounding **down** to whole cents so a balance is never overstated.
+- `formatUsdcBalance(baseUnits: bigint): string` renders a test-USDC balance as `1,250.00 test-USDC`, rounding **down** to whole cents so a balance is never overstated. The `test-` qualifier is part of the formatter output and every balance string: this is a devnet test mint (brief.md, decisions.md), and a bare `USDC` could be read as real funds.
 Cent prices stay `62¢` (an integer `number` from the client plus the `¢` character; no formatter needed). `formatUsdc` and `parseUsdc` keep their exact, throwing behaviour for inputs and transactions; the display formatters never feed a transaction.
 
 Fractional cents (Portfolio, domain.md § P&L): a mark can be a half cent (bid 58¢ and ask 61¢ give 59.5¢) and an average cost is rarely whole. The rule: **all position maths is exact `bigint` in USDC base units, never rounded until display.** The mark is the book mid in tenths of a cent, `(bid + ask) × 5` tenths, which is exact, and is converted to base units by `× 1,000`. Cost basis is carried as total cost in base units plus quantity; unrealized is `mark_base × qty − total_cost` and realized is a running base-unit total, so nothing divides before display. Two more display-only formatters render them, in the same UI-02 `units.ts` exception:
@@ -170,7 +170,7 @@ Before (M1-12): a header with "Meridian", balance, wallet; per ticker a plain ta
 After:
 ```
 ┌ Meridian  Markets Portfolio History Status        14:52:07 ET · close in 1:07:53 ┐
-│                                                        Balance 1,250.00 USDC [Connect]│
+│                                                        Balance 1,250.00 test-USDC [Connect]│
 ├───────────────────────────────────────────────────────────────────────────────────────┤
 │ Will a MAG7 stock close at or above a price today? Pick a strike; YES wins at or above,│  ← landing (FR-21), 2 lines,
 │ NO wins below. Max loss is what you pay.                                [Connect wallet]│    hidden once connected
@@ -203,7 +203,7 @@ Annotations: (a) the question is the H1; (b) the NO view relabels the same book 
 Before: does not exist (M2).
 After:
 ```
-USDC 1,250.00 · Redeemable now $40.00 [Redeem all] · Unrealized +$0.20 · Realized −$1.20
+test-USDC 1,250.00 · Redeemable now $40.00 [Redeem all] · Unrealized +$0.20 · Realized −$1.20
 Market            Side  Qty  Avg   Mark  Unrealized  Realized  State
 NVDA ≥ $180 10/08  NO    10  42¢   44¢   +$0.20      $0.00     Open · 1:07:53
 AAPL ≥ $230 10/07  YES   40  55¢   100¢  —           —         Settled YES at $231.02 [Redeem $40.00]
