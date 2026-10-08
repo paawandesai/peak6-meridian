@@ -131,3 +131,20 @@ Against a local validator: `SOLANA_CLUSTER=localnet` with a loopback `SOLANA_RPC
 - Below `FAUCET_MIN_LAMPORTS` (default 0.1 SOL) the endpoint answers 503 and posts one alert to `ALERT_WEBHOOK_URL` per instance per `FAUCET_ALERT_COOLDOWN_SEC`. Top up the key; no restart is needed.
 - A claim limit of one per wallet per 24 h is enforced on chain by marker accounts; there is nothing to reset. A refused wallet (429) simply waits: the gap is at least 24 h minus about 90 s, and up to about 48 h.
 - A "faucet misconfigured" error means `FAUCET_KEYPAIR` is not the mint authority of `USDC_MINT`; fix the environment and redeploy.
+
+## Demo ops-agent override path (M3-07)
+
+Local fault-injection demonstration of the ops-agent investigation and admin override workflow. **Local validator only** (refused on devnet or any other cluster).
+
+**Scenario:** One oracle source is configured to report a close 2% off (`FAULT_INJECT_SOURCE`), causing settlement to fail the 5 bps spread check. The automation service posts an incident to the ops-agent, which investigates using recorded source fixtures (no live API calls by default) and produces a validated override draft. The admin approves the draft, and after the override delay the market settles with `admin_settle_override`.
+
+**Requirements:**
+- Local validator running (`solana-test-validator` from `make dev` or started separately)
+- M3-05 (ops-agent service) and M3-06 (admin override UI) available
+- Environment: `SOLANA_CLUSTER=localnet`, `FAULT_INJECT_SOURCE=tiingo|twelvedata`, `OPS_AGENT_URL`, `SERVICE_TOKEN`, `ADMIN_KEYPAIR_PATH`
+
+**Run:** `make demo-ops`
+
+The script validates that `FAULT_INJECT_SOURCE` is only set on localnet (security: never against real services), stages the fault, attempts settlement (which fails), posts to the ops-agent, fetches the draft, approves it, waits for the shortened override delay, and settles. Each stage is printed with its result and the final settle transaction signature.
+
+**Live LLM (optional):** Set `ENABLE_LIVE_LLM=1` to call the Anthropic API for the agent's investigation narrative. Default: uses the deterministic fallback (source table + median, no Claude call) per M3-07 AC3.
