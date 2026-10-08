@@ -6,16 +6,27 @@ import type { MeridianReader } from "@/lib/chain";
 import type { MarketRow } from "@/lib/markets";
 
 export function market(overrides: Partial<MarketRow> = {}): MarketRow {
-  return {
+  const row: MarketRow = {
     address: "Mkt1111111111111111111111111111111111111111",
     ticker: "AAPL",
     tradingDate: 20260105,
     strikeCents: 22_000n,
     closeTs: 2_000_000_000n,
     settled: false,
+    outcome: "None",
+    settlePriceScaled: 0n,
     pairsOutstanding: 3n,
     ...overrides,
   };
+  // A settled market without explicit values gets a defined outcome and price, so its Settled
+  // badge text exists (`Settled YES at $181.00`).
+  return row.settled
+    ? {
+        ...row,
+        outcome: overrides.outcome ?? "Yes",
+        settlePriceScaled: overrides.settlePriceScaled ?? 181_000_000_000_000_000_000n,
+      }
+    : row;
 }
 
 export const OWNER = new PublicKey("11111111111111111111111111111112");
@@ -23,6 +34,7 @@ export const OWNER = new PublicKey("11111111111111111111111111111112");
 export function reader(overrides: Partial<MeridianReader> = {}): MeridianReader {
   return {
     listMarkets: () => Promise.resolve([]),
+    getConfig: () => Promise.resolve({ paused: false, overrideDelaySecs: 3600n }),
     usdcBalance: () => Promise.resolve(0n),
     ...overrides,
   };

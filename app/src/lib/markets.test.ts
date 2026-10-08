@@ -7,9 +7,49 @@ import { market } from "@/test-utils";
 describe("marketStatus", () => {
   it("is Open before close, Closed at/after close, Settled once settled", () => {
     const m = market({ closeTs: 1_000n });
-    expect(marketStatus(m, 999)).toBe("Open");
+    // UI-02 AC7 edit: 999 is one second before close, so it is now ClosingSoon (the 15-minute
+    // window); Open holds until 15 minutes before. Was: `expect(marketStatus(m, 999)).toBe("Open")`.
+    expect(marketStatus(m, 1_000 - 901)).toBe("Open");
+    expect(marketStatus(m, 999)).toBe("ClosingSoon");
     expect(marketStatus(m, 1_000)).toBe("Closed");
     expect(marketStatus({ ...m, settled: true }, 5_000)).toBe("Settled");
+  });
+
+  it("walks every boundary: Open, ClosingSoon, Closed, Settling, SettlementDelayed", () => {
+    const m = market({ closeTs: 10_000n });
+    const at = (offset: number) => marketStatus(m, 10_000 + offset);
+    expect(at(-901)).toBe("Open");
+    expect(at(-900)).toBe("ClosingSoon"); // close - 15 min
+    expect(at(-1)).toBe("ClosingSoon");
+    expect(at(0)).toBe("Closed");
+    expect(at(299)).toBe("Closed");
+    expect(at(300)).toBe("Settling"); // close + 5 min
+    expect(at(1_199)).toBe("Settling");
+    expect(at(1_200)).toBe("SettlementDelayed"); // close + 20 min
+    expect(at(86_400)).toBe("SettlementDelayed"); // no upper bound
+  });
+
+  it("Settled wins over every time-based state", () => {
+    const m = market({ closeTs: 10_000n, settled: true });
+    for (const offset of [-5_000, -1, 0, 300, 1_200, 90_000]) {
+      expect(marketStatus(m, 10_000 + offset)).toBe("Settled");
+    }
+  });
+
+  it("is monotonic in time for an unsettled market (property)", () => {
+    const order = ["Open", "ClosingSoon", "Closed", "Settling", "SettlementDelayed"];
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 200_000 }),
+        fc.integer({ min: 0, max: 5_000 }),
+        (a, d) => {
+          const m = market({ closeTs: 100_000n });
+          expect(order.indexOf(marketStatus(m, a))).toBeLessThanOrEqual(
+            order.indexOf(marketStatus(m, a + d)),
+          );
+        },
+      ),
+    );
   });
 });
 
