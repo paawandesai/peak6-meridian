@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { MERIDIAN_PROGRAM_ID } from "@meridian/client";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 
@@ -38,7 +39,7 @@ describe("createAdminActions", () => {
         },
         signAllTransactions: (txs) => Promise.resolve(txs),
       },
-      parsePublicConfig({ programId: "H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm" }),
+      parsePublicConfig({ programId: MERIDIAN_PROGRAM_ID.toBase58() }),
     );
     await expect(actions.setPaused(true)).rejects.toThrow();
     expect(signed).toHaveLength(1);
