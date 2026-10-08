@@ -150,7 +150,7 @@ function PositionsTable({
   readonly rows: readonly PositionRow[];
   readonly nowSecs: number | null;
   readonly overrideDelaySecs: bigint;
-  readonly onRedeem: (item: RedeemItem) => void;
+  readonly onRedeem: (market: MarketRow) => void;
   readonly busy: boolean;
   readonly firstUse: ReadonlySet<string>;
 }) {
@@ -231,13 +231,7 @@ function PositionsTable({
                     type="button"
                     className="mt-mer-1 rounded-mer border border-mer-control-border px-mer-2 py-mer-1 text-mer-sm font-medium disabled:opacity-50"
                     disabled={busy}
-                    onClick={() =>
-                      onRedeem({
-                        market: row.market,
-                        yesQty: row.side === "YES" ? row.walletQty : 0n,
-                        noQty: row.side === "NO" ? row.walletQty : 0n,
-                      })
-                    }
+                    onClick={() => onRedeem(row.market)}
                   >
                     Redeem {formatUsdSigned(row.walletQty * 1_000_000n)}
                   </button>
@@ -526,11 +520,15 @@ export function PortfolioView(props: PortfolioViewProps) {
     }
   }
 
-  const redeemAll: RedeemItem[] = model.redeemable.map(({ market, yesQty, noQty }) => ({
-    market,
-    yesQty,
-    noQty,
-  }));
+  const redeemAll: RedeemItem[] = model.redeemable.map(
+    ({ market, yesQty, noQty, yesAccount, noAccount }) => ({
+      market,
+      yesQty,
+      noQty,
+      yesAccount,
+      noAccount,
+    }),
+  );
 
   return (
     <div className="flex flex-col gap-mer-4">
@@ -600,7 +598,10 @@ export function PortfolioView(props: PortfolioViewProps) {
           rows={shown}
           nowSecs={nowSecs}
           overrideDelaySecs={overrideDelaySecs}
-          onRedeem={(item) => void run((actions) => actions.redeem([item]))}
+          onRedeem={(market) => {
+            const item = redeemAll.find((candidate) => candidate.market.address === market.address);
+            if (item !== undefined) void run((actions) => actions.redeem([item]));
+          }}
           busy={busy}
           firstUse={firstUseKeys(shown)}
         />

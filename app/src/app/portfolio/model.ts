@@ -70,6 +70,8 @@ export type PortfolioModel = {
     readonly market: MarketRow;
     readonly yesQty: bigint;
     readonly noQty: bigint;
+    readonly yesAccount: string | null;
+    readonly noAccount: string | null;
     readonly payout: bigint;
   }[];
   /** True when the event history could not account for every contract held. */
@@ -152,7 +154,16 @@ export function buildPortfolio(input: PortfolioInput): PortfolioModel {
     if (held === undefined) return [];
     const winner = market.outcome === "Yes" ? held.yes : market.outcome === "No" ? held.no : 0n;
     return winner > 0n
-      ? [{ market, yesQty: held.yes, noQty: held.no, payout: winner * BASE_UNITS_PER_USDC }]
+      ? [
+          {
+            market,
+            yesQty: held.yes,
+            noQty: held.no,
+            yesAccount: held.yesAccount,
+            noAccount: held.noAccount,
+            payout: winner * BASE_UNITS_PER_USDC,
+          },
+        ]
       : [];
   });
 

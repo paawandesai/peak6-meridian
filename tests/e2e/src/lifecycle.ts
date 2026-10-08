@@ -764,6 +764,7 @@ async function main(): Promise<void> {
         market: row,
         yesQty: yes,
         noQty: no,
+        accounts: { yes: trader.yes, no: trader.no },
       });
       await send(new Transaction().add(...instructions), [trader.keypair], sigs);
       const paid = (await amount(trader.usdc)) - usdcBefore;

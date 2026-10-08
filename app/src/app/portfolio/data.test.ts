@@ -99,7 +99,14 @@ describe("balances and holdings", () => {
       { symbol: NVDA.ticker, tradingDate: NVDA.tradingDate, strikeCents: NVDA.strikeCents },
       programId,
     );
+    const accounts = [
+      Keypair.generate().publicKey,
+      Keypair.generate().publicKey,
+      Keypair.generate().publicKey,
+    ];
+    let next = 0;
     const entry = (mint: PublicKey, amount: string) => ({
+      pubkey: accounts[next++ % accounts.length],
       account: { data: { parsed: { info: { mint: mint.toBase58(), tokenAmount: { amount } } } } },
     });
     const balances = await fetchBalancesByMint(
@@ -112,9 +119,18 @@ describe("balances and holdings", () => {
       } as never,
       wallet,
     );
-    expect(balances.get(a.yesMint.toBase58())).toBe(10n);
+    // The larger YES account (6) is the one a redeem should burn from.
+    expect(balances.get(a.yesMint.toBase58())).toEqual({
+      amount: 10n,
+      account: accounts[1]?.toBase58(),
+    });
     expect(holdingsFor(balances, [NVDA, AAPL], programId)).toEqual({
-      [NVDA.address]: { yes: 10n, no: 2n },
+      [NVDA.address]: {
+        yes: 10n,
+        no: 2n,
+        yesAccount: accounts[1]?.toBase58(),
+        noAccount: accounts[2]?.toBase58(),
+      },
     });
   });
 

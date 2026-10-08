@@ -21,7 +21,7 @@ describe("buildPortfolio", () => {
   it("an open position gets avg entry, a midpoint mark, unrealized and the if-right-pays figure", () => {
     const model = build(
       snapshot({
-        holdings: { [NVDA.address]: { yes: 10n, no: 0n } },
+        holdings: { [NVDA.address]: { yes: 10n, no: 0n, yesAccount: null, noAccount: null } },
         events: [
           fill("a", NVDA.address, {
             taker: WALLET,
@@ -53,7 +53,7 @@ describe("buildPortfolio", () => {
   it("a NO position is marked at 100¢ less the YES mid", () => {
     const model = build(
       snapshot({
-        holdings: { [NVDA.address]: { yes: 0n, no: 10n } },
+        holdings: { [NVDA.address]: { yes: 0n, no: 10n, yesAccount: null, noAccount: null } },
         events: [
           {
             kind: "PairsMinted",
@@ -84,7 +84,7 @@ describe("buildPortfolio", () => {
   it("YES resting in asks and free YES in OpenOrders count toward the quantity held", () => {
     const model = build(
       snapshot({
-        holdings: { [NVDA.address]: { yes: 2n, no: 0n } },
+        holdings: { [NVDA.address]: { yes: 2n, no: 0n, yesAccount: null, noAccount: null } },
         openOrders: [{ market: NVDA.address, freeUsdc: 0n, freeYes: 3n, restingCount: 1 }],
         resting: [{ market: NVDA.address, orderId: 1n, side: "Ask", price: 60, qty: 5n }],
         events: [
@@ -105,7 +105,10 @@ describe("buildPortfolio", () => {
   it("a settled winner shows payout and redeemable wallet tokens; a loser pays $0.00", () => {
     const model = build(
       snapshot({
-        holdings: { [AAPL.address]: { yes: 40n, no: 0n }, [MSFT.address]: { yes: 5n, no: 0n } },
+        holdings: {
+          [AAPL.address]: { yes: 40n, no: 0n, yesAccount: null, noAccount: null },
+          [MSFT.address]: { yes: 5n, no: 0n, yesAccount: null, noAccount: null },
+        },
         events: [
           fill("a", AAPL.address, {
             taker: WALLET,
@@ -129,7 +132,14 @@ describe("buildPortfolio", () => {
     expect(won).toMatchObject({ state: "won", ifRightPays: 40_000_000n, mark: 1000n });
     expect(lost).toMatchObject({ state: "lost", ifRightPays: 0n, mark: 0n });
     expect(model.redeemable).toEqual([
-      { market: AAPL, yesQty: 40n, noQty: 0n, payout: 40_000_000n },
+      {
+        market: AAPL,
+        yesQty: 40n,
+        noQty: 0n,
+        yesAccount: null,
+        noAccount: null,
+        payout: 40_000_000n,
+      },
     ]);
     expect(model.totals.redeemable).toBe(40_000_000n);
     // Winner: (100 − 55)¢ × 40 = $18.00; loser: (0 − 30)¢ × 5 = −$1.50.
@@ -164,7 +174,11 @@ describe("buildPortfolio", () => {
   });
 
   it("holdings the events cannot explain are flagged and show no P&L", () => {
-    const model = build(snapshot({ holdings: { [NVDA.address]: { yes: 7n, no: 0n } } }));
+    const model = build(
+      snapshot({
+        holdings: { [NVDA.address]: { yes: 7n, no: 0n, yesAccount: null, noAccount: null } },
+      }),
+    );
     expect(model.rows[0]).toMatchObject({ qty: 7n, cost: null, unrealized: null, realized: null });
     expect(model.incompleteHistory).toBe(true);
     expect(build(snapshot({ eventsPartial: true })).incompleteHistory).toBe(true);
@@ -175,7 +189,7 @@ describe("buildPortfolio", () => {
     expect(empty.mm).toMatchObject({ strikes: [], openOrders: 0, withdrawable: [] });
     const model = build(
       snapshot({
-        holdings: { [NVDA.address]: { yes: 25n, no: 0n } },
+        holdings: { [NVDA.address]: { yes: 25n, no: 0n, yesAccount: null, noAccount: null } },
         openOrders: [{ market: NVDA.address, freeUsdc: 12_400_000n, freeYes: 0n, restingCount: 3 }],
         resting: [{ market: NVDA.address, orderId: 1n, side: "Bid", price: 40, qty: 5n }],
         events: [
