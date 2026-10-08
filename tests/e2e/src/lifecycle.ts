@@ -18,10 +18,12 @@ import { fileURLToPath } from "node:url";
 import { AnchorProvider, type Program, Wallet } from "@coral-xyz/anchor";
 import {
   BN,
+  bookAccountApi,
   buildTrade,
   configParamsArg,
   configParamsBatches,
   createMeridianProgram,
+  fetchBookQuotes,
   findConfigPda,
   findOpenOrdersPda,
   type Intent,
@@ -503,11 +505,39 @@ async function main(): Promise<void> {
     await trade(b, "SELL_YES", "limit", 60, 10n, [], sigs);
   });
   await check("sell yes (rest)");
+  // M2-05 AC4 / NFR-01: a confirmed order is visible through the app's book quotes (the same
+  // `fetchBookQuotes` the market-data hook polls every second). The read must see it within 2 s so
+  // that hook poll interval (1 s) + read stays inside the 3 s budget.
+  await step("NFR-01: the resting 60¢ ask shows in the book quotes within 3 s", async () => {
+    const quotesOf = async () =>
+      (await fetchBookQuotes(bookAccountApi(program), [addresses.market], programId))[
+        addresses.market.toBase58()
+      ];
+    const started = Date.now();
+    let quotes = await quotesOf();
+    while (quotes?.yesAsk !== 60 && Date.now() - started < 2_000) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      quotes = await quotesOf();
+    }
+    const elapsed = Date.now() - started;
+    if (quotes?.yesAsk !== 60 || quotes.yesBid !== null || quotes.yesMid !== null) {
+      throw new Error(`the resting ask was not visible in the book quotes after ${elapsed} ms`);
+    }
+    say(
+      `          book quotes saw the confirmed ask after ${elapsed} ms (budget: 2000 ms + 1000 ms poll)`,
+    );
+  });
   await step("BUY YES: trader-a buys 10 @ 60¢ (IOC)", async (sigs) => {
     await trade(a, "BUY_YES", "ioc", 60, 10n, [b], sigs);
     ledger.trade(a.name, b.name, 60n, 10n);
   });
   await check("buy yes");
+  await step("NFR-01: the filled ask is gone from the book quotes", async () => {
+    const quotes = (await fetchBookQuotes(bookAccountApi(program), [addresses.market], programId))[
+      addresses.market.toBase58()
+    ];
+    if (quotes?.yesAsk !== null) throw new Error("the filled ask still shows in the book quotes");
+  });
 
   await step("SELL YES: trader-b bids 4 @ 55¢, trader-a sells 4 into it (IOC)", async (sigs) => {
     await trade(b, "BUY_YES", "limit", 55, 4n, [], sigs);
