@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { runCommand } from "./lib/process";
-import { runPlatformCli } from "./lib/platform-cli";
+import { runPlatformCli } from "./platform/cli";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 

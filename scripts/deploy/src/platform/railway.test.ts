@@ -21,7 +21,6 @@ const options: RailwayOptions = {
   token: TOKEN,
   projectName: "meridian",
   serviceName: "automation",
-  cliVersion: "9.9.9",
   env,
   repoRoot: "/repo",
   healthAttempts: 2,
@@ -96,7 +95,8 @@ describe("deployRailway", () => {
     expect(headersSeen[0]?.["Project-Access-Token"]).toBe(TOKEN);
     expect(runEnv.RAILWAY_TOKEN).toBe(TOKEN);
     expect(runEnv.RAILWAY_API_TOKEN).toBeUndefined();
-    expect(runArgs.join(" ")).toContain("@railway/cli@9.9.9 up --ci --service automation");
+    expect(Object.keys(runEnv).sort()).not.toContain("AUTOMATION_KEYPAIR");
+    expect(runArgs.join(" ")).toContain("@railway/cli@5.64.0 up --ci --service automation");
     expect(runArgs.join(" ")).not.toContain(TOKEN);
     expect(CONFIG_FILE).toBe("services/automation/railway.json");
     const output = logs.join("\n");

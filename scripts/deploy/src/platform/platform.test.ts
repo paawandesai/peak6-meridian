@@ -1,7 +1,16 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-import { APP_ENV, assertComplete, collectEnv, redactSecrets, requestJson } from "./platform";
+import {
+  APP_ENV,
+  assertComplete,
+  childEnv,
+  collectEnv,
+  RAILWAY_CLI_VERSION,
+  redactSecrets,
+  requestJson,
+  VERCEL_CLI_VERSION,
+} from "./platform";
 
 describe("redactSecrets", () => {
   it("removes every secret value and keeps short strings alone", () => {
@@ -52,5 +61,25 @@ describe("requestJson", () => {
     await expect(requestJson({ fetch }, "vercel GET", "u", {}, ["SECRETTOKEN"])).rejects.toThrow(
       /vercel GET: request failed \(connect failed for Bearer \*\*\*\)/,
     );
+  });
+});
+
+describe("childEnv", () => {
+  it("passes only the allow-list plus the given variables", () => {
+    process.env.SOME_OTHER_TOKEN = "must-not-leak";
+    const env = childEnv({ VERCEL_TOKEN: "t" });
+    expect(env.SOME_OTHER_TOKEN).toBeUndefined();
+    expect(env.VERCEL_TOKEN).toBe("t");
+    expect(env.CI).toBe("1");
+    expect(env.PATH).toBe(process.env.PATH);
+    delete process.env.SOME_OTHER_TOKEN;
+  });
+});
+
+describe("pinned CLI versions", () => {
+  it("are exact versions, never a tag or range", () => {
+    for (const version of [VERCEL_CLI_VERSION, RAILWAY_CLI_VERSION]) {
+      expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+    }
   });
 });

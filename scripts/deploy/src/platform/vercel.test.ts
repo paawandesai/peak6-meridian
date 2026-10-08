@@ -18,7 +18,6 @@ const env = {
 const options: VercelOptions = {
   token: TOKEN,
   projectName: "meridian",
-  cliVersion: "1.2.3",
   env,
   repoRoot: "/repo",
 };
@@ -55,17 +54,18 @@ describe("deployVercel", () => {
       };
     });
     expect(result.url).toBe("https://meridian-abc.vercel.app");
-    expect(result.aliasUrl).toBe("https://meridian.vercel.app");
     expect(calls.some((c) => c.url.includes("/v11/projects") && c.method === "POST")).toBe(true);
     const envCall = calls.find((c) => c.url.includes("/prj_new/env"));
     const sent = JSON.parse(envCall?.body ?? "[]") as { key: string; type: string }[];
     expect(sent.find((e) => e.key === "FAUCET_KEYPAIR")?.type).toBe("encrypted");
     expect(sent.find((e) => e.key === "NEXT_PUBLIC_CLUSTER")?.type).toBe("plain");
-    expect(runArgs.join(" ")).toContain("vercel@1.2.3 deploy --prod --yes");
+    expect(runArgs.join(" ")).toContain("vercel@63.1.0 deploy --prod --yes");
     expect(runArgs.join(" ")).not.toContain(TOKEN);
     expect(runEnv.VERCEL_TOKEN).toBe(TOKEN);
     expect(runEnv.VERCEL_PROJECT_ID).toBe("prj_new");
     expect(runEnv.VERCEL_ORG_ID).toBe("usr_1");
+    expect(runEnv.FAUCET_KEYPAIR).toBeUndefined();
+    expect(runEnv.RAILWAY_TOKEN).toBeUndefined();
     const output = logs.join("\n");
     expect(output).not.toContain(TOKEN);
     expect(output).not.toContain(FAUCET);

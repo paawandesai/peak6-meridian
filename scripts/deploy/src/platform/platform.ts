@@ -130,3 +130,22 @@ export function isPublicName(name: string): boolean {
 export function secretValues(tokens: readonly string[], collected: CollectedEnv): string[] {
   return [...tokens, ...Object.values(collected.values)];
 }
+
+/** Exact CLI versions run through `npx` (AB-16: never `latest`; bump here, in review). */
+export const VERCEL_CLI_VERSION = "63.1.0";
+export const RAILWAY_CLI_VERSION = "5.64.0";
+
+const CHILD_ENV_PASSTHROUGH = ["PATH", "HOME", "TMPDIR", "LANG", "TERM"] as const;
+
+/**
+ * The environment of a deploy CLI child: a fixed allow-list plus the variables it needs, so the
+ * CI environment (other tokens, keypairs, API keys) never reaches a downloaded CLI.
+ */
+export function childEnv(extra: Readonly<Record<string, string>>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { CI: "1" };
+  for (const name of CHILD_ENV_PASSTHROUGH) {
+    const value = process.env[name];
+    if (value !== undefined) env[name] = value;
+  }
+  return { ...env, ...extra };
+}

@@ -6,6 +6,8 @@
  */
 import {
   assertComplete,
+  childEnv,
+  RAILWAY_CLI_VERSION,
   collectEnv,
   AUTOMATION_ENV,
   redactSecrets,
@@ -22,7 +24,6 @@ export type RailwayOptions = {
   readonly token: string;
   readonly projectName: string;
   readonly serviceName: string;
-  readonly cliVersion: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly repoRoot: string;
   readonly healthAttempts?: number;
@@ -235,16 +236,15 @@ export async function deployRailway(
   );
   const domain = await ensureDomain(gql, target, serviceId);
 
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  delete env.RAILWAY_TOKEN;
-  delete env.RAILWAY_API_TOKEN;
-  env[target.kind === "project" ? "RAILWAY_TOKEN" : "RAILWAY_API_TOKEN"] = options.token;
+  const env = childEnv({
+    [target.kind === "project" ? "RAILWAY_TOKEN" : "RAILWAY_API_TOKEN"]: options.token,
+  });
   try {
     await run(
       "npx",
       [
         "--yes",
-        `@railway/cli@${options.cliVersion}`,
+        `@railway/cli@${RAILWAY_CLI_VERSION}`,
         "up",
         "--ci",
         "--service",

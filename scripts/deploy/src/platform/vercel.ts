@@ -5,6 +5,8 @@
  */
 import {
   assertComplete,
+  childEnv,
+  VERCEL_CLI_VERSION,
   collectEnv,
   APP_ENV,
   isPublicName,
@@ -22,7 +24,6 @@ export type VercelOptions = {
   readonly projectName: string;
   /** Team slug/ID; absent for a personal (Hobby) account. */
   readonly teamId?: string;
-  readonly cliVersion: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly repoRoot: string;
 };
@@ -134,24 +135,23 @@ export async function deployVercel(
   deps: PlatformDeps,
   options: VercelOptions,
   run: VercelRun,
-): Promise<{ readonly url: string; readonly aliasUrl: string }> {
+): Promise<{ readonly url: string }> {
   const collected = planVercel(options);
   assertComplete("vercel", collected);
   const secrets = secretValues([options.token], collected);
   const project = await ensureVercelProject(deps, options, secrets);
   await upsertVercelEnv(deps, options, project.id, collected, secrets);
 
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
+  const env = childEnv({
     VERCEL_TOKEN: options.token,
     VERCEL_ORG_ID: project.orgId,
     VERCEL_PROJECT_ID: project.id,
-  };
+  });
   let stdout: string;
   try {
     ({ stdout } = await run(
       "npx",
-      ["--yes", `vercel@${options.cliVersion}`, "deploy", "--prod", "--yes"],
+      ["--yes", `vercel@${VERCEL_CLI_VERSION}`, "deploy", "--prod", "--yes"],
       { cwd: options.repoRoot, env },
     ));
   } catch (error) {
@@ -159,7 +159,6 @@ export async function deployVercel(
     throw new Error(redactSecrets(message, secrets));
   }
   const url = parseDeploymentUrl(stdout);
-  const aliasUrl = `https://${options.projectName}.vercel.app`;
-  deps.log(`vercel: deployed ${url} (alias ${aliasUrl})`);
-  return { url, aliasUrl };
+  deps.log(`vercel: deployed ${url}`);
+  return { url };
 }

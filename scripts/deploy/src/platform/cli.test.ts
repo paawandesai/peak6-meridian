@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { runPlatformCli, type CliDeps } from "./platform-cli";
+import { runPlatformCli, type CliDeps } from "./cli";
 
 function deps(): { deps: CliDeps; logs: string[]; fetched: string[] } {
   const logs: string[] = [];
@@ -91,6 +91,6 @@ describe("runPlatformCli", () => {
       run: async () => ({ stdout: "https://a.vercel.app" }),
     });
     expect(code).toBe(0);
-    expect(logs.join("\n")).toContain("app URL: https://meridian.vercel.app");
+    expect(logs.join("\n")).toContain("app URL: https://a.vercel.app");
   });
 });
