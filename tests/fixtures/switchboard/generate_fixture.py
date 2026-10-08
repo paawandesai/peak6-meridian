@@ -14,7 +14,7 @@ from pathlib import Path
 
 DEVNET_PID = "Aio4gaXjXzJNVLtzwtNVmSqGKpANtXhybbkhtAC94ji2"
 DISCRIMINATOR = bytes([196, 27, 108, 196, 10, 215, 219, 40])
-CLOSE_TS = 1_791_057_600  # 2026-10-06 16:00 ET
+CLOSE_TS = 1_791_316_800  # 2026-10-06 16:00 ET
 SLOT = 412_345_678
 VALUE = 681_250_000_000_000_000_000  # $681.25 with 18 fractional digits
 FEED_HASH = bytes([0xAB] * 32)

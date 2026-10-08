@@ -239,7 +239,7 @@ mod tests {
 
     const FIXTURE: &str =
         include_str!("../../../tests/fixtures/switchboard/pull_feed_meta_tiingo.json");
-    const CLOSE_TS: i64 = 1_791_057_600;
+    const CLOSE_TS: i64 = 1_791_316_800;
 
     /// The `data` field of the account JSON fixture (`solana account --output json` shape).
     fn fixture() -> (Pubkey, Vec<u8>) {

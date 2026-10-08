@@ -3,7 +3,7 @@
 //! Three layers: the manifest keeps the feature opt-in (`ab_22_local_oracle_feature.rs`), the
 //! source gates every use of the instruction behind the feature (this file), and the CI job
 //! `build-devnet-check` builds with `make build-devnet` and asserts the IDL lacks
-//! `local_oracle_set`. When `MERIDIAN_DEVNET_IDL` names that IDL, this file checks it too.
+//! `local_oracle_set`. The built-IDL test below is `#[ignore]`d until that job is applied (OQ-16).
 
 const LIB: &str = include_str!("../../../../programs/meridian/src/lib.rs");
 const INSTRUCTIONS: &str = include_str!("../../../../programs/meridian/src/instructions/mod.rs");
@@ -73,13 +73,16 @@ fn idl_parser_lists_instruction_names() {
     );
 }
 
-/// Runs in the `build-devnet-check` CI job after `make build-devnet`.
+/// Needs the IDL of a `make build-devnet` build: run as
+/// `MERIDIAN_DEVNET_IDL=<abs path to target/idl/meridian.json> cargo test -p security-tests --test ab_22_devnet_build -- --include-ignored`.
+/// Ignored by default so a plain `cargo test` reports it as ignored, not as a pass; the held
+/// `build-devnet-check` CI job (OQ-16) runs it with `--include-ignored`. Without the variable an
+/// explicit run fails instead of skipping.
 #[test]
+#[ignore = "needs MERIDIAN_DEVNET_IDL from a make build-devnet build (OQ-16)"]
 fn devnet_idl_has_no_local_oracle_set() {
-    let Ok(path) = std::env::var("MERIDIAN_DEVNET_IDL") else {
-        eprintln!("MERIDIAN_DEVNET_IDL not set: skipping the built-IDL check (CI sets it)");
-        return;
-    };
+    let path = std::env::var("MERIDIAN_DEVNET_IDL")
+        .unwrap_or_else(|_| panic!("set MERIDIAN_DEVNET_IDL to the devnet build's IDL path"));
     let idl = std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"));
     let names = idl_instruction_names(&idl);
     assert!(
