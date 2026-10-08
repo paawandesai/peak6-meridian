@@ -145,11 +145,11 @@ async function marketBytes(fields: {
  * so the (documented, fixed) layout is written by hand and then decoded by the real Anchor
  * program below, which fails if any offset disagrees with the IDL.
  */
-function configBytes(paused: boolean, overrideDelaySecs: bigint): Buffer {
+function configBytes(paused: boolean, overrideDelaySecs: bigint, admin = key()): Buffer {
   const config = MERIDIAN_IDL.accounts?.find((account) => account.name === "Config");
   const parts: Buffer[] = [
     Buffer.from(config?.discriminator ?? []),
-    key().toBuffer(), // admin
+    admin.toBuffer(), // admin
     key().toBuffer(), // automation_authority
     key().toBuffer(), // usdc_mint
     Buffer.from([paused ? 1 : 0]),
@@ -262,13 +262,17 @@ describe("fetchMarkets on real Market account bytes", () => {
 describe("fetchConfig on real Config account bytes", () => {
   it("decodes the pause flag and the override delay", async () => {
     const configAddress = findConfigPda().address;
-    const paused = programServing([{ address: configAddress, data: configBytes(true, 7_200n) }]);
+    const admin = key();
+    const paused = programServing([
+      { address: configAddress, data: configBytes(true, 7_200n, admin) },
+    ]);
     expect(await fetchConfig(paused.account.config, configAddress)).toEqual({
       paused: true,
       overrideDelaySecs: 7_200n,
+      admin: admin.toBase58(),
     });
     const running = programServing([{ address: configAddress, data: configBytes(false, 3_600n) }]);
-    expect(await fetchConfig(running.account.config, configAddress)).toEqual({
+    expect(await fetchConfig(running.account.config, configAddress)).toMatchObject({
       paused: false,
       overrideDelaySecs: 3_600n,
     });

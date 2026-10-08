@@ -231,3 +231,8 @@ Append-only. The operator appends entries and never edits or deletes human entri
 ### D-051 · By: human · 2026-10-08
 **Decision:** M2-11 deploys from GitLab CI on `main` only, using the protected, masked CI variables `VERCEL_TOKEN` and `RAILWAY_TOKEN` on project 2084. `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` are unset, so the job links or creates the Vercel project by name. No tokens go in the box environment. Budget: Vercel free tier, Railway ≤ $5/month (brief.md). Any `.gitlab-ci.yml` change needs Paawan's review and is never merged by the gate. Answered by Paawan 2026-10-08.
 **Why:** Keeps deploy credentials in protected CI variables instead of agent sessions, and keeps CI changes human-reviewed. **Alternatives rejected:** tokens in the box env or local `.env`; deploys from feature branches. **How to reverse:** Move the tokens elsewhere and update M2-11 and `docs/environment.md`.
+
+
+### D-052 · By: human · 2026-10-08
+**Decision:** M2-12 (MR !33) is merged with its live devnet rehearsal (AC1) deferred to follow-up issue #28 ("M2-12 follow-up: live devnet rehearsal run (AC1)", labels M2 and blocked). The AC1 checkbox stays unticked until the live run's signatures, explorer links and `docs/log.md` line are attached to #28. Decided by Paawan 2026-10-08 13:53 CT.
+**Why:** The script, the local-validator evidence and the runbook are done and reviewed; the live run is blocked on OQ-5 (keypairs) and OQ-11 (Switchboard keys), and holding the code behind it blocks nothing else. **Alternatives rejected:** keeping !33 open until the live run. **How to reverse:** Not applicable; the follow-up issue carries the remaining AC1 evidence.
