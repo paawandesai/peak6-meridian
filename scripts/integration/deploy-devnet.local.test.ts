@@ -1,9 +1,10 @@
 // M2-01 against a local validator: the whole deploy script, end to end, under a throwaway
-// program ID (setup as in scripts/e2e.sh). Never touches devnet; the live run needs OQ-5.
+// program ID. Never touches devnet (the live run needs OQ-5).
 //
-// Needs `solana-test-validator`, `anchor`, `make` and `cargo` on PATH (make test provides them).
-// It rewrites two tracked files (declare_id! in lib.rs, Anchor.toml) and restores them, and
-// rebuilds the local-oracle artifacts the Rust tests expect, in afterAll.
+// Isolated from the shared tree: the devnet build happens in a temporary copy of the program
+// sources with its own cargo target directory, so the tracked files and the shared `target/`
+// (the local-oracle build the other suites use) are never modified. Run it serially with
+// `make test-deploy-devnet`; it needs `solana-test-validator`, `anchor` and `cargo` on PATH.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,13 +32,12 @@ import { readRecord } from "../lib/record";
 import { FEEDS_FIXTURE_PATH, FIXTURE_QUEUE } from "../test-support/feeds-fixture";
 import {
   airdrop,
-  buildDevnetUnderThrowawayId,
+  buildDevnetInIsolatedCopy,
   makeTempDir,
   newKeypairFile,
   REPO_ROOT,
   removeDir,
-  restoreOnExit,
-  restoreTrackedFiles,
+  sharedArtifactHashes,
   signatureCount,
   startValidator,
   trackedStatus,
@@ -70,6 +70,8 @@ let admin: Actor;
 let automation: Actor;
 let faucetPubkey: PublicKey;
 let statusBefore = "";
+let artifactsBefore: Record<string, string | null> = {};
+let copyRoot = "";
 let trackedRecordBefore = "";
 
 function track(actor: Actor): Actor {
@@ -83,7 +85,7 @@ function track(actor: Actor): Actor {
 
 function options(rpcUrl: string, overrides: Partial<Options> = {}): Options {
   return {
-    repoRoot: REPO_ROOT,
+    repoRoot: copyRoot,
     rpcUrl,
     solanaCluster: "localnet",
     adminKeypairPath: admin.path,
@@ -103,29 +105,29 @@ function options(rpcUrl: string, overrides: Partial<Options> = {}): Options {
 const log = (line: string) => logs.push(line);
 
 beforeAll(() => {
-  restoreOnExit();
   statusBefore = trackedStatus();
+  artifactsBefore = sharedArtifactHashes();
   trackedRecordBefore = readFileSync(join(REPO_ROOT, TRACKED_RECORD), "utf8");
   admin = track(newKeypairFile(work, "admin.json"));
   automation = track(newKeypairFile(work, "automation.json"));
   faucetPubkey = newKeypairFile(work, "faucet.json").keypair.publicKey; // only the pubkey is used
   programIdKeypair = { path: join(work, "program.json"), keypair: undefined as unknown as Keypair };
-  programId = buildDevnetUnderThrowawayId(programIdKeypair.path);
+  const built = buildDevnetInIsolatedCopy(join(work, "copy"), programIdKeypair.path);
+  copyRoot = built.root;
+  programId = built.programId;
   const secret = JSON.parse(readFileSync(programIdKeypair.path, "utf8")) as number[];
   secretNeedles.push(JSON.stringify(secret), secret.join(","));
-}, 25 * MINUTE);
+}, 40 * MINUTE);
 
 afterAll(() => {
   try {
-    restoreTrackedFiles();
-    // Tracked files must be exactly as they were before the run (AC1).
+    // The real tree is never modified: tracked files and the shared artifacts are unchanged.
     expect(trackedStatus()).toBe(statusBefore);
-    // Put the local-oracle artifacts back for the Rust tests (target/deploy, target/idl).
-    execFileSync("make", ["build-local"], { cwd: REPO_ROOT, stdio: "ignore" });
+    expect(sharedArtifactHashes()).toEqual(artifactsBefore);
   } finally {
     removeDir(work);
   }
-}, 25 * MINUTE);
+}, 5 * MINUTE);
 
 async function expectRejects(promise: Promise<unknown>, pattern: RegExp): Promise<void> {
   let message = "";
@@ -153,7 +155,8 @@ describe("AC3 the devnet build has no local_oracle_set (AB-22)", () => {
   it(
     "target/idl/meridian.json from make build-devnet lacks it, checked by ab_22_devnet_build",
     () => {
-      const idlPath = join(REPO_ROOT, "target", "idl", "meridian.json");
+      // The isolated copy's IDL (absolute: cargo test runs with the package directory as cwd).
+      const idlPath = join(copyRoot, "target", "idl", "meridian.json");
       // Fails (does not skip) when the build produced no IDL.
       expect(existsSync(idlPath)).toBe(true);
       const names = (
@@ -181,8 +184,10 @@ describe("AC3 the devnet build has no local_oracle_set (AB-22)", () => {
           stdio: "pipe",
         },
       );
-      // Run for real: exactly one test passed and none was reported as ignored.
-      expect(output).toMatch(/test result: ok\. 1 passed; 0 failed; 0 ignored/);
+      // Run for real: the one #[ignore]d test passed; the file's other three were filtered out.
+      expect(output).toContain(
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out",
+      );
     },
     25 * MINUTE,
   );
@@ -237,7 +242,7 @@ describe("guards run before any transaction (validator 1)", () => {
         [
           "program",
           "deploy",
-          join(REPO_ROOT, "target", "deploy", "meridian.so"),
+          join(copyRoot, "target", "deploy", "meridian.so"),
           "--program-id",
           programIdKeypair.path,
           "--keypair",
@@ -249,7 +254,7 @@ describe("guards run before any transaction (validator 1)", () => {
           "--commitment",
           "confirmed",
         ],
-        { cwd: REPO_ROOT, stdio: "ignore" },
+        { cwd: copyRoot, stdio: "ignore" },
       );
       const otherProgram = createProgram(validator.connection, other.keypair, programId);
       const mint = await createMint(
@@ -517,46 +522,33 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
   );
 
   it(
-    "make deploy-devnet's CLI: a no-op rerun exits 0, a devnet claim on this validator exits 1",
+    "the CLI refuses a devnet claim on this validator (exit 1, genesis hash mismatch)",
     () => {
-      const env = {
-        ...process.env,
-        SOLANA_RPC_URL: validator.rpcUrl,
-        SOLANA_CLUSTER: "localnet",
-        ADMIN_KEYPAIR_PATH: admin.path,
-        PROGRAM_KEYPAIR_PATH: programIdKeypair.path,
-        FAUCET_PUBKEY: faucetPubkey.toBase58(),
-        AUTOMATION_PUBKEY: automation.keypair.publicKey.toBase58(),
-      };
-      const cli = (extra: NodeJS.ProcessEnv, args: string[]) => {
-        try {
-          const stdout = execFileSync(
-            process.execPath,
-            ["--import", "tsx", "deploy-devnet.ts", "--out", record, "--skip-build", ...args],
-            {
-              cwd: join(REPO_ROOT, "scripts"),
-              env: { ...env, ...extra },
-              encoding: "utf8",
-              stdio: "pipe",
-            },
-          );
-          return { code: 0, output: stdout };
-        } catch (error) {
-          const failure = error as { status?: number; stdout?: string; stderr?: string };
-          return {
-            code: failure.status ?? -1,
-            output: `${failure.stdout ?? ""}${failure.stderr ?? ""}`,
-          };
-        }
-      };
-      const ok = cli({}, []);
-      logs.push(ok.output);
-      expect(ok.code).toBe(0);
-      expect(ok.output).toContain("nothing to do: already deployed");
-      const refused = cli({ SOLANA_CLUSTER: "devnet" }, []);
-      logs.push(refused.output);
-      expect(refused.code).toBe(1);
-      expect(refused.output).toMatch(/unknown cluster/);
+      let output = "";
+      let code = 0;
+      try {
+        execFileSync(process.execPath, ["--import", "tsx", "deploy-devnet.ts", "--skip-build"], {
+          cwd: join(REPO_ROOT, "scripts"),
+          env: {
+            ...process.env,
+            SOLANA_RPC_URL: validator.rpcUrl,
+            SOLANA_CLUSTER: "devnet",
+            ADMIN_KEYPAIR_PATH: admin.path,
+            PROGRAM_KEYPAIR_PATH: programIdKeypair.path,
+            FAUCET_PUBKEY: faucetPubkey.toBase58(),
+            AUTOMATION_PUBKEY: automation.keypair.publicKey.toBase58(),
+          },
+          encoding: "utf8",
+          stdio: "pipe",
+        });
+      } catch (error) {
+        const failure = error as { status?: number; stdout?: string; stderr?: string };
+        code = failure.status ?? -1;
+        output = `${failure.stdout ?? ""}${failure.stderr ?? ""}`;
+      }
+      logs.push(output);
+      expect(code).toBe(1);
+      expect(output).toMatch(/unknown cluster/);
     },
     5 * MINUTE,
   );

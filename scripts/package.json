@@ -7,7 +7,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "coverage": "vitest run --coverage --exclude 'integration/**'",
+    "coverage": "vitest run --coverage",
+    "test:deploy": "vitest run --config vitest.integration.config.ts",
     "deploy-devnet": "tsx --env-file-if-exists=../.env deploy-devnet.ts"
   },
   "dependencies": {

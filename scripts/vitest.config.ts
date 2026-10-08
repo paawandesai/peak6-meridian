@@ -2,9 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["lib/**/*.test.ts", "test-support/**/*.test.ts", "integration/**/*.test.ts"],
-    // The local-validator tests share one validator, one build and tracked files they restore.
-    fileParallelism: false,
+    include: ["lib/**/*.test.ts", "test-support/**/*.test.ts"],
     coverage: {
       provider: "v8",
       include: ["lib/**/*.ts"],

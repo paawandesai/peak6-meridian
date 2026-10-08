@@ -13,7 +13,7 @@ export NEXT_TELEMETRY_DISABLED := 1
 PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
-	client lint typecheck test test-security coverage audit eval-live deploy-devnet e2e dev
+	client lint typecheck test test-security coverage audit eval-live deploy-devnet test-deploy-devnet e2e dev
 
 help:
 	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e dev"
@@ -67,6 +67,14 @@ test: build-local
 	pnpm -r --filter '!security-tests-ts' run test
 	pnpm --filter app run build
 	uv run --locked pytest services
+	$(MAKE) test-deploy-devnet
+
+## M2-01: the deploy script against a local validator, serial and isolated: the devnet build runs
+## in a temporary copy of the sources with its own cargo target dir, so the shared target/ (the
+## local-oracle build the other suites use) and the tracked files are never touched. `make test`
+## runs it last. Needs solana-test-validator, anchor and cargo.
+test-deploy-devnet:
+	pnpm --filter meridian-scripts run test:deploy
 
 ## Abuse-case tests (tests/security, one file per AB ID). The Rust ones run the local build.
 test-security: build-local
