@@ -59,6 +59,7 @@ describe("buildRedeem", () => {
   it("uses the wallet's existing token accounts and skips creating them", async () => {
     const yes = Keypair.generate().publicKey;
     const no = Keypair.generate().publicKey;
+    const usdc = Keypair.generate().publicKey;
     const instructions = await buildRedeem({
       program,
       user,
@@ -66,10 +67,11 @@ describe("buildRedeem", () => {
       market: AAPL,
       yesQty: 1n,
       noQty: 1n,
-      accounts: { yes, no },
+      accounts: { usdc, yes, no },
     });
-    expect(instructions).toHaveLength(2); // the USDC account, then the redeem
+    expect(instructions).toHaveLength(1); // only the redeem
     const keys = instructions.at(-1)?.keys.map((key) => key.pubkey.toBase58());
+    expect(keys?.[2]).toBe(usdc.toBase58());
     expect(keys?.[3]).toBe(yes.toBase58());
     expect(keys?.[4]).toBe(no.toBase58());
   });

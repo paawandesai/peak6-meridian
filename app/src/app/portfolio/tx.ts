@@ -37,6 +37,7 @@ const createAta = (payer: PublicKey, mint: PublicKey, owner: PublicKey): Transac
 
 /** Token accounts to use instead of the associated ones (the wallet's existing accounts). */
 export type TokenAccountOverrides = {
+  readonly usdc?: PublicKey | null;
   readonly yes?: PublicKey | null;
   readonly no?: PublicKey | null;
 };
@@ -65,7 +66,7 @@ export async function buildRedeem(params: RedeemParams): Promise<TransactionInst
     .accountsStrict({
       market: a.market,
       user,
-      userUsdc: ata(usdcMint, user),
+      userUsdc: params.accounts?.usdc ?? ata(usdcMint, user),
       userYes,
       userNo,
       yesMint: a.yesMint,
@@ -75,7 +76,7 @@ export async function buildRedeem(params: RedeemParams): Promise<TransactionInst
     })
     .instruction();
   return [
-    createAta(user, usdcMint, user),
+    ...(params.accounts?.usdc ? [] : [createAta(user, usdcMint, user)]),
     ...(params.accounts?.yes ? [] : [createAta(user, a.yesMint, user)]),
     ...(params.accounts?.no ? [] : [createAta(user, a.noMint, user)]),
     instruction,
