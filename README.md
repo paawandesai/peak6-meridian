@@ -19,7 +19,9 @@ Commands and conventions: [CLAUDE.md](CLAUDE.md). Environment variables: [docs/e
 ## Devnet
 - **Program ID (declared):** `3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq` (the key behind it is held by the human, OQ-5). The first live run writes it, with the mint and Config PDA, to `deployments/devnet.json`.
 - **Test-USDC mint:** _not created yet._ The first live `make deploy-devnet` run creates it (6 decimals, mint authority = the faucet key) and writes its address to `deployments/devnet.json` and here.
-- **Frontend URL, how to get test-USDC:** _filled in when the app is deployed (M2)._
+- **Frontend URL, how to get test-USDC:** _filled in when the app is deployed (M2-11; the `deploy:vercel` job prints the URL)._
+- **Automation service (Railway):** `/health` needs `Authorization: Bearer <SERVICE_TOKEN>`; the `deploy:railway` job prints its URL.
+- Deploys run from CI on `main` (`make deploy-vercel`, `make deploy-railway`; `DEPLOY_ARGS=--dry-run` lists the variables each target needs, names only).
 
 Deploy (idempotent, refuses any cluster whose genesis hash is not devnet; needs the keypairs from OQ-5, see [docs/environment.md](docs/environment.md#devnet-deploy)):
 
