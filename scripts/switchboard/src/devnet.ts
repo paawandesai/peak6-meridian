@@ -1,3 +1,4 @@
+import { assertCluster, ClusterError, DEVNET_GENESIS_HASH } from "@meridian/client";
 import {
   PublicKey,
   type AddressLookupTableAccount,
@@ -13,8 +14,8 @@ import { z } from "zod";
 import { SOURCES, TICKERS, type FeedDefinition, type Ticker } from "./feeds";
 import { toOracleJobs, type OracleResult, type UpdateSimulator } from "./spike";
 
-/** Genesis hash of Solana devnet; any other cluster is refused for live runs. */
-export const DEVNET_GENESIS_HASH = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
+/** Genesis hash of Solana devnet (one copy, in `@meridian/client`); other clusters are refused. */
+export { DEVNET_GENESIS_HASH };
 /** Switchboard On-Demand default devnet queue (same value as the SDK's ON_DEMAND_DEVNET_QUEUE). */
 export const DEVNET_QUEUE = new PublicKey("EYiAmGSdsQTuCw413V5BzaruWuCCSDgTPtBGvLkXHbe7");
 export const DEFAULT_DEVNET_RPC = "https://api.devnet.solana.com";
@@ -33,8 +34,18 @@ export const FEED_CONFIG = {
 /** Throws unless the RPC is Solana devnet (never mainnet, D-012). */
 export async function assertDevnet(connection: Pick<Connection, "getGenesisHash">): Promise<void> {
   const genesis = await connection.getGenesisHash();
-  if (genesis !== DEVNET_GENESIS_HASH) {
-    throw new Error(`RPC is not Solana devnet (genesis ${genesis}); refusing to run`);
+  try {
+    // `cluster: "devnet"` never consults `rpcUrl`, so a localnet genesis is still refused.
+    await assertCluster({
+      cluster: "devnet",
+      rpcUrl: "",
+      getGenesisHash: () => Promise.resolve(genesis),
+    });
+  } catch (error) {
+    if (error instanceof ClusterError) {
+      throw new Error(`RPC is not Solana devnet (genesis ${genesis}); refusing to run`);
+    }
+    throw error;
   }
 }
 

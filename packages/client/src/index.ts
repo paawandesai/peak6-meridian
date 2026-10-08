@@ -7,6 +7,7 @@ export function clientInfo(): { readonly name: string; readonly program: string 
 }
 
 export * from "./bn";
+export * from "./cluster";
 export * from "./book";
 export * from "./config";
 export * from "./intents";

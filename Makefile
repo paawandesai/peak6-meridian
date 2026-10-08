@@ -14,7 +14,7 @@ PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
 	client lint lint-rust lint-js-py typecheck test test-rust-unit test-js-py-unit test-security \
-	test-rust-security test-js-py-security test-rust-build coverage audit eval-live e2e dev
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet test-deploy-devnet e2e dev
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -85,6 +85,14 @@ test-js-py-unit:
 	pnpm --filter app run build
 	uv run --locked pytest services
 
+## M2-01: the deploy script against a local validator, serial and isolated: the devnet build runs
+## in a temporary copy of the sources (its own target/), so the shared target/ (the local-oracle
+## build the other suites use) and the tracked files are never touched. NOT part of `make test`:
+## a cold devnet SBF build is too heavy for every run. Run it before pushing any change to
+## programs/, crates/, scripts/deploy or Anchor.toml. Needs solana-test-validator, anchor, cargo.
+test-deploy-devnet:
+	pnpm --filter deploy run test:deploy
+
 ## Abuse-case tests (tests/security, one file per AB ID). The Rust ones run the local build.
 test-security: test-rust-security test-js-py-security
 
@@ -117,6 +125,12 @@ audit:
 ## Not part of CI: CI runs the same cases with the scripted fake (`make test`).
 eval-live:
 	uv run --locked python services/ops-agent/evals/run_live.py
+
+## Devnet deploy (M2-01): program, test-USDC mint and Config; idempotent, refuses any non-devnet
+## cluster by genesis hash. Needs the environment in docs/environment.md (§ Devnet deploy).
+## Extra flags: make deploy-devnet DEPLOY_ARGS="--feeds deployments/feeds.devnet.json".
+deploy-devnet:
+	pnpm --filter deploy run deploy-devnet $(DEPLOY_ARGS)
 
 ## End-to-end smoke on a local validator.
 e2e:

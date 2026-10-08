@@ -1,0 +1,26 @@
+{
+  "name": "deploy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Devnet deployment commands: program, test-USDC mint and config (M2-01)",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "test:deploy": "vitest run --config vitest.deploy.config.ts",
+    "deploy-devnet": "tsx --env-file-if-exists=../../.env src/deploy-devnet.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.31.1",
+    "@meridian/client": "workspace:*",
+    "@solana/spl-token": "0.4.15",
+    "@solana/web3.js": "1.99.0",
+    "switchboard-scripts": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "fast-check": "4.10.2",
+    "tsx": "4.23.15"
+  }
+}
