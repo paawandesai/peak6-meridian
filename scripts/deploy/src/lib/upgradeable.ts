@@ -47,32 +47,31 @@ export function programDataHeader(data: Uint8Array): ProgramDataHeader | null {
   };
 }
 
-function trimmedLength(bytes: Uint8Array, from: number): number {
-  let end = bytes.length;
-  while (end > from && bytes[end - 1] === 0) {
-    end -= 1;
-  }
-  return end - from;
-}
-
 /**
- * True when the ELF stored on chain equals `localElf`. ProgramData accounts are allocated at
- * `--max-len`, so the stored ELF is followed by zero padding: both sides are compared after
- * trimming trailing zeros, which also means an older, longer build never matches a shorter one.
+ * The exact ProgramData comparison: skip the 45-byte header, require `len >= built_len`, require
+ * `data[..built_len] == built`, and require every byte after `built_len` to be zero. Trailing
+ * zeros of the on-chain data are never trimmed (that would break when the `.so` itself ends in
+ * zero bytes); ProgramData is allocated at `--max-len`, so zero padding follows the ELF.
  */
-export function onChainElfMatches(programData: Uint8Array, localElf: Uint8Array): boolean {
-  if (programData.length < PROGRAM_DATA_HEADER_LEN) {
+export function onChainElfMatches(programData: Uint8Array, built: Uint8Array): boolean {
+  const start = PROGRAM_DATA_HEADER_LEN;
+  if (programData.length < start + built.length) {
     return false;
   }
-  const onChainLength = trimmedLength(programData, PROGRAM_DATA_HEADER_LEN);
-  const localLength = trimmedLength(localElf, 0);
-  if (onChainLength !== localLength) {
-    return false;
+  for (let i = 0; i < built.length; i += 1) {
+    if (programData[start + i] !== built[i]) {
+      return false;
+    }
   }
-  for (let i = 0; i < localLength; i += 1) {
-    if (programData[PROGRAM_DATA_HEADER_LEN + i] !== localElf[i]) {
+  for (let i = start + built.length; i < programData.length; i += 1) {
+    if (programData[i] !== 0) {
       return false;
     }
   }
   return true;
+}
+
+/** The on-chain bytes in the window of the built ELF's length (for printing a digest). */
+export function onChainWindow(programData: Uint8Array, builtLength: number): Uint8Array {
+  return programData.slice(PROGRAM_DATA_HEADER_LEN, PROGRAM_DATA_HEADER_LEN + builtLength);
 }

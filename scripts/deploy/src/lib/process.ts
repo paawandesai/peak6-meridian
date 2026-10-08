@@ -10,7 +10,13 @@ export type CommandResult = { readonly stdout: string; readonly stderr: string }
 export function runCommand(
   command: string,
   args: readonly string[],
-  options: { readonly cwd: string; readonly env?: NodeJS.ProcessEnv; readonly timeoutMs?: number },
+  options: {
+    readonly cwd: string;
+    readonly env?: NodeJS.ProcessEnv;
+    readonly timeoutMs?: number;
+    /** Applied to the output tail before it is thrown (for example RPC URL redaction). */
+    readonly redact?: (text: string) => string;
+  },
 ): Promise<CommandResult> {
   return new Promise((resolvePromise, reject) => {
     execFile(
@@ -30,7 +36,8 @@ export function runCommand(
             .filter((line) => line.trim().length > 0)
             .slice(-15)
             .join("\n");
-          reject(new Error(`${command} ${args[0] ?? ""} failed (${status})\n${tail}`));
+          const text = `${command} ${args[0] ?? ""} failed (${status})\n${tail}`;
+          reject(new Error(options.redact === undefined ? text : options.redact(text)));
           return;
         }
         resolvePromise({ stdout, stderr });

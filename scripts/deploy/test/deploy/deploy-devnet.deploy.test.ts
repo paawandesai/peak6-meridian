@@ -26,8 +26,11 @@ import { Connection } from "@solana/web3.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createProgram, readOnChainConfig } from "../../src/lib/chain-io";
-import { runDeploy } from "../../src/lib/deploy";
+import { runDeploy, type RunSolana } from "../../src/lib/deploy";
+import { runCommand } from "../../src/lib/process";
+import { programDataAddress, programDataHeader } from "../../src/lib/upgradeable";
 import { bytesToHex, TICKER_ORDER } from "../../src/lib/feeds-file";
+import { FEED_HASH_OFFSET } from "../../src/lib/switchboard";
 import { type Options } from "../../src/lib/options";
 import { readRecord } from "../../src/lib/record";
 import { FEEDS_FIXTURE_PATH, FIXTURE_QUEUE } from "../../src/test-support/feeds-fixture";
@@ -58,6 +61,26 @@ const MINUTE = 60_000;
 
 type Feeds = Record<string, { pubkey: string; hash: string }[]>;
 const fixtureFeeds = (): Feeds => JSON.parse(readFileSync(FEEDS_FIXTURE_PATH, "utf8")) as Feeds;
+/** Per-feed account bodies: the base fixture with its own feed_hash patched to the pinned one. */
+function feedAccountFiles(): { address: string; file: string }[] {
+  // Patched as text: `rentEpoch` is u64::MAX, which JSON.parse would turn into a float.
+  const text = readFileSync(SB_ACCOUNT_FIXTURE, "utf8");
+  const dataField = /("data":\s*\[\s*")([^"]+)(")/;
+  const base64 = dataField.exec(text)?.[2];
+  if (base64 === undefined) throw new Error("fixture has no data field");
+  const files: { address: string; file: string }[] = [];
+  for (const [ticker, pair] of Object.entries(fixtureFeeds())) {
+    pair.forEach((feed, index) => {
+      const data = Buffer.from(base64, "base64");
+      data.set(Buffer.from(feed.hash, "hex"), FEED_HASH_OFFSET);
+      const file = join(work, `feed-${ticker}-${index}.json`);
+      writeFileSync(file, text.replace(dataField, `$1${data.toString("base64")}$3`));
+      files.push({ address: feed.pubkey, file });
+    });
+  }
+  return files;
+}
+
 const feedAddresses = (): string[] =>
   Object.values(fixtureFeeds()).flatMap((pair) => pair.map((feed) => feed.pubkey));
 
@@ -100,6 +123,7 @@ function options(rpcUrl: string, overrides: Partial<Options> = {}): Options {
     outPath: join(work, "record.json"),
     feedsPath: undefined,
     skipBuild: true,
+    allowUpgrade: false,
     ...overrides,
   };
 }
@@ -192,6 +216,26 @@ describe("guards run before any transaction (validator 1)", () => {
     },
     40 * MINUTE,
   );
+
+  it("AC2b the RPC URL, which can carry an API key, never appears in errors or logs", async () => {
+    secretNeedles.push("SECRET123");
+    const urls = [
+      "http://127.0.0.1:9/?api-key=SECRET123", // unreachable
+      `${validator.rpcUrl}/?api-key=SECRET123`, // a reachable validator that is not devnet
+    ];
+    for (const rpcUrl of urls) {
+      let message = "";
+      try {
+        await runDeploy(options(rpcUrl, { solanaCluster: "devnet" }), log);
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      expect(message).toMatch(/cannot reach the RPC|unknown cluster/);
+      expect(message).not.toContain("SECRET123");
+      expect(message).not.toContain(rpcUrl);
+    }
+    expect(logs.join("\n")).not.toContain("SECRET123");
+  });
 
   it("the cluster guard refuses a local validator that is not devnet", async () => {
     const before = await signatureCount(validator.connection, admin.keypair.publicKey);
@@ -316,9 +360,7 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
   const bogusMint = PublicKey.unique();
 
   beforeAll(async () => {
-    validator = await startValidator(
-      feedAddresses().map((address) => ({ address, file: SB_ACCOUNT_FIXTURE })),
-    );
+    validator = await startValidator(feedAccountFiles());
     await airdrop(validator.connection, admin.keypair.publicKey, 200);
     await airdrop(validator.connection, automation.keypair.publicKey, 5);
     program = createProgram(validator.connection, admin.keypair, programId);
@@ -330,8 +372,23 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
   }, 5 * MINUTE);
   afterAll(async () => validator.stop());
 
+  // Every `solana` CLI call goes through this spy, which also runs it for real.
+  const solanaCalls: string[][] = [];
+  const runSolana: RunSolana = async (args) => {
+    solanaCalls.push([...args]);
+    await runCommand("solana", args, { cwd: copyRoot });
+  };
   const run = (overrides: Partial<Options> = {}) =>
-    runDeploy(options(validator.rpcUrl, { outPath: record, ...overrides }), log);
+    runDeploy(options(validator.rpcUrl, { outPath: record, ...overrides }), log, { runSolana });
+  const programSlot = async (): Promise<bigint> => {
+    const info = await validator.connection.getAccountInfo(programId, "confirmed");
+    const address = info === null ? null : programDataAddress(info.data);
+    const data =
+      address === null ? null : await validator.connection.getAccountInfo(address, "confirmed");
+    const header = data === null ? null : programDataHeader(data.data);
+    if (header === null) throw new Error("no ProgramData");
+    return header.slot;
+  };
   const adminSigs = () => signatureCount(validator.connection, admin.keypair.publicKey);
 
   it(
@@ -380,32 +437,65 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
   );
 
   it(
-    "AC1 a re-run with unchanged inputs sends no transaction at all (spy on the sender); a changed .so upgrades exactly once",
+    "AC1 a re-run with unchanged inputs sends nothing (spies on runSolana and the web3 sender, plus chain-side checks)",
     async () => {
       const send = vi.spyOn(Connection.prototype, "sendRawTransaction");
       try {
-        const before = await adminSigs();
+        const slotBefore = await programSlot();
+        const watched = [admin.keypair.publicKey, programId, findConfigPda(programId).address];
+        const sigsBefore = await Promise.all(
+          watched.map((key) => signatureCount(validator.connection, key)),
+        );
+        solanaCalls.length = 0;
         const same = await run();
         expect(same.actions).toEqual([]);
         expect(send).not.toHaveBeenCalled();
-        expect(await adminSigs()).toBe(before);
-
-        // A different, still valid ELF: flip one letter of a unique error-message literal.
-        const soPath = join(copyRoot, "target", "deploy", "meridian.so");
-        const elf = readFileSync(soPath);
-        const at = elf.indexOf(Buffer.from("Arithmetic overflow"));
-        expect(at).toBeGreaterThan(0);
-        elf[at] = "a".charCodeAt(0);
-        writeFileSync(soPath, elf);
-
-        const upgraded = await run();
-        expect(upgraded.actions).toEqual(["upgrade-program"]);
-        const again = await run();
-        expect(again.actions).toEqual([]);
-        // The upgrade authority is unchanged and the Config untouched.
-        expect(again.record.upgradeAuthority).toBe(admin.keypair.publicKey.toBase58());
+        expect(solanaCalls).toEqual([]);
+        expect(await programSlot()).toBe(slotBefore);
+        expect(
+          await Promise.all(watched.map((key) => signatureCount(validator.connection, key))),
+        ).toEqual(sigsBefore);
       } finally {
         send.mockRestore();
+      }
+    },
+    5 * MINUTE,
+  );
+
+  it(
+    "AC1 a changed .so fails without --allow-upgrade (both hashes printed, no tx) and upgrades exactly once with it; every CLI call pins --url and --keypair",
+    async () => {
+      // A different, still valid ELF: flip one letter of a unique error-message literal.
+      const soPath = join(copyRoot, "target", "deploy", "meridian.so");
+      const elf = readFileSync(soPath);
+      const at = elf.indexOf(Buffer.from("Arithmetic overflow"));
+      expect(at).toBeGreaterThan(0);
+      elf[at] = "a".charCodeAt(0);
+      writeFileSync(soPath, elf);
+
+      const slotBefore = await programSlot();
+      const sigsBefore = await adminSigs();
+      solanaCalls.length = 0;
+      await expectRejects(run(), /on-chain [0-9a-f]{64}, built [0-9a-f]{64}.*--allow-upgrade/s);
+      expect(solanaCalls).toEqual([]);
+      expect(await programSlot()).toBe(slotBefore);
+      expect(await adminSigs()).toBe(sigsBefore);
+
+      const upgraded = await run({ allowUpgrade: true });
+      expect(upgraded.actions).toEqual(["upgrade-program"]);
+      expect(await programSlot()).not.toBe(slotBefore);
+      const slotAfter = await programSlot();
+      const again = await run({ allowUpgrade: true });
+      expect(again.actions).toEqual([]);
+      expect(await programSlot()).toBe(slotAfter);
+      expect(again.record.upgradeAuthority).toBe(admin.keypair.publicKey.toBase58());
+
+      // The CLI never uses its own config: every call carries the validated URL and the admin key.
+      expect(solanaCalls).toHaveLength(1);
+      for (const call of solanaCalls) {
+        expect(call[call.indexOf("--url") + 1]).toBe(validator.rpcUrl);
+        expect(call[call.indexOf("--keypair") + 1]).toBe(admin.path);
+        expect(call[call.indexOf("--upgrade-authority") + 1]).toBe(admin.path);
       }
     },
     10 * MINUTE,
@@ -483,6 +573,21 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
     writeFileSync(path, JSON.stringify(bad));
     const before = await adminSigs();
     await expectRejects(run({ feedsPath: path }), /AAPL\.tiingo.*Nothing was sent/s);
+    expect(await adminSigs()).toBe(before);
+  });
+
+  it("AC1 --feeds rejects a feed account whose own feed_hash differs from the pinned hash", async () => {
+    const bad = fixtureFeeds();
+    const pair = bad.AAPL;
+    if (pair?.[0] === undefined || pair[1] === undefined) throw new Error("fixture");
+    [pair[0].pubkey, pair[1].pubkey] = [pair[1].pubkey, pair[0].pubkey]; // swapped accounts
+    const path = join(work, "feeds.swapped.json");
+    writeFileSync(path, JSON.stringify(bad));
+    const before = await adminSigs();
+    await expectRejects(
+      run({ feedsPath: path }),
+      /own feed_hash differs.*AAPL\.tiingo.*AAPL\.twelvedata.*Nothing was sent/s,
+    );
     expect(await adminSigs()).toBe(before);
   });
 

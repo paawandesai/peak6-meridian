@@ -51,6 +51,8 @@ Options:
   --queue <pubkey>  Switchboard queue (overrides SWITCHBOARD_QUEUE)
   --repo-root <dir> read sources and build artifacts from <dir> (default: this repository)
   --skip-build      do not run the devnet build first (use the existing target/ artifacts)
+  --allow-upgrade   upgrade an existing program whose ELF differs from this build; without it a
+                    mismatch fails loudly (a rebuild on another machine is never byte-identical)
   --help
 `;
 
@@ -68,6 +70,8 @@ export type Options = {
   readonly outPath: string;
   readonly feedsPath: string | undefined;
   readonly skipBuild: boolean;
+  /** Upgrade an existing program whose ELF differs from the build (opt-in). */
+  readonly allowUpgrade: boolean;
 };
 
 function expandHome(path: string): string {
@@ -94,6 +98,7 @@ export function parseOptions(
       queue: { type: "string" },
       "repo-root": { type: "string" },
       "skip-build": { type: "boolean" },
+      "allow-upgrade": { type: "boolean" },
       help: { type: "boolean" },
     },
     strict: true,
@@ -134,5 +139,6 @@ export function parseOptions(
     outPath: resolvePath(root, values.out ?? "deployments/devnet.json"),
     feedsPath: values.feeds === undefined ? undefined : resolvePath(root, values.feeds),
     skipBuild: values["skip-build"] === true,
+    allowUpgrade: values["allow-upgrade"] === true,
   };
 }

@@ -23,6 +23,28 @@ export class ClusterError extends Error {
   }
 }
 
+/**
+ * Removes the RPC URL from `text`: provider URLs often carry an API key, and fetch errors tend
+ * to echo them. The exact URL, its query string and any other `http(s)://` URL are replaced.
+ */
+export function redactRpcUrl(text: string, rpcUrl: string): string {
+  let out = text;
+  if (rpcUrl !== "") {
+    out = out.split(rpcUrl).join("[RPC URL]");
+    try {
+      const parsed = new URL(rpcUrl);
+      for (const part of [parsed.search.replace(/^\?/, ""), parsed.password, parsed.username]) {
+        if (part !== "") {
+          out = out.split(part).join("[redacted]");
+        }
+      }
+    } catch {
+      // not a URL: only the exact-text replacement above applies
+    }
+  }
+  return out.replace(/\b(?:https?|wss?):\/\/\S+/gi, "[RPC URL]");
+}
+
 /** Reads the cluster's genesis hash (for example `() => connection.getGenesisHash()`). */
 export type GetGenesisHash = () => Promise<string>;
 
@@ -83,8 +105,12 @@ export async function assertCluster(params: {
   try {
     genesis = await getGenesisHash();
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new ClusterError(`cannot reach the RPC to verify the cluster (refusing): ${reason}`);
+    throw new ClusterError(
+      `cannot reach the RPC to verify the cluster (refusing): ${redactRpcUrl(
+        error instanceof Error ? error.message : String(error),
+        rpcUrl,
+      )}`,
+    );
   }
   if (genesis !== DEVNET_GENESIS_HASH) {
     throw new ClusterError(`the RPC serves ${describeGenesis(genesis)}, not Solana devnet`);

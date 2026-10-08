@@ -10,3 +10,13 @@ export const SWITCHBOARD_PROGRAM_IDS: readonly PublicKey[] = [
 export function isSwitchboardOwner(owner: PublicKey): boolean {
   return SWITCHBOARD_PROGRAM_IDS.some((id) => id.equals(owner));
 }
+
+/** Offset of `feed_hash` in a `PullFeedAccountData` account (8-byte discriminator + 2,112). */
+export const FEED_HASH_OFFSET = 8 + 2_112;
+
+/** The feed hash stored in a Switchboard feed account's own data, or null if too short. */
+export function feedAccountHash(data: Uint8Array): Uint8Array | null {
+  return data.length < FEED_HASH_OFFSET + 32
+    ? null
+    : data.slice(FEED_HASH_OFFSET, FEED_HASH_OFFSET + 32);
+}

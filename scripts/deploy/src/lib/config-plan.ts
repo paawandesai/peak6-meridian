@@ -189,7 +189,9 @@ export function assertConfigMatches(onChain: OnChainConfig, desired: Desired): v
 export function assertConfigAdmin(onChain: OnChainConfig, admin: PublicKey): void {
   if (!onChain.admin.equals(admin)) {
     throw new ConfigMismatchError(
-      `the on-chain Config belongs to admin ${onChain.admin.toBase58()}, not ${admin.toBase58()}; nothing was sent`,
+      `the on-chain Config belongs to admin ${onChain.admin.toBase58()}, not ${admin.toBase58()}; nothing was sent. ` +
+        "On a first run this means someone else won the initialize_config race: do not retry, " +
+        "re-key the program per OQ-5 (new declare_id!).",
     );
   }
 }

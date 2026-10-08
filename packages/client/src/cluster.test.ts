@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertCluster,
+  redactRpcUrl,
   ClusterError,
   DEVNET_GENESIS_HASH,
   isLoopbackUrl,
@@ -143,5 +144,55 @@ describe("isLoopbackUrl", () => {
         expect(isLoopbackUrl(`https://${domain}/`)).toBe(false);
       }),
     );
+  });
+});
+
+describe("RPC URLs never leak (they often carry an API key)", () => {
+  const secretUrl = "https://devnet.example/?api-key=SECRET123";
+
+  it("an unreachable RPC error that echoes the URL is redacted", async () => {
+    const echoing = () => Promise.reject(new Error(`fetch failed for ${secretUrl} (ECONNREFUSED)`));
+    let message = "";
+    try {
+      await assertCluster({ cluster: "devnet", rpcUrl: secretUrl, getGenesisHash: echoing });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toMatch(/cannot reach the RPC/);
+    expect(message).not.toContain("SECRET123");
+    expect(message).not.toContain("devnet.example");
+  });
+
+  it("a wrong-genesis error names the genesis hash, never the URL", async () => {
+    let message = "";
+    try {
+      await assertCluster({
+        cluster: "devnet",
+        rpcUrl: secretUrl,
+        getGenesisHash: genesis(MAINNET_BETA_GENESIS_HASH),
+      });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toMatch(/mainnet-beta/);
+    expect(message).not.toContain("SECRET123");
+  });
+
+  it("a non-loopback localnet error does not echo the URL", async () => {
+    let message = "";
+    try {
+      await assertCluster({ cluster: "localnet", rpcUrl: secretUrl, getGenesisHash: unreachable });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).not.toContain("SECRET123");
+  });
+
+  it("redactRpcUrl removes the exact URL, its query and stray URLs", () => {
+    const text = `a ${secretUrl} b api-key=SECRET123 c https://other.example/x?k=1 d`;
+    const out = redactRpcUrl(text, secretUrl);
+    expect(out).not.toContain("SECRET123");
+    expect(out).not.toContain("other.example");
+    expect(redactRpcUrl("plain", "not a url")).toBe("plain");
   });
 });

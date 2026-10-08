@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { assertCluster, findConfigPda } from "@meridian/client";
+import { assertCluster, findConfigPda, redactRpcUrl } from "@meridian/client";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { computeFeedHash, loadFeedDefinitions } from "switchboard-scripts";
 
@@ -27,10 +27,11 @@ import type { Options } from "./options";
 import { runCommand } from "./process";
 import { type DeploymentRecord, readRecord, writeRecord } from "./record";
 import { assertProgramIds, declaredIdFromLibRs, idlAddress } from "./program-id";
-import { isSwitchboardOwner } from "./switchboard";
+import { feedAccountHash, isSwitchboardOwner } from "./switchboard";
 import {
   BPF_LOADER_UPGRADEABLE,
   onChainElfMatches,
+  onChainWindow,
   programDataAddress,
   programDataHeader,
 } from "./upgradeable";
@@ -52,7 +53,23 @@ type Context = {
   readonly programId: PublicKey;
   readonly log: (line: string) => void;
   readonly actions: string[];
+  readonly runSolana: RunSolana;
 };
+
+/** Runs the `solana` CLI with these arguments (injectable so tests can observe every call). */
+export type RunSolana = (args: readonly string[]) => Promise<void>;
+
+export type DeployDeps = { readonly runSolana?: RunSolana };
+
+/** The default `runSolana`: output is redacted so the RPC URL never reaches a log or an error. */
+function defaultRunSolana(options: Options): RunSolana {
+  return async (args) => {
+    await runCommand("solana", args, {
+      cwd: options.repoRoot,
+      redact: (text) => redactRpcUrl(text, options.rpcUrl),
+    });
+  };
+}
 
 async function expectedFeedHashes(options: Options): Promise<Map<string, string>> {
   if (options.queue === undefined) {
@@ -89,6 +106,12 @@ async function loadFeeds(options: Options, connection: Connection): Promise<Feed
       }
     }
   }
+  const pins = order.map((entry) => {
+    const [ticker, source] = entry.label.split(".");
+    const index = SOURCE_ORDER.findIndex((name) => name === source);
+    const pin = feeds.get(ticker as (typeof TICKER_ORDER)[number])?.[index === 1 ? 1 : 0];
+    return pin?.hash ?? new Uint8Array(32);
+  });
   const infos = await connection.getMultipleAccountsInfo(
     order.map((entry) => entry.pubkey),
     "confirmed",
@@ -104,6 +127,21 @@ async function loadFeeds(options: Options, connection: Connection): Promise<Feed
       `feed accounts that are missing or not owned by a Switchboard program: ${bad.join(", ")}. Nothing was sent.`,
     );
   }
+  // Each account's own feed_hash must equal the hash being pinned: a swapped or wrong-queue pubkey
+  // would otherwise only fail at settlement with OracleFeedHashMismatch.
+  const wrongOwnHash = order
+    .filter((_, i) => {
+      const data = infos[i]?.data;
+      const own = data === undefined ? null : feedAccountHash(data);
+      const want = pins[i];
+      return own === null || want === undefined || bytesToHex(own) !== bytesToHex(want);
+    })
+    .map((entry) => `${entry.label} (${entry.pubkey.toBase58()})`);
+  if (wrongOwnHash.length > 0) {
+    throw new Error(
+      `feed accounts whose own feed_hash differs from the hash being pinned: ${wrongOwnHash.join(", ")}. Nothing was sent.`,
+    );
+  }
   return feeds;
 }
 
@@ -112,7 +150,7 @@ async function ensureProgram(
   soPath: string,
   expectedSha: string,
 ): Promise<PublicKey> {
-  const { connection, admin, programId, options, log, actions } = ctx;
+  const { connection, admin, programId, options, log, actions, runSolana } = ctx;
   const elf = readFileSync(soPath);
   // The `.so` deployed is exactly the one verified after the build.
   if (sha256Hex(elf) !== expectedSha) {
@@ -126,6 +164,8 @@ async function ensureProgram(
     options.adminKeypairPath,
     "--upgrade-authority",
     options.adminKeypairPath,
+    // The CLI never uses its own config (cluster, fee payer): the URL the guard validated and
+    // the admin keypair are passed on every call.
     "--url",
     options.rpcUrl,
     "--commitment",
@@ -134,11 +174,7 @@ async function ensureProgram(
   if (info === null) {
     const maxLen = (BigInt(elf.length) * MAX_LEN_FACTOR_NUM) / MAX_LEN_FACTOR_DEN;
     log(`deploying program ${programId.toBase58()} (${elf.length} bytes)`);
-    await runCommand(
-      "solana",
-      ["program", "deploy", soPath, ...common, "--max-len", maxLen.toString()],
-      { cwd: options.repoRoot },
-    );
+    await runSolana(["program", "deploy", soPath, ...common, "--max-len", maxLen.toString()]);
     actions.push("deploy-program");
   } else {
     if (!info.owner.equals(BPF_LOADER_UPGRADEABLE)) {
@@ -153,11 +189,16 @@ async function ensureProgram(
     }
     if (onChainElfMatches(data.bytes, elf)) {
       log(`program ${programId.toBase58()} is up to date (same ELF, no deploy)`);
+    } else if (!options.allowUpgrade) {
+      // Anchor builds are not byte-reproducible across machines: never upgrade the live program
+      // silently from another worktree.
+      throw new Error(
+        `the on-chain program differs from this build (on-chain ${sha256Hex(onChainWindow(data.bytes, elf.length))}, ` +
+          `built ${soSha(elf)}). Nothing was sent. Pass --allow-upgrade to upgrade it.`,
+      );
     } else {
       log(`upgrading program ${programId.toBase58()} (${elf.length} bytes)`);
-      await runCommand("solana", ["program", "deploy", soPath, ...common], {
-        cwd: options.repoRoot,
-      });
+      await runSolana(["program", "deploy", soPath, ...common]);
       actions.push("upgrade-program");
     }
   }
@@ -251,6 +292,10 @@ async function ensureMint(
   return mint.publicKey;
 }
 
+function soSha(elf: Uint8Array): string {
+  return sha256Hex(elf);
+}
+
 function buildRecord(
   cluster: "devnet" | "localnet",
   ctx: Context,
@@ -311,6 +356,22 @@ export async function buildDevnet(
 export async function runDeploy(
   options: Options,
   log: (line: string) => void = (line) => process.stdout.write(`${line}\n`),
+  deps: DeployDeps = {},
+): Promise<DeployResult> {
+  const safeLog = (line: string) => log(redactRpcUrl(line, options.rpcUrl));
+  try {
+    return await deploy(options, safeLog, deps.runSolana ?? defaultRunSolana(options));
+  } catch (error) {
+    // Provider URLs often carry an API key and fetch errors echo them.
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(redactRpcUrl(message, options.rpcUrl));
+  }
+}
+
+async function deploy(
+  options: Options,
+  log: (line: string) => void,
+  runSolana: RunSolana,
 ): Promise<DeployResult> {
   if (!options.skipBuild) {
     await buildDevnet(options.repoRoot, log);
@@ -344,7 +405,7 @@ export async function runDeploy(
 
   const feeds = options.feedsPath === undefined ? undefined : await loadFeeds(options, connection);
 
-  const ctx: Context = { options, connection, admin, programId, log, actions: [] };
+  const ctx: Context = { options, connection, admin, programId, log, actions: [], runSolana };
   const program = createProgram(connection, admin, programId);
   const before = await readOnChainConfig(program);
   if (before !== null) {

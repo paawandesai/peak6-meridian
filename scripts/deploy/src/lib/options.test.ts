@@ -39,6 +39,14 @@ describe("parseOptions", () => {
     expect(options.skipBuild).toBe(true);
   });
 
+  it("--allow-upgrade is opt-in", () => {
+    const off = parseOptions(env(), [], "/repo");
+    const on = parseOptions(env(), ["--allow-upgrade"], "/repo");
+    if (off === "help" || on === "help") throw new Error("unexpected help");
+    expect(off.allowUpgrade).toBe(false);
+    expect(on.allowUpgrade).toBe(true);
+  });
+
   it("--repo-root redirects relative paths to the given root", () => {
     const options = parseOptions(env(), ["--repo-root", "/copy", "--out", "rec.json"], "/repo");
     if (options === "help") throw new Error("unexpected help");

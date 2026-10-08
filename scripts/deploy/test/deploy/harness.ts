@@ -5,9 +5,11 @@ import { createHash } from "node:crypto";
 import {
   copyFileSync,
   cpSync,
+  closeSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -171,6 +173,21 @@ export type Validator = {
 export async function startValidator(
   accounts: readonly { address: string; file: string }[] = [],
 ): Promise<Validator> {
+  let lastError = "";
+  // A port picked as free can be taken before the validator binds it: retry with new ports.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await startValidatorOnce(accounts);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  throw new Error(`solana-test-validator did not start after 3 attempts: ${lastError}`);
+}
+
+async function startValidatorOnce(
+  accounts: readonly { address: string; file: string }[],
+): Promise<Validator> {
   const ledger = makeTempDir("ledger");
   const { rpc, faucet } = await validatorPorts();
   const args = [
@@ -188,9 +205,12 @@ export async function startValidator(
   for (const account of accounts) {
     args.push("--account", account.address, account.file);
   }
+  // Outside the ledger: `--reset` clears the ledger directory, including files placed in it.
+  const output = `${ledger}.out`;
+  const fd = openSync(output, "w");
   const child: ChildProcess = spawn("solana-test-validator", args, {
     cwd: REPO_ROOT,
-    stdio: "ignore",
+    stdio: ["ignore", fd, fd],
   });
   let exited = false;
   child.once("exit", () => {
@@ -198,36 +218,35 @@ export async function startValidator(
   });
   const rpcUrl = `http://127.0.0.1:${rpc}`;
   const connection = new Connection(rpcUrl, "confirmed");
+  const stop = async () => {
+    if (!exited) {
+      child.kill();
+      await new Promise<void>((done) => {
+        child.once("exit", () => done());
+        setTimeout(done, 10_000);
+      });
+    }
+    closeSync(fd);
+    removeDir(ledger);
+    rmSync(output, { force: true });
+  };
   const deadline = Date.now() + 120_000;
   for (;;) {
-    if (exited) {
-      throw new Error("solana-test-validator exited during startup");
+    if (exited || Date.now() > deadline) {
+      const tail = readFileSync(output, "utf8").split("\n").slice(-8).join("\n");
+      await stop();
+      throw new Error(
+        `${exited ? "validator exited during startup" : "validator not ready after 120 s"}: ${tail}`,
+      );
     }
     try {
       await connection.getVersion();
       break;
     } catch {
-      if (Date.now() > deadline) {
-        child.kill();
-        throw new Error("solana-test-validator not ready after 120 s");
-      }
       await new Promise((r) => setTimeout(r, 500));
     }
   }
-  return {
-    rpcUrl,
-    connection,
-    async stop() {
-      if (!exited) {
-        child.kill();
-        await new Promise<void>((done) => {
-          child.once("exit", () => done());
-          setTimeout(done, 10_000);
-        });
-      }
-      removeDir(ledger);
-    },
-  };
+  return { rpcUrl, connection, stop };
 }
 
 /** Airdrops `sol` SOL to `pubkey` and waits for confirmation. */

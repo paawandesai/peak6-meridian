@@ -2,6 +2,8 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { redactRpcUrl } from "@meridian/client";
+
 import { runDeploy } from "./lib/deploy";
 import { parseOptions, USAGE } from "./lib/options";
 
@@ -20,8 +22,10 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   // The message only: errors here never carry key material (see lib/keypair.ts).
+  // Provider RPC URLs often carry an API key: redact before printing.
+  const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(
-    `deploy-devnet: ${error instanceof Error ? error.message : String(error)}\n`,
+    `deploy-devnet: ${redactRpcUrl(message, process.env.SOLANA_RPC_URL ?? "")}\n`,
   );
   process.exitCode = 1;
 });

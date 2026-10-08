@@ -71,32 +71,55 @@ describe("programDataHeader", () => {
   });
 });
 
-describe("onChainElfMatches", () => {
-  it("matches the stored ELF followed by padding", () => {
+describe("onChainElfMatches (the exact comparison rule)", () => {
+  it("matches the stored ELF followed by zero padding (property)", () => {
     fc.assert(
       fc.property(
         fc.uint8Array({ minLength: 1, maxLength: 200 }),
         fc.nat({ max: 50 }),
         (elf, padding) => {
-          const data = programDataAccount(1n, null, elf, padding);
-          expect(onChainElfMatches(data, elf)).toBe(true);
+          expect(onChainElfMatches(programDataAccount(1n, null, elf, padding), elf)).toBe(true);
         },
       ),
     );
   });
 
-  it("does not match when the on-chain ELF is a longer, older build (padding-aware)", () => {
+  it("matches a .so whose own last bytes are zero (nothing is trimmed)", () => {
+    const elf = Uint8Array.from([7, 8, 9, 0, 0]);
+    expect(onChainElfMatches(programDataAccount(1n, null, elf, 6), elf)).toBe(true);
+    // ...but a same-prefix on-chain buffer with a non-zero tail is a different program.
+    const tail = programDataAccount(1n, null, elf, 6);
+    tail[tail.length - 1] = 1;
+    expect(onChainElfMatches(tail, elf)).toBe(false);
+  });
+
+  it("does not match a non-zero padded tail (an older, longer build)", () => {
     const old = Uint8Array.from([1, 2, 3, 4, 5, 6]);
     const shorter = Uint8Array.from([1, 2, 3, 4]);
     expect(onChainElfMatches(programDataAccount(1n, null, old, 2), shorter)).toBe(false);
-    expect(onChainElfMatches(programDataAccount(1n, null, shorter, 9), old)).toBe(false);
   });
 
-  it("does not match a changed byte or a longer local ELF", () => {
+  it("does not match a short on-chain buffer (len < built_len)", () => {
+    const built = Uint8Array.from([1, 2, 3, 4]);
+    expect(onChainElfMatches(programDataAccount(1n, null, built.slice(0, 2)), built)).toBe(false);
+    expect(onChainElfMatches(new Uint8Array(10), built)).toBe(false);
+  });
+
+  it("starts comparing after the 45-byte header, not before", () => {
+    const built = Uint8Array.from([5, 5, 5]);
+    const data = programDataAccount(1n, null, built);
+    expect(PROGRAM_DATA_HEADER_LEN).toBe(45);
+    expect(onChainElfMatches(data, built)).toBe(true);
+    // a built ELF equal to the header bytes' continuation would only match at offset 45
+    const shifted = new Uint8Array(data.length + 1);
+    shifted.set(data, 1);
+    expect(onChainElfMatches(shifted, built)).toBe(false);
+  });
+
+  it("does not match a changed byte", () => {
     const elf = Uint8Array.from([1, 2, 3, 4]);
-    const data = programDataAccount(1n, null, elf, 4);
-    const changed = Uint8Array.from([1, 2, 9, 4]);
-    expect(onChainElfMatches(data, changed)).toBe(false);
-    expect(onChainElfMatches(data, new Uint8Array(100))).toBe(false);
+    expect(
+      onChainElfMatches(programDataAccount(1n, null, elf, 4), Uint8Array.from([1, 2, 9, 4])),
+    ).toBe(false);
   });
 });
