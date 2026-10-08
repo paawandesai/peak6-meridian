@@ -247,6 +247,8 @@ export async function deployRailway(
         `@railway/cli@${RAILWAY_CLI_VERSION}`,
         "up",
         "--ci",
+        "--project",
+        target.projectId,
         "--service",
         options.serviceName,
         "--environment",

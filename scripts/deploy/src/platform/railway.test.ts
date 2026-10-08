@@ -96,7 +96,10 @@ describe("deployRailway", () => {
     expect(runEnv.RAILWAY_TOKEN).toBe(TOKEN);
     expect(runEnv.RAILWAY_API_TOKEN).toBeUndefined();
     expect(Object.keys(runEnv).sort()).not.toContain("AUTOMATION_KEYPAIR");
-    expect(runArgs.join(" ")).toContain("@railway/cli@5.64.0 up --ci --service automation");
+    expect(runArgs.join(" ")).toContain(
+      "@railway/cli@5.64.0 up --ci --project p1 --service automation",
+    );
+    expect(runArgs.join(" ")).toContain("--environment e1");
     expect(runArgs.join(" ")).not.toContain(TOKEN);
     expect(CONFIG_FILE).toBe("services/automation/railway.json");
     const output = logs.join("\n");
@@ -108,10 +111,13 @@ describe("deployRailway", () => {
   it("account token: reuses an existing project by name", async () => {
     const { deps, queries, headersSeen } = fakes("account-existing");
     let runEnv: NodeJS.ProcessEnv = {};
-    await deployRailway(deps, options, async (_c, _a, o) => {
+    let runArgs: readonly string[] = [];
+    await deployRailway(deps, options, async (_c, args, o) => {
       runEnv = o.env;
+      runArgs = args;
       return { stdout: "" };
     });
+    expect(runArgs.join(" ")).toContain("--project p1 --service automation --environment e1");
     expect(queries.some((q) => q.includes("projectCreate"))).toBe(false);
     expect(headersSeen.at(-1)?.Authorization).toBe(`Bearer ${TOKEN}`);
     expect(runEnv.RAILWAY_API_TOKEN).toBe(TOKEN);
@@ -120,8 +126,13 @@ describe("deployRailway", () => {
 
   it("account token: creates the project when absent", async () => {
     const { deps, queries } = fakes("account-new");
-    await deployRailway(deps, options, async () => ({ stdout: "" }));
+    let runArgs: readonly string[] = [];
+    await deployRailway(deps, options, async (_c, args) => {
+      runArgs = args;
+      return { stdout: "" };
+    });
     expect(queries.some((q) => q.includes("projectCreate"))).toBe(true);
+    expect(runArgs.join(" ")).toContain("--project p1 --service automation --environment e1");
   });
 
   it("refuses before any network call when required variables are missing", async () => {
