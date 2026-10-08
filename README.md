@@ -17,11 +17,11 @@ make e2e              # scripted full lifecycle: create → mint → trade (4 pa
 Commands and conventions: [CLAUDE.md](CLAUDE.md). Environment variables: [docs/environment.md](docs/environment.md).
 
 ## Devnet
-- **Program ID (declared):** `3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq` (the key behind it is held by the human, OQ-5). The first live run writes it, with the mint and Config PDA, to `deployments/devnet.json`.
+- **Program ID (declared, re-keyed in D-053):** `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm` (its keypair is held outside the repo; see [docs/decisions.md](docs/decisions.md)). The first live run writes it, with the mint and Config PDA, to `deployments/devnet.json`.
 - **Test-USDC mint:** _not created yet._ The first live `make deploy-devnet` run creates it (6 decimals, mint authority = the faucet key) and writes its address to `deployments/devnet.json` and here.
 - **Frontend URL, how to get test-USDC:** _filled in when the app is deployed (M2)._
 
-Deploy (idempotent, refuses any cluster whose genesis hash is not devnet; needs the keypairs from OQ-5, see [docs/environment.md](docs/environment.md#devnet-deploy)):
+Deploy (idempotent, refuses any cluster whose genesis hash is not devnet; needs the keypairs from D-053 (OQ-5), see [docs/environment.md](docs/environment.md#devnet-deploy)):
 
 ```sh
 make deploy-devnet                                            # program, test-USDC mint, config
