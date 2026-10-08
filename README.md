@@ -17,7 +17,16 @@ make e2e              # scripted full lifecycle: create → mint → trade (4 pa
 Commands and conventions: [CLAUDE.md](CLAUDE.md). Environment variables: [docs/environment.md](docs/environment.md).
 
 ## Devnet
-_Filled in when M2 ships: program ID, frontend URL, how to get test-USDC._
+- **Program ID (declared):** `3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq` (the key behind it is held by the human, OQ-5). It is recorded in [`deployments/devnet.json`](deployments/devnet.json).
+- **Test-USDC mint:** _not created yet._ The first live `make deploy-devnet` run creates it (6 decimals, mint authority = the faucet key) and writes its address to `deployments/devnet.json` and here.
+- **Frontend URL, how to get test-USDC:** _filled in when the app is deployed (M2)._
+
+Deploy (idempotent, refuses any cluster whose genesis hash is not devnet; needs the keypairs from OQ-5, see [docs/environment.md](docs/environment.md#devnet-deploy)):
+
+```sh
+make deploy-devnet                                            # program, test-USDC mint, config
+make deploy-devnet DEPLOY_ARGS="--feeds deployments/feeds.devnet.json"   # pin real Switchboard feeds
+```
 
 ## Demo
 _Filled in as milestones ship._

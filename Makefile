@@ -13,7 +13,7 @@ export NEXT_TELEMETRY_DISABLED := 1
 PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
-	client lint typecheck test test-security coverage audit eval-live e2e dev
+	client lint typecheck test test-security coverage audit eval-live deploy-devnet e2e dev
 
 help:
 	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e dev"
@@ -91,6 +91,12 @@ audit:
 ## Not part of CI: CI runs the same cases with the scripted fake (`make test`).
 eval-live:
 	uv run --locked python services/ops-agent/evals/run_live.py
+
+## Devnet deploy (M2-01): program, test-USDC mint and Config; idempotent, refuses any non-devnet
+## cluster by genesis hash. Needs the environment in docs/environment.md (§ Devnet deploy).
+## Extra flags: make deploy-devnet DEPLOY_ARGS="--feeds deployments/feeds.devnet.json".
+deploy-devnet:
+	pnpm --filter meridian-scripts run deploy-devnet $(DEPLOY_ARGS)
 
 ## End-to-end smoke on a local validator.
 e2e:
