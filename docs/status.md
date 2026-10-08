@@ -1,7 +1,7 @@
 <!-- OWNER: operator. -->
 # Status
 
-_Last updated: 2026-10-07 12:05 CT by operator (merge main into M1-09 after D-047; OQ-12 option b on MR !9)._
+_Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, OQ-17)._
 
 ## Current milestone
 **M1: Core lifecycle, local** (ends Wed Oct 7 23:59 ET). Tickets: [tickets/M1.md](tickets/M1.md). Next anchor: Thu Oct 8 16:05 ET devnet rehearsal settlement.
