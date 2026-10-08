@@ -215,9 +215,107 @@ export type Meridian = {
       discriminator: [89, 240, 244, 16, 196, 201, 190, 163];
       accounts: [
         {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "market";
+          writable: true;
+        },
+        {
+          name: "book";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [98, 111, 111, 107];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+          relations: ["market"];
+        },
+        {
           name: "user";
-          docs: ["The user buying NO."];
+          docs: ["The user buying NO; pays rent for `open_orders` on first use."];
+          writable: true;
           signer: true;
+        },
+        {
+          name: "openOrders";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 111];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+              {
+                kind: "account";
+                path: "user";
+              },
+            ];
+          };
+        },
+        {
+          name: "userUsdc";
+          writable: true;
+        },
+        {
+          name: "userYes";
+          writable: true;
+        },
+        {
+          name: "userNo";
+          writable: true;
+        },
+        {
+          name: "yesMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "noMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "vault";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowUsdc";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowYes";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
         },
       ];
       args: [
@@ -834,9 +932,107 @@ export type Meridian = {
       discriminator: [189, 194, 132, 42, 80, 249, 154, 103];
       accounts: [
         {
+          name: "config";
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "market";
+          writable: true;
+        },
+        {
+          name: "book";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [98, 111, 111, 107];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+            ];
+          };
+          relations: ["market"];
+        },
+        {
           name: "user";
-          docs: ["The user selling NO."];
+          docs: ["The user selling NO; pays rent for `open_orders` on first use."];
+          writable: true;
           signer: true;
+        },
+        {
+          name: "openOrders";
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 111];
+              },
+              {
+                kind: "account";
+                path: "market";
+              },
+              {
+                kind: "account";
+                path: "user";
+              },
+            ];
+          };
+        },
+        {
+          name: "userUsdc";
+          writable: true;
+        },
+        {
+          name: "userYes";
+          writable: true;
+        },
+        {
+          name: "userNo";
+          writable: true;
+        },
+        {
+          name: "yesMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "noMint";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "vault";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowUsdc";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "escrowYes";
+          writable: true;
+          relations: ["market"];
+        },
+        {
+          name: "tokenProgram";
+          address: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
         },
       ];
       args: [
