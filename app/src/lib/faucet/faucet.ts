@@ -99,7 +99,9 @@ async function buildClaim(
   for (const marked of [bucket, bucket + 1n]) {
     const seed = markerSeed(wallet, marked);
     const marker = await PublicKey.createWithSeed(payer, seed, SystemProgram.programId);
-    instructions.push(SystemProgram.transfer({ fromPubkey: payer, toPubkey: marker, lamports: rent }));
+    instructions.push(
+      SystemProgram.transfer({ fromPubkey: payer, toPubkey: marker, lamports: rent }),
+    );
     markerIndexes.push(instructions.length);
     instructions.push(
       SystemProgram.allocate({
@@ -112,7 +114,9 @@ async function buildClaim(
     );
   }
   const ata = getAssociatedTokenAddressSync(deps.mint, wallet);
-  instructions.push(createAssociatedTokenAccountIdempotentInstruction(payer, ata, wallet, deps.mint));
+  instructions.push(
+    createAssociatedTokenAccountIdempotentInstruction(payer, ata, wallet, deps.mint),
+  );
   instructions.push(createMintToInstruction(deps.mint, ata, payer, deps.amountBaseUnits));
   const tx = new Transaction({ feePayer: payer, ...blockhash }).add(...instructions);
   tx.sign(deps.keypair);
@@ -148,13 +152,17 @@ export function createFaucet(deps: FaucetDeps): Faucet {
       authority = await deps.chain.getMintAuthority(deps.mint);
     } catch (error) {
       deps.log({ event: "faucet_mint_unreadable", reason: (error as Error).name });
-      return { status: 502, error: "The faucet could not read the test-USDC mint; try again shortly." };
+      return {
+        status: 502,
+        error: "The faucet could not read the test-USDC mint; try again shortly.",
+      };
     }
     if (authority === null || !authority.equals(deps.keypair.publicKey)) {
       deps.log({ event: "faucet_misconfigured", reason: "faucet key is not the mint authority" });
       return {
         status: 500,
-        error: "The faucet is misconfigured: its key is not the mint authority of the test-USDC mint.",
+        error:
+          "The faucet is misconfigured: its key is not the mint authority of the test-USDC mint.",
       };
     }
     verifiedConfig = true;
@@ -214,7 +222,10 @@ export function createFaucet(deps: FaucetDeps): Faucet {
       } catch (error) {
         const reason = error instanceof ClusterError ? error.message : "cluster check failed";
         deps.log({ event: "faucet_cluster_refused", reason: redactRpcUrl(reason, deps.rpcUrl) });
-        return { status: 503, error: "The faucet only runs on Solana devnet or a local validator." };
+        return {
+          status: 503,
+          error: "The faucet only runs on Solana devnet or a local validator.",
+        };
       }
       try {
         const misconfigured = await checkConfig();
@@ -223,13 +234,19 @@ export function createFaucet(deps: FaucetDeps): Faucet {
         const balance = await deps.chain.getBalance(deps.keypair.publicKey);
         if (BigInt(balance) < deps.minLamports) {
           await maybeAlert(balance);
-          return { status: 503, error: "The faucet is out of funds right now; please try again later." };
+          return {
+            status: 503,
+            error: "The faucet is out of funds right now; please try again later.",
+          };
         }
         return await attempt(wallet);
       } catch (error) {
         // Only the error class: messages from the RPC client can echo the URL.
         deps.log({ event: "faucet_error", reason: (error as Error).name });
-        return { status: 502, error: "The faucet could not complete the claim; try again shortly." };
+        return {
+          status: 502,
+          error: "The faucet could not complete the claim; try again shortly.",
+        };
       }
     },
   };

@@ -50,7 +50,15 @@ function setup(overrides: { skewMs?: number; cooldownMs?: number } = {}) {
       now: () => localTime + skewMs,
       log: (entry) => logs.push(entry),
     });
-  return { keypair, chain, logs, alerts, faucet: make(), make, setLocalTime: (ms: number) => (localTime = ms) };
+  return {
+    keypair,
+    chain,
+    logs,
+    alerts,
+    faucet: make(),
+    make,
+    setLocalTime: (ms: number) => (localTime = ms),
+  };
 }
 
 /** A faucet on `chain` signing with `keypair` (the markers are derived from the faucet key). */
@@ -112,10 +120,18 @@ describe("AB-21 one claim per wallet per 24 h", () => {
   });
 
   it("cannot be bypassed by respelling the address: a different spelling is a different, usually invalid, wallet", async () => {
-    const { faucet, chain } = setup();
+    const { faucet } = setup();
     const w = wallet();
     expect(status(await faucet.claim(w))).toBe(200);
-    for (const variant of [w.toLowerCase(), w.toUpperCase(), `${w}1`, w.slice(1), "", "not an address", "0".repeat(44)]) {
+    for (const variant of [
+      w.toLowerCase(),
+      w.toUpperCase(),
+      `${w}1`,
+      w.slice(1),
+      "",
+      "not an address",
+      "0".repeat(44),
+    ]) {
       const result = await faucet.claim(variant);
       // Either rejected as invalid, or (if the respelling is itself a valid key) a distinct wallet.
       expect([200, 400]).toContain(result.status);
@@ -217,7 +233,11 @@ describe("AB-21 midnight boundary and cluster time", () => {
           // next buckets (and the second before it) on a copy of the chain; a successful probe
           // must not consume the markers.
           let allowedAt: number | undefined;
-          for (let k = Number(dayBucket(landedAt)) + 1; k <= Number(dayBucket(landedAt)) + 4; k += 1) {
+          for (
+            let k = Number(dayBucket(landedAt)) + 1;
+            k <= Number(dayBucket(landedAt)) + 4;
+            k += 1
+          ) {
             const probe = chain.clone();
             probe.unixTime = k * DAY;
             if (status(await faucetFor(probe, keypair).claim(w)) === 200) {
@@ -305,7 +325,17 @@ describe("AB-21 faucet funds", () => {
         expect(parseIntegerEnv("X", n.toString(), 0n)).toBe(n);
       }),
     );
-    for (const bad of ["0.1", "-5", "1e9", "0x10", "abc", "1 000", "+3", "1,000", "99999999999999999999"]) {
+    for (const bad of [
+      "0.1",
+      "-5",
+      "1e9",
+      "0x10",
+      "abc",
+      "1 000",
+      "+3",
+      "1,000",
+      "99999999999999999999",
+    ]) {
       expect(() => parseIntegerEnv("FAUCET_MIN_LAMPORTS", bad, 0n)).toThrow();
     }
   });

@@ -25,14 +25,15 @@ export function dayBucket(unixSeconds: number): bigint {
 
 /** The 32-character seed of one wallet and day bucket. */
 export function markerSeed(wallet: PublicKey, bucket: bigint): string {
-  const digest = createHash("sha256")
-    .update(wallet.toBytes())
-    .update(u64Le(bucket))
-    .digest("hex");
+  const digest = createHash("sha256").update(wallet.toBytes()).update(u64Le(bucket)).digest("hex");
   return digest.slice(0, 32);
 }
 
 /** The marker account address: `createWithSeed(base, seed, SystemProgram)`. */
-export function markerAddress(base: PublicKey, wallet: PublicKey, bucket: bigint): Promise<PublicKey> {
+export function markerAddress(
+  base: PublicKey,
+  wallet: PublicKey,
+  bucket: bigint,
+): Promise<PublicKey> {
   return PublicKey.createWithSeed(base, markerSeed(wallet, bucket), SystemProgram.programId);
 }

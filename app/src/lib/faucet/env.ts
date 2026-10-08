@@ -38,7 +38,9 @@ export function parseIntegerEnv(name: string, value: string | undefined, fallbac
   if (value === undefined || value.trim() === "") return fallback;
   const text = value.trim();
   if (!/^\d{1,18}$/.test(text)) {
-    throw new FaucetConfigError(`${name} must be a non-negative integer, got ${JSON.stringify(text)}`);
+    throw new FaucetConfigError(
+      `${name} must be a non-negative integer, got ${JSON.stringify(text)}`,
+    );
   }
   return BigInt(text);
 }
@@ -60,7 +62,8 @@ function parseKeypair(value: string | undefined): Keypair {
 }
 
 function parseMint(value: string | undefined): PublicKey {
-  if (value === undefined || value.trim() === "") throw new FaucetConfigError("USDC_MINT is not set");
+  if (value === undefined || value.trim() === "")
+    throw new FaucetConfigError("USDC_MINT is not set");
   try {
     return new PublicKey(value.trim());
   } catch {
@@ -70,7 +73,11 @@ function parseMint(value: string | undefined): PublicKey {
 
 /** Validates the environment; throws `FaucetConfigError` naming the variable (never its value). */
 export function parseFaucetEnv(env: FaucetEnv): FaucetSettings {
-  const amountUsdc = parseIntegerEnv("FAUCET_AMOUNT_USDC", env.FAUCET_AMOUNT_USDC, DEFAULT_AMOUNT_USDC);
+  const amountUsdc = parseIntegerEnv(
+    "FAUCET_AMOUNT_USDC",
+    env.FAUCET_AMOUNT_USDC,
+    DEFAULT_AMOUNT_USDC,
+  );
   if (amountUsdc === 0n) throw new FaucetConfigError("FAUCET_AMOUNT_USDC must be at least 1");
   const cooldownSec = parseIntegerEnv(
     "FAUCET_ALERT_COOLDOWN_SEC",
@@ -78,13 +85,18 @@ export function parseFaucetEnv(env: FaucetEnv): FaucetSettings {
     BigInt(DEFAULT_ALERT_COOLDOWN_SEC),
   );
   const rpcUrl = env.SOLANA_RPC_URL?.trim();
-  if (rpcUrl === undefined || rpcUrl === "") throw new FaucetConfigError("SOLANA_RPC_URL is not set");
+  if (rpcUrl === undefined || rpcUrl === "")
+    throw new FaucetConfigError("SOLANA_RPC_URL is not set");
   const webhook = env.ALERT_WEBHOOK_URL?.trim();
   return {
     keypair: parseKeypair(env.FAUCET_KEYPAIR),
     mint: parseMint(env.USDC_MINT),
     amountBaseUnits: amountUsdc * BASE_UNITS_PER_USDC,
-    minLamports: parseIntegerEnv("FAUCET_MIN_LAMPORTS", env.FAUCET_MIN_LAMPORTS, DEFAULT_MIN_LAMPORTS),
+    minLamports: parseIntegerEnv(
+      "FAUCET_MIN_LAMPORTS",
+      env.FAUCET_MIN_LAMPORTS,
+      DEFAULT_MIN_LAMPORTS,
+    ),
     alertCooldownMs: Number(cooldownSec) * 1000,
     alertWebhookUrl: webhook === undefined || webhook === "" ? undefined : webhook,
     cluster: env.SOLANA_CLUSTER?.trim() || undefined,

@@ -7,17 +7,16 @@
  */
 import { DEVNET_GENESIS_HASH } from "@meridian/client";
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import {
-  PublicKey,
-  SystemInstruction,
-  SystemProgram,
-  type Transaction,
-} from "@solana/web3.js";
+import { PublicKey, SystemInstruction, SystemProgram, type Transaction } from "@solana/web3.js";
 
 import type { BlockhashInfo, ConfirmResult, FaucetChain, SimulationResult } from "./chain";
 
 type Account = { lamports: number; dataLen: number };
-type Outcome = { err: unknown; mints: { ata: string; amount: bigint }[]; accounts: Map<string, Account> };
+type Outcome = {
+  err: unknown;
+  mints: { ata: string; amount: bigint }[];
+  accounts: Map<string, Account>;
+};
 
 export class FakeFaucetChain implements FaucetChain {
   genesisHash = DEVNET_GENESIS_HASH;
@@ -54,7 +53,9 @@ export class FakeFaucetChain implements FaucetChain {
   }
 
   getGenesisHash(): Promise<string> {
-    return this.genesisError === undefined ? Promise.resolve(this.genesisHash) : Promise.reject(this.genesisError);
+    return this.genesisError === undefined
+      ? Promise.resolve(this.genesisHash)
+      : Promise.reject(this.genesisError);
   }
   getBalance(): Promise<number> {
     return Promise.resolve(this.balance);
@@ -91,7 +92,11 @@ export class FakeFaucetChain implements FaucetChain {
     const accounts = new Map([...this.accounts].map(([k, v]) => [k, { ...v }]));
     const mints: Outcome["mints"] = [];
     for (const [index, ix] of tx.instructions.entries()) {
-      const fail = (code: number): Outcome => ({ err: { InstructionError: [index, { Custom: code }] }, mints: [], accounts: this.accounts });
+      const fail = (code: number): Outcome => ({
+        err: { InstructionError: [index, { Custom: code }] },
+        mints: [],
+        accounts: this.accounts,
+      });
       if (ix.programId.equals(SystemProgram.programId)) {
         const type = SystemInstruction.decodeInstructionType(ix);
         if (type === "Transfer") {

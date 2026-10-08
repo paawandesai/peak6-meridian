@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createFaucetFromEnv } from "@/lib/faucet/instance";
-import { FaucetConfigError } from "@/lib/faucet/env";
 import type { Faucet } from "@/lib/faucet/faucet";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +30,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     wallet = body.parse(await request.json()).wallet;
   } catch {
-    return NextResponse.json({ error: "Send JSON like {\"wallet\": \"<address>\"}." }, { status: 400 });
+    return NextResponse.json({ error: 'Send JSON like {"wallet": "<address>"}.' }, { status: 400 });
   }
   let active: Faucet;
   try {
@@ -41,7 +40,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     console.warn(
       JSON.stringify({
         event: "faucet_not_configured",
-        detail: error instanceof FaucetConfigError ? error.message : (error as Error).name,
+        detail:
+          (error as Error).name === "FaucetConfigError"
+            ? (error as Error).message
+            : (error as Error).name,
       }),
     );
     return NextResponse.json({ error: "The faucet is not configured." }, { status: 500 });
