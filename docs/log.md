@@ -58,3 +58,6 @@ PRD/docs verification (local `.ao-ops/prd-docs-verification.md`):
 
 ## 2026-10-07 21:07 CT · orchestrator
 - UI-01 design spec drafted by the orchestrator with the frontend-design plugin (/design command not available in session); docs/design.md + UI-02..UI-08 tickets added to docs/tickets/M1.md (D-048). Docs only.
+
+## 2026-10-07 23:25 CT · orchestrator
+- **M2 tickets** M2-01..M2-13 drafted by the orchestrator (Tier 2, Paawan notified; By: orchestrator); UI-04/05/06/08 design ACs folded into M2-06/07/08/10. MR !24.
