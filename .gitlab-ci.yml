@@ -417,7 +417,22 @@ heartbeat:
 .deploy:
   stage: deploy
   rules:
+    # Docs-only pushes to main skip the deploy: only deploy inputs trigger it.
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        paths:
+          - app/**/*
+          - services/**/*
+          - packages/**/*
+          - programs/**/*
+          - scripts/deploy/**/*
+          - package.json
+          - pnpm-lock.yaml
+          - pnpm-workspace.yaml
+          - Makefile
+          - app/vercel.json
+          - services/automation/railway.json
+          - .gitlab-ci.yml
   interruptible: false
   retry: 0
   timeout: 20 minutes
