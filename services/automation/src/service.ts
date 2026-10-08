@@ -73,8 +73,6 @@ export interface HealthReport {
     readonly name: string;
     readonly cron?: string;
     readonly signer?: string;
-    /** A stand-in that does no real work yet. */
-    readonly placeholder?: boolean;
     readonly scheduled: boolean;
     readonly disabled?: string;
   }[];
@@ -202,7 +200,6 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
         name: job.name,
         cron: job.cron,
         ...(job.signer === undefined ? {} : { signer: job.signer }),
-        ...(job.placeholder === true ? { placeholder: true } : {}),
         scheduled: true,
       })),
       ...disabled.map((name) => ({ name, scheduled: false, disabled: degraded ?? "" })),
