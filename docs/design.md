@@ -168,7 +168,7 @@ After:
 ├───────────────────────────────────────────────────────────────────────────────────────┤
 │ Will a MAG7 stock close at or above a price today? Pick a strike; YES wins at or above,│  ← landing (FR-21), 2 lines,
 │ NO wins below. Max loss is what you pay.                                [Connect wallet]│    hidden once connected
-├ NVDA  $181.42  ▲0.8%  as of 14:52:05 ET                         7 strikes · closes 16:00 ET ┤
+├ NVDA  $181.42  as of 14:52:05 ET                                7 strikes · closes 16:00 ET ┤
 │  $180  ▏██████████████████        58¢ YES   42¢ NO   58%   Open             [Trade]     │  ← whole row is the link
 │ ─────── live $181.42 ───────────────────────────────────────────────                    │  ← live-price marker
 │  $190  ▏██████                    18¢ YES   82¢ NO   18%   Open                         │
@@ -176,7 +176,7 @@ After:
 │  ...                                                                                    │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
-Strikes are listed ascending (UI-03 AC1). Annotations: (a) the ladder bar length = YES price, labelled with the number; (b) the live-price line sits between the two strikes it falls between; (c) each row links to Trade (2 clicks from landing: ticker row → strike row); (d) state badge text per §3; (e) 390 px: the bar collapses under the strike and the NO column hides behind a "YES/NO" toggle. (f) the ladder is a semantic table: one `row` per strike under a `region` per ticker, and the pairs outstanding count from M1-12 stays as a muted figure on each row (behind the same toggle at 390 px), so the M1-12 tests map onto it one-to-one.
+Strikes are listed ascending (UI-03 AC1). The ticker header shows no day-change percentage: it needs a previous close or open price that is neither on-chain nor read by M1-12, and money math here is integer cents only. A later M2/M3 data ticket may add it from a supplied reference price, computed in integer basis points. Annotations: (a) the ladder bar length = YES price, labelled with the number; (b) the live-price line sits between the two strikes it falls between; (c) each row links to Trade (2 clicks from landing: ticker row → strike row); (d) state badge text per §3; (e) 390 px: the bar collapses under the strike and the NO column hides behind a "YES/NO" toggle. (f) the ladder is a semantic table: one `row` per strike under a `region` per ticker, and the pairs outstanding count from M1-12 stays as a muted figure on each row (behind the same toggle at 390 px), so the M1-12 tests map onto it one-to-one.
 
 ### Trade
 Before: does not exist (M2).
