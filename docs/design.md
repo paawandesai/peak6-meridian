@@ -1,11 +1,25 @@
 <!-- OWNER: shared. -->
-# Meridian: UI design spec (UI-01, D-048)
+# Meridian: UI design spec (UI-01 v2, D-048)
 
 Scope: how every Meridian page looks and reads, grounded in [requirements.md](requirements.md), [domain.md](domain.md), [plan.md](plan.md) and [brief.md](brief.md). This file changes no code. Implementation lives in the UI wave tickets (UI-02 onward) in [tickets/M1.md](tickets/M1.md#ui-wave-d-048). Cursor reviews every UI MR against this file as well as its ticket.
 
 Method: drafted with the frontend-design plugin (Claude Code's `/design` command was not available in the operator session). The baseline was the M1-12 code on MR !17 (`app/src/app/layout.tsx`, `components/app-shell.tsx`, `components/markets-view.tsx`); it is the only page that exists. "Before" screenshots of each page are taken by the implementing ticket, against `make dev`, and attached to its MR.
 
 Nothing here adds a feature, a framework, a font, a CDN asset or a non-integer amount. Anything that would is listed under [Open questions](#open-questions) instead.
+
+**v2 (research-grounded).** v2 keeps v1's structure, tokens and hierarchy and changes only what public products show better. The evidence is in [design-research.md](design-research.md) (ids `R-K*` Kalshi, `R-P*` Polymarket, `R-R*` Robinhood, `R-I*` Interactive Brokers, `R-N*` Nadex; adopt `A*` and avoid `V*` lists). Claims there are limited to fetched public pages; unverified ones are marked and are never the only reason for a change.
+
+| v2 change | Section | Research | Tickets touched |
+|---|---|---|---|
+| Cost strip above the sign button (cost = max loss, pays if right, profit if right, fees, estimated total) | §3 Payoff sentence, §5 Trade | A1, A10; R-I3, R-R3, R-K3, R-R1 | UI-04 (AC9) |
+| Average fill price and levels in the simulated result | §3 Payoff sentence | A2; R-K1 | UI-04 (AC9) |
+| "How a strike settles" rule line and timeline strip | §3 (new), §5 Trade | A3, V6; R-K4, R-R4, R-I4, R-P3 | UI-04 (AC10) |
+| Displayed-price rule: midpoint, or bid and ask when the spread is over 10¢; always-visible "not a price you can trade at" text | §3 Price, probability | A4, V2; R-P1, R-N1, R-K3b | UI-03 (AC4 scoped, AC7), UI-04 (AC9) |
+| Portfolio filters (Open, Resting orders, Closed) and an "If right pays" column; value footnote | §2 Portfolio, §5 Portfolio | A5; R-K3, R-K3b | UI-05 (AC5) |
+| "Closed does not mean settled" help text, once per page and in the Trade reason (never inside a badge) | §3 Market state | A6; R-K4, R-K6 | UI-03 (AC7), UI-04 (AC9) |
+| "YES + NO = 100¢, NO is derived" line; NO range in the wide-spread case | §3 YES vs NO | A7, V1; R-R2, R-P1b | UI-03 (AC4 scoped, AC7), UI-04 (AC4 caption, AC9) |
+| Connect copy: connecting asks for nothing and moves nothing; each trade is one signature | §5 Markets | A8, V4; R-P4 | UI-03 (AC7) |
+| Market question carries the time: "at today's 16:00 ET close" | §2 Trade | A9; R-R4 | UI-04 (AC9) |
 
 ---
 
@@ -34,13 +48,13 @@ Read order, first → third. Anything not listed is secondary and visually quiet
 Trading-date scoping: the reader returns every date's markets (devnet keeps old days), so a page never mixes days and never goes blank while markets exist. The **active date** is today's ET trading date when the reader result has markets for it, otherwise the most recent `trading_date` present in the result. "Today" is the current ET calendar date from `Intl.DateTimeFormat` (`timeZone: "America/New_York"`) as the `YYYYMMDD` number that `Market.trading_date` stores (`packages/client` `tradingDate`). One ladder per ticker holds only the active date's markets, with a single live-price marker and its own strike count; the header's next close and its empty states use the same set. When the active date is not today (weekends, holidays, and every morning before the day's markets exist at about 08:30 ET) the Markets page shows a line above the ladders, `Showing markets from {YYYY-MM-DD} (closed)`, so an evaluator who opens the app after Friday's close sees Friday's settled ladders, not an empty page. "No markets today" appears only for an empty reader result. Earlier days' positions and winnings are also reachable through Portfolio and History.
 
 **Trade** (one strike)
-1. The question in plain words: "Will NVDA close at or above $180 today?", with state, countdown to close and live price + as-of.
-2. The 4-intent panel (Buy YES, Buy NO, Sell YES, Sell NO) with the payoff sentence and simulated result directly above the single sign button.
+1. The question in plain words, with the time: "Will NVDA close at or above $180.00 at today's 16:00 ET close?" (the time is the market's own `close_ts` in ET, so 13:00 ET on an early close; [A9](design-research.md#8-adopt)), with state, countdown to close and live price + as-of.
+2. The 4-intent panel (Buy YES, Buy NO, Sell YES, Sell NO) with the payoff sentence, the cost strip and the simulated result directly above the single sign button, and the "How this strike settles" line (§3) under the question.
 3. The book with a YES/NO toggle; then (M3) fair value, edge and the ticker's distribution chart.
 
 **Portfolio**
 1. Wallet total: USDC balance, redeemable now, unrealized P&L.
-2. Positions table: market, side, qty, avg entry, mark, unrealized, realized; settled rows show outcome and a Redeem button.
+2. Positions table with three filters, Open, Resting orders and Closed ([A5](design-research.md#8-adopt), R-K3): market, side, qty, avg entry, mark, "If right pays", unrealized, realized; settled rows show outcome and a Redeem button. A footnote says the mark is the book midpoint, not a guaranteed sale price (R-K3b).
 3. MM block: net exposure per strike (dense), open orders, unsettled open-orders balance.
 
 **History**: (1) newest event first, with time ET, market, action, side, price, qty; (2) the tx signature linked to the devnet explorer; (3) filters.
@@ -57,6 +71,7 @@ Rule for everything below: **text plus colour, never colour alone.** Every colou
 - YES uses the `--mer-yes` hue (blue); NO uses `--mer-no` (amber). Blue and amber stay distinguishable for the common colour-vision deficiencies. Red and green are reserved for P&L sign and pass/fail, never for sides.
 - Sides are always labelled with their full word, "YES" / "NO", plus a one-line meaning on first use per page: "YES pays $1.00 if NVDA closes at or above $180."
 - The NO price is always shown as `100 − YES` in cents. It is never computed in floats.
+- NO is derived, never separately quoted, so the pair always totals 100¢; the book's NO view and the Trade panel say so in one templated line with the live numbers (`NO {100 − yes}¢ = 100 − {yes}¢ YES; YES + NO = 100¢`, for example NO 42¢ = 100 − 58¢ YES). Products that quote the two sides separately can show a pair above $1 (R-R2, V1); the line makes it plain Meridian cannot ([A7](design-research.md#8-adopt)).
 
 ### The four intents
 - One segmented control with four labelled buttons, in the domain order **Buy YES · Buy NO · Sell YES · Sell NO**, each with a sub-label that says the outcome: "wins if ≥ $180", "wins if < $180", "exit YES", "exit NO".
@@ -89,6 +104,8 @@ Paused + Settled follows the Settled row and paused + Closed the Closed row (see
 | Override pending | an override draft exists (supplied, see below) | Override pending, available at {HH:mm} ET, and from `close_ts + override_delay_secs` on `Override pending, available now` | warn outline |
 | Paused | global pause flag and the market is otherwise `Open` or `Closing soon` (see precedence below) | Paused: trading and minting stopped; cancel, withdraw and redeem still work | danger outline, banner on every page |
 
+Help text for Closed, Settling and Settlement delayed (v2): "Trading has stopped. The result is set when settlement runs; closed does not mean settled." It appears in the Trade panel as its own line directly under the reason for those states (the reason strings quoted in "The four intents" stay exactly as written, and the help is never appended to them) and once per page on Markets (under the page header, only while the active date has such a market). It never goes inside a badge or a ladder row, where it would overflow at 390 px. Kalshi makes the same point about open or undetermined markets and notes settlement timing varies (R-K4, R-K6; [A6](design-research.md#8-adopt)).
+
 Precedence: `Paused` is a global flag (`Config.paused`), not a per-market status, so it never hides a market's own state. The global banner on every page always shows the pause. A market's badge and its Trade-panel reason come from the per-market state first (Settled, Settlement delayed, Settling, Closed); the `Paused` badge and reason apply only to a market that would otherwise be `Open` or `Closing soon`. Examples: paused and Settled YES shows the Settled YES badge with winner Redeem (pause blocks nothing for a settled market); paused and past `close_ts` shows Closed, with the banner saying why trading is stopped as well; paused and `Open` shows Paused. The actions offered are the union of what the program still accepts in the market's state, so pause never removes winner Redeem, Cancel, Withdraw or pair Redeem.
 
 Data sources for the states: the app reads only on-chain state (`Market`, `Config`) and the clock. **The shipped M1-12 reader does not decode all of it yet:** it exposes only `settled`, `closeTs`, `strikeCents` and `pairsOutstanding` per market and reads no `Config`, so `outcome`, `settle_price_scaled` and `Config.paused` are not available until **UI-02 AC7 extends the reader** (`MarketRow` gains `outcome` and `settlePriceScaled`, `MeridianReader` gains `getConfig()`, `marketStatus` gains Closing soon and Settling). Every state and field below that needs them is gated on that ticket, and UI-03 to UI-08 depend on it. From those it derives Open, Closing soon, Closed, Settling (the badge reads `Settling…` with no attempt number, and for no longer than the job's window: from `close_ts + 20 min` it reads `Settlement delayed`, derived from the clock alone, so a spinner never runs for an hour after the job gave up), Settled YES/NO and Paused (`Config.paused`). The settlement attempt count lives in `services/automation` and override drafts in `services/ops-agent`; neither is readable by the app today. `StateBadge` therefore takes them as optional props (`attempt?: number`, `overridePending?: { availableAt }`): UI-02 tests those variants through props, UI-03 renders only the derivable states and passes neither, and `Override pending` and the attempt number appear in the app only once an M2/M3 ticket exposes that data (the /status and admin tickets, UI-07 and UI-08, consume it then).
@@ -118,6 +135,7 @@ When the wallet holds NO on this strike, Buy YES is replaced in place by an inli
 
 ### Price, probability, fair value, edge
 - Price: `62¢` (integer cents, tabular figures). Implied probability is the same number with a different unit: `62%`. Show both together, price first: `62¢ · 62%`.
+- **Displayed price rule (v2).** The YES price on the ladder and in headers is the book midpoint of the best bid and best ask, in integer cents (floor of the average, which is what `packages/client` `yesMidCents` computes), when both sides exist and the spread is at most 10¢. When only one side exists, or the spread is wider than 10¢, the ladder shows the bid and ask range instead (`55–70¢ YES`, with the text "wide spread") and no probability figure, so a thin book never prints a precise-looking number. Polymarket publishes the same midpoint rule with a 10¢ spread cutoff (R-P1); Nadex reads the midpoint of bid and offer as implied probability (R-N1). The midpoint is not a price anyone can trade at, and the page says so in always-visible text, once per page under the page header (not hover-only, so keyboard and 390 px users see it): "Prices are the midpoint of the best bid and ask, not a price you can trade at. Buying costs the ask; selling pays the bid." Kalshi gives the same warning for displayed values (R-K3b). In the range case the NO column shows the NO range derived from the same book (NO bid = 100 − YES ask, NO ask = 100 − YES bid). The ticket always shows the executable ask or bid ([A4](design-research.md#8-adopt), V2).
 - Fair value (M3): `Fair 58¢` next to the market price; edge = market − fair, signed, in cents: `Edge +4¢ (rich)` / `Edge −3¢ (cheap)`. Rich/cheap is always written, never only coloured.
 
 ### Data staleness and time
@@ -133,6 +151,16 @@ One inline status line under the sign button, never a modal: `Simulating…` →
 Directly above the single sign button, always visible before signing:
 > You pay **$3.80** for 10 contracts. You win **$10.00** (profit $6.20) if NVDA closes **below $180** today. Max loss $3.80.
 Below it, the simulation result: "Simulated: fills 10 at 38¢ NO (62¢ YES bid). 1 signature." The sign button stays disabled until simulation succeeds.
+
+**Cost strip (v2).** Between the sentence and the simulation line, four labelled figures in one row (wrapping at 390 px), all from the simulated result and the integer-unit helpers, none computed in the component: **You pay** (this is also the most you can lose), **Pays if right**, **Profit if right**, **Fees**. For Buy YES and Buy NO: `You pay $3.80 · Pays if right $10.00 · Profit if right $6.20 · Fees $0.00 (network fee in devnet SOL)`. For Sell YES and Sell NO: `You receive $4.20 · Gives up if right $10.00 · Fees $0.00 (network fee in devnet SOL)`, where the amount received is the simulated proceeds in integer cents: selling N contracts at p¢ gives `N × p¢` (the sum over levels for a multi-price fill), so 10 at 42¢ shows $4.20, and "gives up if right" is `N × $1.00`. Amounts in the examples are illustrative; the labels are the template. IBKR's ticket lists "Potential Profit and Maximum Loss" and "Estimated Total for the Order" before the order (R-I3), and both Robinhood and Kalshi stress that a payout is not the profit (R-R3, R-K3), so the strip prints profit next to the payout rather than leaving the subtraction to the reader. The fee figure is explicit because fees are the first thing Robinhood's pricing pages discuss (R-R1) and a missing line reads as hidden; Meridian charges none, and the network fee is paid in devnet SOL, not USDC ([A1](design-research.md#8-adopt), [A10](design-research.md#8-adopt)). The strip adds no second source of truth: it repeats the figures the sentence already states, and the sentence stays the NFR-12/NFR-15 element.
+
+**Average fill (v2).** A market-sized order that walks several price levels reports the volume-weighted average and the level count, as in Kalshi's panel (R-K1, [A2](design-research.md#8-adopt)): `Simulated: fills 10 at an average 38.5¢ NO across 2 prices (YES bids 62¢ ×6, 61¢ ×4). 1 signature.` The average is `formatPriceTenths(total_cost, qty)`, rounded down, never overstated.
+
+### How a strike settles (v2)
+Every market page and every strike row's detail carries the rule in plain words, because every product that publishes market rules puts the resolution source next to the market (R-K4, R-R4, V6):
+> Settles on the average of two official closing prices (Tiingo and Twelve Data) for {YYYY-MM-DD}. YES wins at or above $180.00, NO wins below. The price must agree within 0.05%.
+
+and a timeline strip with times in ET from `close_ts` (never hardcoded; 13:00 on an early close): `Trading stops 16:00 ET · Settlement about 16:05 ET · Redeem after settlement`. IBKR shows each contract's last trading time, results release and payout (R-I4); Robinhood's event page names the source, rounding and payout timing (R-R4); Polymarket tells winners redemption has no deadline (R-P3), but Meridian only says what [domain.md](domain.md) states: winner redeem is available after settlement ([A3](design-research.md#8-adopt)). The 0.05% figure is `max_conf_bps` from `Config` when the reader exposes it and is omitted otherwise.
 
 ### Win/lose P&L
 - Positive P&L: `+$3.80` with `--mer-gain`; negative: `−$1.20` with `--mer-loss`. The sign character is always printed.
@@ -195,7 +223,8 @@ After:
 │                                                        Balance 1,250.00 test-USDC [Connect]│
 ├───────────────────────────────────────────────────────────────────────────────────────┤
 │ Will a MAG7 stock close at or above a price today? Pick a strike; YES wins at or above,│  ← landing (FR-21), 2 lines,
-│ NO wins below. Max loss is what you pay.                                [Connect wallet]│    hidden once connected
+│ NO wins below. Max loss is what you pay. Connecting costs nothing and moves no funds;   │
+│ each trade asks for one signature.                                      [Connect wallet]│    hidden once connected
 ├ NVDA  $181.42  as of 14:52:05 ET                                7 strikes · closes 16:00 ET ┤
 │  $180  ▏██████████████████        58¢ YES   42¢ NO   58%   Open             [Trade]     │  ← whole row is the link
 │ ─────── live $181.42 ───────────────────────────────────────────────                    │  ← live-price marker
@@ -204,31 +233,36 @@ After:
 │  ...                                                                                    │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
-Strikes are listed ascending (UI-03 AC1). The ticker header shows no day-change percentage: it needs a previous close or open price that is neither on-chain nor read by M1-12, and money math here is integer cents only. A later M2/M3 data ticket may add it from a supplied reference price, computed in integer basis points. Annotations: (a) the ladder bar length = YES price, labelled with the number; (b) the live-price line sits between the two strikes it falls between; (c) each row links to Trade (2 clicks from landing: ticker row → strike row); the link is an anchor in the strike cell stretched over the row (a `tr` cannot be an anchor), pointing at `/trade/{market address}`, and is rendered only once the Trade route exists (UI-04 AC8 passes the `tradeHref` function that builds `/trade/{market address}`), so the demo has no dead link: the `[Trade]` text in the mockup above appears only then; (d) state badge text per §3; (e) 390 px: the bar collapses under the strike and the NO column hides behind a "YES/NO" toggle. (f) the ladder is a semantic table: one `row` per strike under a `region` per ticker, and the pairs outstanding count from M1-12 stays as a muted figure on each row (behind the same toggle at 390 px), so the M1-12 tests map onto it one-to-one: the ticker `h2` holds only the symbol (price, as-of and the strike count sit in sibling elements of the header line), there is exactly one header row, and the live-price marker is a decorative `aria-hidden` element, never a table row.
+Strikes are listed ascending (UI-03 AC1). The ticker header shows no day-change percentage: it needs a previous close or open price that is neither on-chain nor read by M1-12, and money math here is integer cents only. A later M2/M3 data ticket may add it from a supplied reference price, computed in integer basis points. Annotations: (a) the ladder bar length = YES price, labelled with the number; when YES is a bid and ask range (spread over 10¢ or a missing side) there is no filled bar: an outlined segment spans the bid to the ask length with the range text, and the NO column shows the derived NO range; (b) the live-price line sits between the two strikes it falls between; (c) each row links to Trade (2 clicks from landing: ticker row → strike row); the link is an anchor in the strike cell stretched over the row (a `tr` cannot be an anchor), pointing at `/trade/{market address}`, and is rendered only once the Trade route exists (UI-04 AC8 passes the `tradeHref` function that builds `/trade/{market address}`), so the demo has no dead link: the `[Trade]` text in the mockup above appears only then; (d) state badge text per §3; (e) 390 px: the bar collapses under the strike and the NO column hides behind a "YES/NO" toggle. (g) the YES figure follows the displayed-price rule in §3 (midpoint, or a bid and ask range with "wide spread" when the spread is over 10¢ or a side is missing; R-P1, [A4](design-research.md#8-adopt)), and a row's detail repeats "YES + NO = 100¢" (A7). (f) the ladder is a semantic table: one `row` per strike under a `region` per ticker, and the pairs outstanding count from M1-12 stays as a muted figure on each row (behind the same toggle at 390 px), so the M1-12 tests map onto it one-to-one: the ticker `h2` holds only the symbol (price, as-of and the strike count sit in sibling elements of the header line), there is exactly one header row, and the live-price marker is a decorative `aria-hidden` element, never a table row.
 
 ### Trade
 Before: does not exist (M2).
 After:
 ```
-Will NVDA close at or above $180 today?          Open · closes in 1:07:53 · NVDA $181.42 as of 14:52:05 ET
-┌ Book  [YES view | NO view]       ┐ ┌ [Buy YES][Buy NO][Sell YES][Sell NO]          ┐
-│ asks  61¢ ×40   60¢ ×25           │ │ Market ○ Limit ●  Price 40¢ NO   Qty [ 10 ]   │
-│ ─── spread 2¢ ───                 │ │ You pay $4.00 for 10 contracts. You win $10.00 │
-│ bids  58¢ ×30   57¢ ×50           │ │ (profit $6.00) if NVDA closes below $180.      │
-└───────────────────────────────────┘ │ Simulated: rests YES ask at 60¢. 1 signature. │
-  (M3) Fair 58¢ · Edge +0¢             │ [ Sign and buy NO ]   status: Simulating…      │
-                                       └───────────────────────────────────────────────┘
+Will NVDA close at or above $180.00 at today's 16:00 ET close?   Open · closes in 1:07:53 · NVDA $181.42 as of 14:52:05 ET
+Settles on the average of two official closing prices (Tiingo, Twelve Data) for 2026-10-08. YES wins at or above $180.00.
+Trading stops 16:00 ET · Settlement about 16:05 ET · Redeem after settlement
+┌ Book  [YES view | NO view]       ┐ ┌ [Buy YES][Buy NO][Sell YES][Sell NO]                      ┐
+│ asks  61¢ ×40   60¢ ×25           │ │ Market ○ Limit ●  Price 40¢ NO   Qty [ 10 ]               │
+│ ─── spread 2¢ · mid 59¢ ───       │ │ You pay $4.00 for 10 contracts. You win $10.00             │
+│ bids  58¢ ×30   57¢ ×50           │ │ (profit $6.00) if NVDA closes below $180. Max loss $4.00. │
+└───────────────────────────────────┘ │ You pay $4.00 · Pays if right $10.00 · Profit if right    │
+  NO 40¢ = 100 − 60 YES; YES + NO =     │ $6.00 · Fees $0.00 (network fee in devnet SOL)            │
+  100¢. (M3) Fair 58¢ · Edge +0¢        │ Simulated: rests YES ask at 60¢. 1 signature.             │
+                                       │ [ Sign and buy NO ]   status: Simulating…                  │
+                                       └───────────────────────────────────────────────────────────┘
 ```
-Annotations: (a) the question is the H1; (b) the NO view relabels the same book (YES asks become NO bids at 100 − p), with a caption saying so; (c) the payoff sentence sits directly above the button; (d) one sign button, disabled until simulation passes; (e) 390 px: the panel stacks above the book.
+Annotations: (a) the question is the H1; (b) the NO view relabels the same book (YES asks become NO bids at 100 − p), with a caption saying so; (c) the payoff sentence sits directly above the button; (d) one sign button, disabled until simulation passes; (e) 390 px: the panel stacks above the book; (f) the cost strip repeats the sentence's figures as four labelled values plus fees (A1, A10); (g) the settlement rule and the timeline strip sit under the question (A3); (h) the spread line also names the midpoint (A4) and the caption states NO is derived (A7).
 
 ### Portfolio
 Before: does not exist (M2).
 After:
 ```
 test-USDC 1,250.00 · Redeemable now $40.00 [Redeem all] · Unrealized +$0.20 · Realized −$1.20
-Market            Side  Qty  Avg   Mark  Unrealized  Realized  State
-NVDA ≥ $180 10/08  NO    10  42¢   44¢   +$0.20      $0.00     Open · 1:07:53
-AAPL ≥ $230 10/07  YES   40  55¢   100¢  —           —         Settled YES at $231.02 [Redeem $40.00]
+[Open] [Resting orders] [Closed]                                 Mark = book midpoint, not a guaranteed sale price
+Market            Side  Qty  Avg   Mark  If right pays  Unrealized  Realized  State
+NVDA ≥ $180 10/08  NO    10  42¢   44¢   $10.00         +$0.20      $0.00     Open · 1:07:53
+AAPL ≥ $230 10/07  YES   40  55¢   100¢  $40.00         —           —         Settled YES at $231.02 [Redeem $40.00]
 MM exposure: NVDA $180 net −10 YES-equiv · $190 +25 · ...   Open orders 3 · Unsettled $12.40 [Withdraw]
 ```
 Figures are illustrative; the totals include positions not shown. Annotations: (a) the totals line answers "where do I stand" first; (b) settled winners show the payout and a one-click Redeem (US-11); (c) the MM block is dense and tabular (P3), collapsed for wallets with no open orders.
@@ -242,6 +276,8 @@ Figures are illustrative; the totals include positions not shown. Annotations: (
 - No `dangerouslySetInnerHTML` on external data; no server secrets in client bundles (M1-12 AC3 test keeps passing).
 
 ## Open questions
+- v2 research gaps (see [design-research.md §6](design-research.md#6-gaps)): no CME ladder page and no live trading screen of Kalshi, Polymarket, Robinhood or IBKR could be fetched, so v2 takes layout cues from help text and tutorials only. A human review of the live screens (screenshots taken by the operator) could confirm or overturn the display choices (for example whether a ladder row shows both prices) before UI-03 and UI-04 are implemented.
+- The cost strip and the average-fill line (A1, A2) read the simulation result and a volume-weighted average the M2 Trade ticket does not compute today; UI-04 AC9 asks for them, and if the simulation result does not carry the fill levels, the line falls back to the single price already in v1.
 - Pre-open (also OQ-14 in docs/status.md): the program does not gate on 09:30 ET (see "Pre-open" under §3), so the UI shows `Open` from creation. Paawan to confirm that is intended; if a 09:30 gate is wanted it is an on-chain change (an `open_ts` on `Market`) and its own ticket, after which this table gains an "Opens 09:30 ET" state (mint only).
 - Decided here, for Paawan to confirm (also OQ-15 in docs/status.md): the UI-02 exception of five display-only helpers in `units.ts` (`scaledToCentsFloor`, `formatUsdCents`, `formatUsdcBalance`, `formatPriceTenths`, `formatUsdSigned`; see "Settle price display", "Money strings" and "Fractional cents"). The alternative is to hold the settled-price text until a separate client ticket lands.
 - None conflict with brief.md, requirements.md or a By: human decision. A web font (for example a tabular-figure sans) would improve the ladder; it is not proposed because a new font is a Tier 2 dependency. Recommendation: keep system stacks.

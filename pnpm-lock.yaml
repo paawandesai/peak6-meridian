@@ -145,8 +145,39 @@ importers:
         specifier: 4.10.2
         version: 4.10.2
 
+  scripts/deploy:
+    dependencies:
+      '@coral-xyz/anchor':
+        specifier: 0.31.1
+        version: 0.31.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      '@meridian/client':
+        specifier: workspace:*
+        version: link:../../packages/client
+      '@solana/spl-token':
+        specifier: 0.4.15
+        version: 0.4.15(@solana/web3.js@1.99.0(bufferutil@4.1.0)(typescript@5.9.3))(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)
+      '@solana/web3.js':
+        specifier: 1.99.0
+        version: 1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      switchboard-scripts:
+        specifier: workspace:*
+        version: link:../switchboard
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+
   scripts/switchboard:
     dependencies:
+      '@meridian/client':
+        specifier: workspace:*
+        version: link:../../packages/client
       '@solana/web3.js':
         specifier: 1.99.0
         version: 1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)

@@ -1,0 +1,72 @@
+{
+  "AAPL": [
+    {
+      "pubkey": "G8f6Hu9XY95xCM6wp8y6pK2CmrUWgeUrTdSRech6VaR8",
+      "hash": "becf5ff7fda71094cecbd7e8e3ddd30e3c5e1eb0bd9d67005a3bb121a862f1bc"
+    },
+    {
+      "pubkey": "GkZmDtpCWJarfnwEGPMNmfumQy1NMpsy8idhm7PBcVyg",
+      "hash": "d04840cd42c5851da75b4df4eae2596ab12c75cf9043d168730f1ff03820c2ad"
+    }
+  ],
+  "MSFT": [
+    {
+      "pubkey": "9k3DK6Nuxi4HJjdzhL7bYdoq7hNu3XDJ4DZQZYGK5jZT",
+      "hash": "c05dd1da3aabff5be1772b0d8bcc171f9145d353cd47b66b5ee16b2d957bedde"
+    },
+    {
+      "pubkey": "GnGMugTMPcBxSrJGV6nMqB3Dqi8gz965aCs8aznCzu7U",
+      "hash": "92409f7446d7440c8d70a24a8c044e9823d47fb14697ba0d39370b9121221a4e"
+    }
+  ],
+  "GOOGL": [
+    {
+      "pubkey": "7cdSArhiRqKCGqYHwdjTztpBFkCsVCYNFRpAfLuEBF9x",
+      "hash": "2bbfccd5ddf50e73c6ba35c065fbc33106b380eb6c364b4a5e807382c1802008"
+    },
+    {
+      "pubkey": "EDuP2EPrR97NxSUZMBaAR1vVLSDpkmW9R21vmVhBnx1e",
+      "hash": "2a1414be9601346092e6fd0cd6345b9e2dd90e92e132a89363fed0292ed3aea7"
+    }
+  ],
+  "AMZN": [
+    {
+      "pubkey": "2WRLXQW87dj6zqhBbQ52DuYVsaT9WJWHG37xBy3ka8t9",
+      "hash": "f1ab19cfd2a92bfe7cc85a475d15b9e1eb0f31018b12b29c127a757bcd3a1171"
+    },
+    {
+      "pubkey": "8FuN3YNkGocZGufx4Y9ucaSaeDvdGaxAZckKwcZnPxxN",
+      "hash": "d6c05f3afaffadce4dadc3ffec14d80cf449f2f896e8371eb1d73a03ca07432e"
+    }
+  ],
+  "NVDA": [
+    {
+      "pubkey": "9bvo6S6Uxfu2MPVqzKJNMhfX2P4yHGjPwRXaLSMJxU9E",
+      "hash": "63a98affcde4ff0d74ed34e8552148b3049cf6d863753c730c0d12408c382cf7"
+    },
+    {
+      "pubkey": "9yVnWpQRGDMPSL2WNCrXh1UG2yc3erGkfeu8bREX7Lmp",
+      "hash": "215e96bf817fbb3decb262f65c90982bcdc2af9cbe940027c637d673e8edcbb6"
+    }
+  ],
+  "META": [
+    {
+      "pubkey": "FjLAZ2HHLxWagX7HkvzT4tvNz891kpzci3qSTZ8RDEfR",
+      "hash": "4c511f677424ae5f724a151c64c6db10b6e3026d7fd63cb3c9d9d6eec2e983e9"
+    },
+    {
+      "pubkey": "5q5r5wQPNecVqbFsCCmKrVSMi2rouw6xKogNWBwXfMWc",
+      "hash": "7be920e262b2c9b5135116a753d4a7fdc6b2732ab74d7ebdce5a00de35c74dcb"
+    }
+  ],
+  "TSLA": [
+    {
+      "pubkey": "4umiLb4Mw5rkup5VBY4pF42abK9jojw1BKcebToXoaAD",
+      "hash": "28711163944ead73beae07787469afec065a5290a3082b94946f8125bc5976a7"
+    },
+    {
+      "pubkey": "8HVbxyorzbDUM8VXf8X9K44jD5u1CySZoMDLWs9Yevaw",
+      "hash": "0b6fbb868c17ce1b8272f883d5baa3b25e2208778c67ee96bc1966b79af9b947"
+    }
+  ]
+}
