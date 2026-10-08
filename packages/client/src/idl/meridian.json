@@ -239,53 +239,9 @@
       "discriminator": [95, 129, 237, 240, 8, 49, 223, 132],
       "accounts": [
         {
-          "name": "market"
-        },
-        {
-          "name": "book",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [98, 111, 111, 107]
-              },
-              {
-                "kind": "account",
-                "path": "market"
-              }
-            ]
-          },
-          "relations": ["market"]
-        },
-        {
           "name": "owner",
           "docs": ["The order owner."],
           "signer": true
-        },
-        {
-          "name": "open_orders",
-          "docs": [
-            "Receives the refund. Its PDA seeds name its stored owner, which must be the signer."
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [111, 111]
-              },
-              {
-                "kind": "account",
-                "path": "market"
-              },
-              {
-                "kind": "account",
-                "path": "open_orders.owner",
-                "account": "OpenOrders"
-              }
-            ]
-          }
         }
       ],
       "args": [
@@ -647,90 +603,9 @@
       "discriminator": [51, 194, 155, 175, 109, 130, 96, 106],
       "accounts": [
         {
-          "name": "config",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [99, 111, 110, 102, 105, 103]
-              }
-            ]
-          }
-        },
-        {
-          "name": "market"
-        },
-        {
-          "name": "book",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [98, 111, 111, 107]
-              },
-              {
-                "kind": "account",
-                "path": "market"
-              }
-            ]
-          },
-          "relations": ["market"]
-        },
-        {
           "name": "user",
-          "docs": ["The order owner; pays rent for `open_orders` on first use."],
-          "writable": true,
+          "docs": ["The order owner."],
           "signer": true
-        },
-        {
-          "name": "open_orders",
-          "docs": ["The owner's balances in this market, created on first use."],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [111, 111]
-              },
-              {
-                "kind": "account",
-                "path": "market"
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user_usdc",
-          "docs": ["USDC source (bids) and destination (ask proceeds)."],
-          "writable": true
-        },
-        {
-          "name": "user_yes",
-          "docs": ["YES source (asks) and destination (bid fills)."],
-          "writable": true
-        },
-        {
-          "name": "escrow_usdc",
-          "writable": true,
-          "relations": ["market"]
-        },
-        {
-          "name": "escrow_yes",
-          "writable": true,
-          "relations": ["market"]
-        },
-        {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -850,57 +725,9 @@
       "discriminator": [238, 64, 163, 96, 75, 171, 16, 33],
       "accounts": [
         {
-          "name": "market"
-        },
-        {
           "name": "owner",
           "docs": ["The open orders owner."],
           "signer": true
-        },
-        {
-          "name": "open_orders",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [111, 111]
-              },
-              {
-                "kind": "account",
-                "path": "market"
-              },
-              {
-                "kind": "account",
-                "path": "open_orders.owner",
-                "account": "OpenOrders"
-              }
-            ]
-          }
-        },
-        {
-          "name": "escrow_usdc",
-          "writable": true,
-          "relations": ["market"]
-        },
-        {
-          "name": "escrow_yes",
-          "writable": true,
-          "relations": ["market"]
-        },
-        {
-          "name": "user_usdc",
-          "docs": ["Receives the free USDC."],
-          "writable": true
-        },
-        {
-          "name": "user_yes",
-          "docs": ["Receives the free YES."],
-          "writable": true
-        },
-        {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
       "args": []
@@ -1002,10 +829,6 @@
     {
       "name": "Market",
       "discriminator": [219, 190, 213, 55, 0, 227, 198, 154]
-    },
-    {
-      "name": "OpenOrders",
-      "discriminator": [139, 166, 123, 206, 111, 2, 116, 33]
     }
   ],
   "events": [
@@ -1771,45 +1594,6 @@
           },
           {
             "name": "Settled"
-          }
-        ]
-      }
-    },
-    {
-      "name": "OpenOrders",
-      "docs": ["Free balances of one owner in one market. PDA seeds: `[\"oo\", market, owner]`."],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "owner",
-            "docs": ["The owner who can withdraw these balances."],
-            "type": "pubkey"
-          },
-          {
-            "name": "market",
-            "docs": ["The market these balances belong to."],
-            "type": "pubkey"
-          },
-          {
-            "name": "free_usdc",
-            "docs": ["USDC base units withdrawable with `settle_funds`."],
-            "type": "u64"
-          },
-          {
-            "name": "free_yes",
-            "docs": ["YES contracts withdrawable with `settle_funds`."],
-            "type": "u64"
-          },
-          {
-            "name": "resting_count",
-            "docs": ["Orders currently resting on the book for this owner (cap: 8)."],
-            "type": "u8"
-          },
-          {
-            "name": "bump",
-            "docs": ["PDA bump."],
-            "type": "u8"
           }
         ]
       }
