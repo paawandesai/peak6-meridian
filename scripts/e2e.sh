@@ -106,9 +106,15 @@ PROGRAM_ID="$(solana-keygen pubkey "$PROGRAM_KEYPAIR")"
 export ANCHOR_PROVIDER_URL="$RPC_URL" ANCHOR_WALLET="$PAYER" E2E_PROGRAM_ID="$PROGRAM_ID"
 
 if [ "$MODE" = "dev" ]; then
-  # Seed: config with local feeds and a day's markets that stay open for 8 hours.
-  E2E_SEED_ONLY=1 E2E_CLOSE_IN_SECS=28800 pnpm --filter e2e run lifecycle
-  log "validator $RPC_URL, program $PROGRAM_ID; starting the app on http://localhost:3000"
+  # Seed: config with local feeds and a day's markets that stay open for 8 hours. The seed
+  # prints SEED_USDC_MINT=<mint>; the app needs it with the throwaway program ID and the RPC URL.
+  E2E_SEED_ONLY=1 E2E_CLOSE_IN_SECS=28800 pnpm --filter e2e run lifecycle | tee "$WORK/seed.log"
+  USDC_MINT="$(sed -n 's/^SEED_USDC_MINT=//p' "$WORK/seed.log" | tail -n 1)"
+  [ -n "$USDC_MINT" ] || die "the seed did not report the USDC mint"
+  export NEXT_PUBLIC_CLUSTER=localnet NEXT_PUBLIC_RPC_URL="$RPC_URL"
+  export NEXT_PUBLIC_PROGRAM_ID="$PROGRAM_ID" NEXT_PUBLIC_USDC_MINT="$USDC_MINT"
+  log "validator $RPC_URL, program $PROGRAM_ID, USDC mint $USDC_MINT"
+  log "starting the app on http://localhost:3000 (Ctrl-C stops the app and the validator)"
   pnpm --filter app dev
   exit 0
 fi

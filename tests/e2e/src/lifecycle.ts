@@ -302,9 +302,9 @@ async function main(): Promise<void> {
   const market = await program.account.market.fetch(addresses.market);
   const closeTs = Number(market.closeTs.toString());
   if (env.E2E_SEED_ONLY !== undefined) {
-    say(
-      `seeded ${marketCount} markets for program ${programId.toBase58()} (USDC mint ${usdcMint.toBase58()})`,
-    );
+    say(`seeded ${marketCount} markets for program ${programId.toBase58()}`);
+    // Machine-readable: `scripts/e2e.sh --dev` hands this to the app as NEXT_PUBLIC_USDC_MINT.
+    say(`SEED_USDC_MINT=${usdcMint.toBase58()}`);
     return;
   }
 

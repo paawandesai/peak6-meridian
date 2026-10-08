@@ -14,7 +14,6 @@
     "@meridian/client": "workspace:*",
     "@solana/spl-token": "0.4.15",
     "@solana/web3.js": "1.99.0",
-    "automation": "workspace:*",
     "zod": "4.6.5"
   },
   "devDependencies": {
