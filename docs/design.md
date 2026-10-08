@@ -68,10 +68,14 @@ Rule for everything below: **text plus colour, never colour alone.** Every colou
 | Closing soon | `Open` and `close_ts − 15 min ≤ now < close_ts` | Closes in 12:04 | warn tint + live countdown |
 | Closed | `now ≥ close_ts`, not settled, before close + 5 min | Closed, settling at close + 5 min (16:05 ET; 13:05 ET on early-close days) | muted |
 | Settling | after close + 5 min, not settled | Settling… (attempt n) | muted + spinner with text |
-| Settled YES | `Settled`, outcome YES | Settled YES at $181.42 | YES hue, solid |
+| Settled YES | `Settled`, outcome YES | Settled YES at $181.42 (see "Settle price display" below) | YES hue, solid |
 | Settled NO | `Settled`, outcome NO | Settled NO at $178.10 | NO hue, solid |
-| Override pending | settle failed, override draft exists | Override pending, review after 17:00 ET | warn outline |
+| Override pending | settle failed, override draft exists | Override pending, available at {HH:mm} ET | warn outline |
 | Paused | global pause flag | Paused: trading and minting stopped; cancel, withdraw and redeem still work | danger outline, banner on every page |
+
+Override time: `{HH:mm}` is `close_ts + override_delay_secs` (from the on-chain config, default 3600 s) rendered in ET with the `America/New_York` tz library, so it is 17:00 ET on a normal close, 14:00 ET on an early-close day with the default delay, and follows any change to the delay. It is never hardcoded.
+
+Settle price display: `settle_price_scaled` has 18 fractional digits. The UI converts it with existing `packages/client` pieces only: integer-divide the `bigint` by the exported `STRIKE_CENTS_TO_SCALED` (10^16) to get whole cents (round half up, in `bigint`, no floats), then show it with `centsToBaseUnits` and `formatUsdc`. No new `packages/client` helper is needed, so the shared rule "UI tickets touch no `packages/client`" holds. If a named scaled-to-display helper is wanted in the client, that is a separate client ticket (see Open questions).
 
 "Closing soon" is a UI threshold, not an on-chain state. The 15-minute value is a design default (Tier 1, changeable).
 
@@ -199,4 +203,5 @@ Figures are illustrative; the totals include positions not shown. Annotations: (
 - No `dangerouslySetInnerHTML` on external data; no server secrets in client bundles (M1-12 AC3 test keeps passing).
 
 ## Open questions
+- A named scaled-price display helper in `packages/client` (instead of the `STRIKE_CENTS_TO_SCALED` division described under "Settle price display") would need its own client ticket, because UI tickets may not touch `packages/client`. Not proposed here; recommendation: use the existing pieces.
 - None conflict with brief.md, requirements.md or a By: human decision. A web font (for example a tabular-figure sans) would improve the ladder; it is not proposed because a new font is a Tier 2 dependency. Recommendation: keep system stacks.
