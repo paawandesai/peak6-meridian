@@ -89,18 +89,29 @@ export async function runFaucetChecks(options: {
     },
   );
 
-  await step("faucet: two truly concurrent claims for one wallet mint exactly once", async () => {
-    const walletB = Keypair.generate().publicKey;
-    const results = await Promise.all(
-      [makeFaucet(), makeFaucet(), makeFaucet()].map((f) => f.claim(walletB.toBase58())),
-    );
-    const statuses = results.map((r) => r.status).sort();
-    if (JSON.stringify(statuses) !== JSON.stringify([200, 429, 429])) {
-      throw new Error(`expected one 200 and two 429, got ${JSON.stringify(statuses)}`);
-    }
-    if ((await balance(walletB)) !== AMOUNT)
-      throw new Error("concurrent claims must mint exactly once");
-  });
+  await step(
+    "faucet: three truly concurrent claims for one wallet mint exactly once",
+    async (sigs) => {
+      const walletB = Keypair.generate().publicKey;
+      const results = await Promise.all(
+        [makeFaucet(), makeFaucet(), makeFaucet()].map((f) => f.claim(walletB.toBase58())),
+      );
+      // Identical transactions (same blockhash, same markers) are deduplicated by the cluster, so
+      // several callers can legitimately see the same signature; a different transaction loses
+      // with 429. Either way the wallet is minted for exactly once.
+      const signatures = new Set<string>();
+      for (const result of results) {
+        if (result.status === 200) signatures.add(result.signature);
+        else if (result.status !== 429) throw new Error(`unexpected HTTP ${result.status}`);
+      }
+      if (signatures.size !== 1) {
+        throw new Error(`expected exactly one landed transaction, saw ${signatures.size}`);
+      }
+      sigs.push(...signatures);
+      if ((await balance(walletB)) !== AMOUNT)
+        throw new Error("concurrent claims must mint exactly once");
+    },
+  );
 
   await step("faucet: a pre-funded marker address does not block a claim", async (sigs) => {
     const walletC = Keypair.generate().publicKey;
