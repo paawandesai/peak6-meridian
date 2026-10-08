@@ -75,7 +75,7 @@ Rule for everything below: **text plus colour, never colour alone.** Every colou
 
 Override time: `{HH:mm}` is `close_ts + override_delay_secs` (from the on-chain config, default 3600 s) rendered in ET with the `America/New_York` tz library, so it is 17:00 ET on a normal close, 14:00 ET on an early-close day with the default delay, and follows any change to the delay. It is never hardcoded.
 
-Settle price display: `settle_price_scaled` has 18 fractional digits and `packages/client` has no formatter in that direction today. UI-02 adds one small additive helper to `packages/client/src/units.ts` as an **explicit, single exception** to the "UI tickets touch no `packages/client`" rule: `scaledToCents(scaled: bigint): bigint` (integer division by `STRIKE_CENTS_TO_SCALED`, round half up, rejects negatives), with fast-check tests (round trip with `strikeCentsToScaled`, monotonic, exact at multiples of 10^16). Display is then `formatUsdc(centsToBaseUnits(scaledToCents(x)))`, so no UI code does arithmetic on money. Every settle price in the badges and mockups (`$181.42`, `$178.10`, `$231.02`) comes from this path.
+Settle price display: `settle_price_scaled` has 18 fractional digits and `packages/client` has no formatter in that direction today. UI-02 adds one small additive helper to `packages/client/src/units.ts` as an **explicit, single exception** to the "UI tickets touch no `packages/client`" rule: `scaledToCentsFloor(scaled: bigint): bigint`, a **display-only** conversion (integer division by `STRIKE_CENTS_TO_SCALED`, rounding **down**, rejects negatives), documented in `units.ts` as the one lossy conversion there (the rest of the file throws instead of rounding). It floors because settlement is exact (`close_scaled >= strike_cents × 10^16`) and strikes are whole cents, so `floor(close) >= strike` iff `close >= strike`: the displayed price can never contradict the outcome (a $179.996 close settles NO and shows $179.99, never $180.00). Display is `formatUsdc(centsToBaseUnits(scaledToCentsFloor(x)))`, so no UI code does arithmetic on money. Every settle price in the badges and mockups (`$181.42`, `$178.10`, `$231.02`) comes from this path.
 
 "Closing soon" is a UI threshold, not an on-chain state. The 15-minute value is a design default (Tier 1, changeable).
 
@@ -203,5 +203,5 @@ Figures are illustrative; the totals include positions not shown. Annotations: (
 - No `dangerouslySetInnerHTML` on external data; no server secrets in client bundles (M1-12 AC3 test keeps passing).
 
 ## Open questions
-- Decided here, for Paawan to confirm: the `scaledToCents` exception in UI-02 (see "Settle price display"). The alternative is to hold the settled-price text until a separate client ticket lands.
+- Decided here, for Paawan to confirm: the `scaledToCentsFloor` exception in UI-02 (see "Settle price display"). The alternative is to hold the settled-price text until a separate client ticket lands.
 - None conflict with brief.md, requirements.md or a By: human decision. A web font (for example a tabular-figure sans) would improve the ladder; it is not proposed because a new font is a Tier 2 dependency. Recommendation: keep system stacks.
