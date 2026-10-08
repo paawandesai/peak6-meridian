@@ -9,6 +9,9 @@
  * Environment (set by scripts/e2e.sh): ANCHOR_PROVIDER_URL, ANCHOR_WALLET (admin + automation
  * authority + payer), E2E_PROGRAM_ID. Optional: E2E_CLOSE_IN_SECS (default 150),
  * E2E_SEED_ONLY=1 (stop after the markets exist; used by `make dev`).
+ *
+ * `--cluster devnet` (M2-12) runs the rehearsal path instead (rehearsal.ts, docs/runbook.md#rehearsal):
+ * the deployed program, real markets and the real settlement; it never creates a Config or mint.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -57,6 +60,7 @@ import { fakeSourcesHttp } from "automation/testing";
 
 import { runFaucetChecks } from "./faucet";
 import { Ledger, UNITS_PER_CENT, UNITS_PER_USDC } from "./ledger";
+import { wantsRehearsal } from "./rehearsal-plan";
 
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 const FIXTURE = resolve(ROOT, "tests/fixtures/prev_closes.json");
@@ -66,6 +70,15 @@ const TRADED = { symbol: "META", strikeCents: 68_000n } as const;
 /** Settlement price: $700.00, at or above the $680 strike, so YES wins. */
 const SETTLE_PRICE_CENTS = 70_000n;
 const STRIKE_CENTS_TO_SCALED = 10n ** 16n;
+
+if (wantsRehearsal(process.argv.slice(2))) {
+  const { runRehearsal } = await import("./rehearsal");
+  await runRehearsal(process.argv.slice(2)).catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+  process.exit(0);
+}
 
 const env = z
   .object({
