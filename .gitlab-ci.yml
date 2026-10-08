@@ -489,7 +489,7 @@ e2e:ui:
     - *cache-pnpm
   script:
     - make install-rust install-js
-    - pnpm --filter e2e exec playwright install --with-deps chromium
+    - make e2e-ui-browser
     - |
       if [ -f target/deploy/meridian.so ] && [ -f target/idl/meridian.json ]; then
         export E2E_PREBUILT=1
