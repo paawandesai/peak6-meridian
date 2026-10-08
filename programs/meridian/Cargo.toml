@@ -35,6 +35,8 @@ litesvm = "=0.5.0"
 solana-sdk = "=2.1.21"
 # Decodes `Program data:` log lines to assert on emitted events.
 base64 = "0.22"
+# Reads the recorded Switchboard account fixture (tests/fixtures/switchboard).
+serde_json = "1"
 # Property tests over random mint/redeem sequences (M1-04 AC1, NFR-07; same crate as meridian-book).
 proptest = "1"
 
