@@ -88,6 +88,11 @@ Money strings: `formatUsdc` returns a bare 6-decimal string (`"181.420000"`) and
 - `formatUsdcBalance(baseUnits: bigint): string` renders a USDC balance as `1,250.00 USDC`, rounding **down** to whole cents so a balance is never overstated.
 Cent prices stay `62¢` (an integer `number` from the client plus the `¢` character; no formatter needed). `formatUsdc` and `parseUsdc` keep their exact, throwing behaviour for inputs and transactions; the display formatters never feed a transaction.
 
+Fractional cents (Portfolio, domain.md § P&L): a mark can be a half cent (bid 58¢ and ask 61¢ give 59.5¢) and an average cost is rarely whole. The rule: **all position maths is exact `bigint` in USDC base units, never rounded until display.** The mark is the book mid in tenths of a cent, `(bid + ask) × 5` tenths, which is exact, and is converted to base units by `× 1,000`. Cost basis is carried as total cost in base units plus quantity; unrealized is `mark_base × qty − total_cost` and realized is a running base-unit total, so nothing divides before display. Two more display-only formatters render them, in the same UI-02 `units.ts` exception:
+- `formatPriceTenths(baseUnits: bigint, perQty: bigint = 1n): string` renders a per-contract price to one decimal of a cent, rounding **down**, and drops a zero decimal: `42¢`, `42.5¢`, `59.5¢`. Average entry passes `(total_cost, qty)`; a mark passes `(tenths × 1,000n)`.
+- `formatUsdSigned(baseUnits: bigint, sign: "auto" | "always" = "auto"): string` renders a base-unit amount as dollars and cents like `formatUsdCents`, flooring toward −∞ to the cent, so a gain is never overstated and a loss never understated (`+$0.20`, `−$1.21` for −$1.2049).
+The Portfolio uses these for Avg, Mark, Unrealized, Realized and the totals line; `formatUsdCents` stays for amounts already in whole cents (cost, payout, strikes). No float is involved anywhere.
+
 "Closing soon" is a UI threshold, not an on-chain state. The 15-minute value is a design default (Tier 1, changeable).
 
 ### Position-constraint block (FR-18, US-07)
@@ -215,5 +220,5 @@ Figures are illustrative; the totals include positions not shown. Annotations: (
 
 ## Open questions
 - Pre-open: the program does not gate on 09:30 ET (see "Pre-open" under §3), so the UI shows `Open` from creation. Paawan to confirm that is intended; if a 09:30 gate is wanted it is an on-chain change (an `open_ts` on `Market`) and its own ticket, after which this table gains an "Opens 09:30 ET" state (mint only).
-- Decided here, for Paawan to confirm: the UI-02 exception of three display-only helpers in `units.ts` (`scaledToCentsFloor`, `formatUsdCents`, `formatUsdcBalance`; see "Settle price display" and "Money strings"). The alternative is to hold the settled-price text until a separate client ticket lands.
+- Decided here, for Paawan to confirm: the UI-02 exception of five display-only helpers in `units.ts` (`scaledToCentsFloor`, `formatUsdCents`, `formatUsdcBalance`, `formatPriceTenths`, `formatUsdSigned`; see "Settle price display", "Money strings" and "Fractional cents"). The alternative is to hold the settled-price text until a separate client ticket lands.
 - None conflict with brief.md, requirements.md or a By: human decision. A web font (for example a tabular-figure sans) would improve the ladder; it is not proposed because a new font is a Tier 2 dependency. Recommendation: keep system stacks.
