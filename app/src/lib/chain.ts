@@ -16,13 +16,19 @@ export type MeridianReader = {
   usdcBalance(owner: PublicKey): Promise<bigint | null>;
 };
 
-export type AppConfig = { readonly paused: boolean; readonly overrideDelaySecs: bigint };
+export type AppConfig = {
+  readonly paused: boolean;
+  readonly overrideDelaySecs: bigint;
+  /** Base58 of `Config.admin`: the only wallet the admin page offers actions to (M2-10). */
+  readonly admin: string;
+};
 
 /** The slice of the Anchor config account namespace that `getConfig` uses. */
 export type ConfigAccountApi = {
   fetch(address: PublicKey): Promise<{
     paused: boolean;
     overrideDelaySecs: { toString(): string };
+    admin: PublicKey;
   }>;
 };
 
@@ -35,6 +41,7 @@ export async function fetchConfig(
   return {
     paused: account.paused,
     overrideDelaySecs: BigInt(account.overrideDelaySecs.toString()),
+    admin: account.admin.toBase58(),
   };
 }
 
