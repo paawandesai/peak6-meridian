@@ -5,7 +5,7 @@ import type { MeridianEvent } from "@/lib/events";
 import type { MarketRow } from "@/lib/markets";
 import { market } from "@/test-utils";
 
-import type { PortfolioSnapshot } from "./data";
+import type { Holdings, PortfolioSnapshot } from "./data";
 
 export const WALLET = "Wallet1111111111111111111111111111111111111";
 export const OTHER = "Other11111111111111111111111111111111111111";
@@ -49,11 +49,20 @@ export const fill = (
   ...o,
 });
 
+/** Wallet holdings of `yes` and `no` tokens, each in one token account. */
+export const held = (yes: bigint, no: bigint): Holdings => ({
+  yes,
+  no,
+  yesAccounts: yes > 0n ? [{ account: PublicKey.unique().toBase58(), amount: yes }] : [],
+  noAccounts: no > 0n ? [{ account: PublicKey.unique().toBase58(), amount: no }] : [],
+});
+
 export const snapshot = (overrides: Partial<PortfolioSnapshot> = {}): PortfolioSnapshot => ({
   holdings: {},
   openOrders: [],
   resting: [],
   events: [],
   eventsPartial: false,
+  usdcAccount: null,
   ...overrides,
 });

@@ -8,17 +8,17 @@ import {
   type TransactionInstruction,
 } from "@solana/web3.js";
 
-import { buildRedeem, buildWithdraw, chunk } from "./tx";
+import { buildRedeem, buildWithdraw, chunk, type HeldAccount, redeemSlices } from "./tx";
 import type { PublicConfig } from "@/lib/config";
 import type { MarketRow } from "@/lib/markets";
 
 export type RedeemItem = {
   readonly market: MarketRow;
-  readonly yesQty: bigint;
-  readonly noQty: bigint;
-  /** The wallet's existing YES/NO token accounts (base58), when known. */
-  readonly yesAccount?: string | null;
-  readonly noAccount?: string | null;
+  /** The wallet's YES and NO token accounts for this market and what each holds. */
+  readonly yesAccounts: readonly HeldAccount[];
+  readonly noAccounts: readonly HeldAccount[];
+  /** The wallet's fullest USDC account (base58), or `null` to use the associated one. */
+  readonly usdcAccount: string | null;
 };
 
 export type TxResult = { readonly signature: string; readonly slot: number };
@@ -87,21 +87,25 @@ export function createActions(
   return {
     async redeem(items) {
       const mint = requireMint();
+      // One redeem per account pair; each market's instructions stay together in one transaction.
       const built = await Promise.all(
-        items.map((item) =>
-          buildRedeem({
-            program,
-            user: wallet.publicKey,
-            usdcMint: mint,
-            market: item.market,
-            yesQty: item.yesQty,
-            noQty: item.noQty,
-            accounts: {
-              yes: item.yesAccount ? new PublicKey(item.yesAccount) : null,
-              no: item.noAccount ? new PublicKey(item.noAccount) : null,
-            },
-          }),
-        ),
+        items.map(async (item) => {
+          const usdc = item.usdcAccount === null ? null : new PublicKey(item.usdcAccount);
+          const parts = await Promise.all(
+            redeemSlices(item.yesAccounts, item.noAccounts).map((slice) =>
+              buildRedeem({
+                program,
+                user: wallet.publicKey,
+                usdcMint: mint,
+                market: item.market,
+                yesQty: slice.yesQty,
+                noQty: slice.noQty,
+                accounts: { usdc, yes: slice.yes, no: slice.no },
+              }),
+            ),
+          );
+          return parts.flat();
+        }),
       );
       return run(chunk(built).map((group) => group.flat()));
     },

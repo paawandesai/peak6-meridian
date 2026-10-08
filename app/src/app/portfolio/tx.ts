@@ -110,6 +110,43 @@ export async function buildWithdraw(params: WithdrawParams): Promise<Transaction
   return [createAta(owner, usdcMint, owner), createAta(owner, a.yesMint, owner), instruction];
 }
 
+/** A token account and what it holds (structurally `TokenSlice` from `data.ts`). */
+export type HeldAccount = { readonly account: string; readonly amount: bigint };
+
+export type RedeemSlice = {
+  readonly yesQty: bigint;
+  readonly noQty: bigint;
+  readonly yes: PublicKey | null;
+  readonly no: PublicKey | null;
+};
+
+/**
+ * One redeem per account pair, so each instruction burns exactly what the accounts it names
+ * hold (the program takes one YES and one NO account per call). A side with fewer accounts is
+ * padded with quantity 0 against its first account (the program still needs a valid account;
+ * a zero quantity burns nothing); a side with no accounts yields `null` (the ATA is created).
+ */
+export function redeemSlices(
+  yes: readonly HeldAccount[],
+  no: readonly HeldAccount[],
+): RedeemSlice[] {
+  const count = Math.max(yes.length, no.length, 1);
+  const slices: RedeemSlice[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const y = yes[index];
+    const n = no[index];
+    const yesAccount = y?.account ?? yes[0]?.account;
+    const noAccount = n?.account ?? no[0]?.account;
+    slices.push({
+      yesQty: y?.amount ?? 0n,
+      noQty: n?.amount ?? 0n,
+      yes: yesAccount === undefined ? null : new PublicKey(yesAccount),
+      no: noAccount === undefined ? null : new PublicKey(noAccount),
+    });
+  }
+  return slices.filter((slice) => slice.yesQty > 0n || slice.noQty > 0n);
+}
+
 /** Transactions stay under the 1232-byte limit with at most this many markets in each. */
 export const MARKETS_PER_TRANSACTION = 3;
 

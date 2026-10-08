@@ -6,7 +6,14 @@ import { Connection, Keypair } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 
 import { AAPL, NVDA } from "./fixtures";
-import { addressesOf, buildRedeem, buildWithdraw, chunk, MARKETS_PER_TRANSACTION } from "./tx";
+import {
+  addressesOf,
+  buildRedeem,
+  buildWithdraw,
+  chunk,
+  MARKETS_PER_TRANSACTION,
+  redeemSlices,
+} from "./tx";
 
 const user = Keypair.generate().publicKey;
 const usdcMint = Keypair.generate().publicKey;
@@ -113,5 +120,32 @@ describe("chunk", () => {
     const items = [1, 2, 3, 4, 5, 6, 7];
     expect(chunk(items).map((group) => group.length)).toEqual([MARKETS_PER_TRANSACTION, 3, 1]);
     expect(chunk([])).toEqual([]);
+  });
+});
+
+describe("redeemSlices", () => {
+  const acct = () => Keypair.generate().publicKey.toBase58();
+  it("pairs accounts index by index and drops empty pairs", () => {
+    const [y1, y2, n1] = [acct(), acct(), acct()];
+    const slices = redeemSlices(
+      [
+        { account: y1, amount: 6n },
+        { account: y2, amount: 4n },
+      ],
+      [{ account: n1, amount: 2n }],
+    );
+    expect(slices.map((s) => [s.yesQty, s.noQty, s.yes?.toBase58(), s.no?.toBase58()])).toEqual([
+      [6n, 2n, y1, n1],
+      [4n, 0n, y2, n1], // the NO side is padded with quantity 0 on its first account
+    ]);
+  });
+
+  it("a side with no account yields null (the ATA is created) and nothing held yields no slice", () => {
+    const y = acct();
+    expect(redeemSlices([{ account: y, amount: 3n }], [])[0]).toMatchObject({
+      noQty: 0n,
+      no: null,
+    });
+    expect(redeemSlices([], [])).toEqual([]);
   });
 });
