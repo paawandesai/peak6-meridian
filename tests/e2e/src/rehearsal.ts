@@ -707,16 +707,26 @@ async function runRedeem(ctx: Ctx): Promise<void> {
   console.log("redeem phase ok: record the explorer links above in docs/log.md");
 }
 
-export async function runRehearsal(argv: readonly string[]): Promise<void> {
+/** Rethrows with the RPC URL (which may carry an API key) removed from the message. */
+function redacted(error: unknown, rpcUrl: string | undefined): Error {
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(rpcUrl === undefined || rpcUrl === "" ? message : redactRpcUrl(message, rpcUrl));
+}
+
+export async function runRehearsal(
+  argv: readonly string[],
+  environment: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
   const args = parseRehearsalArgs(argv);
-  const ctx = await setup(args, process.env);
+  const rpcUrl = environment.SOLANA_RPC_URL;
+  // Setup (env parsing, the cluster guard) is inside the redaction too: a failed parse or a
+  // fetch error can echo the URL.
   try {
+    const ctx = await setup(args, environment);
     if (args.phase === "markets") runMarketsFallback(ctx);
     else if (args.phase === "trade") await runTrade(ctx);
     else await runRedeem(ctx);
   } catch (error) {
-    // Provider URLs often carry an API key and fetch errors echo them.
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(redactRpcUrl(message, ctx.env.SOLANA_RPC_URL));
+    throw redacted(error, rpcUrl);
   }
 }
