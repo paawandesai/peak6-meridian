@@ -38,7 +38,7 @@ describe("createAdminActions", () => {
         },
         signAllTransactions: (txs) => Promise.resolve(txs),
       },
-      parsePublicConfig({ programId: "3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq" }),
+      parsePublicConfig({ programId: "H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm" }),
     );
     await expect(actions.setPaused(true)).rejects.toThrow();
     expect(signed).toHaveLength(1);
