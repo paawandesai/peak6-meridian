@@ -6,6 +6,7 @@
   "description": "End-to-end smoke against a local validator",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "lifecycle": "tsx src/lifecycle.ts"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "fast-check": "4.10.2",
     "tsx": "4.23.15"
   }
 }

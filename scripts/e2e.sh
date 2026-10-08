@@ -14,7 +14,7 @@
 #   E2E_PAYER_KEYPAIR  existing payer keypair file; a throwaway one is created when unset/missing
 #   E2E_RPC_PORT       validator RPC port (default 8899; the websocket port is this plus one)
 #   E2E_FAUCET_PORT    validator faucet port (default 9900)
-#   E2E_CLOSE_IN_SECS  seconds between market creation and close (default 75)
+#   E2E_CLOSE_IN_SECS  seconds between market creation and close (default 150)
 set -euo pipefail
 
 MODE="e2e"

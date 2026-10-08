@@ -7,7 +7,7 @@
  * final USDC change must equal the independent model in `ledger.ts` exactly.
  *
  * Environment (set by scripts/e2e.sh): ANCHOR_PROVIDER_URL, ANCHOR_WALLET (admin + automation
- * authority + payer), E2E_PROGRAM_ID. Optional: E2E_CLOSE_IN_SECS (default 75),
+ * authority + payer), E2E_PROGRAM_ID. Optional: E2E_CLOSE_IN_SECS (default 150),
  * E2E_SEED_ONLY=1 (stop after the markets exist; used by `make dev`).
  */
 import { execFileSync } from "node:child_process";
@@ -52,7 +52,7 @@ const env = z
     ANCHOR_PROVIDER_URL: z.string().url(),
     ANCHOR_WALLET: z.string().min(1),
     E2E_PROGRAM_ID: z.string().min(32),
-    E2E_CLOSE_IN_SECS: z.coerce.number().int().positive().default(75),
+    E2E_CLOSE_IN_SECS: z.coerce.number().int().positive().default(150),
     E2E_SEED_ONLY: z.string().optional(),
   })
   .parse(process.env);
@@ -181,7 +181,7 @@ async function assertInvariants(a: MarketAddresses, traders: readonly Trader[], 
 
 // ---- main -------------------------------------------------------------------------------------
 
-async function createMarketsViaCli(): Promise<{ created: number; existed: number }> {
+async function createMarketsViaCli(sigs: string[]): Promise<{ created: number; existed: number }> {
   const out = execFileSync(
     "pnpm",
     [
@@ -199,6 +199,13 @@ async function createMarketsViaCli(): Promise<{ created: number; existed: number
     ],
     { cwd: ROOT, encoding: "utf8", env: process.env },
   );
+  // The CLI prints `created <symbol> <strike> <signature>` per market; surface the signatures.
+  for (const line of out.split("\n")) {
+    const created = /^created (\S+) (\d+) (\S+)$/.exec(line);
+    if (created !== null) {
+      sigs.push(`${created[3]}  (${created[1]} $${Number(created[2]) / 100})`);
+    }
+  }
   const match = /(\d+) created, (\d+) already existed/.exec(out);
   if (match === null) {
     throw new Error(`unexpected create-markets output:\n${out}`);
@@ -263,13 +270,15 @@ async function main(): Promise<void> {
   );
 
   // ---- markets ---------------------------------------------------------------------------------
-  const first = await step("create-markets CLI (first run)", async () => createMarketsViaCli());
+  const first = await step("create-markets CLI (first run)", async (sigs) =>
+    createMarketsViaCli(sigs),
+  );
   say(`          ${first.created} created, ${first.existed} already existed`);
   if (first.created === 0 || first.existed !== 0) {
     throw new Error("first create-markets run must create every market");
   }
-  const second = await step("create-markets CLI (second run creates nothing)", async () =>
-    createMarketsViaCli(),
+  const second = await step("create-markets CLI (second run creates nothing)", async (sigs) =>
+    createMarketsViaCli(sigs),
   );
   say(`          ${second.created} created, ${second.existed} already existed`);
   if (second.created !== 0 || second.existed !== first.created) {
