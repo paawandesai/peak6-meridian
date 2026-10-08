@@ -23,7 +23,7 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 - M1-04 (after M1-02), then M1-05 (needs M1-03+M1-04), M1-07 (after M1-04), M1-06 (after M1-05), M1-12 (after M1-04), M1-10 (after M1-06/07/08).
 
 ## Blocked
-- M1-09 live spike / feed create on devnet: needs keys usable outside sandbox (see OQ-2 / OQ-11). Offline `--dry-run` is the CI path.
+- M1-09 live spike / feed create on devnet: keys are no longer a blocker (OQ-11 resolved, [D-053](decisions.md)); the live run needs the funded devnet keys and the re-keyed program deployed (M2-01 live). Offline `--dry-run` is the CI path.
 
 ## Awaiting human veto
 - **M2 tickets M2-01..M2-13** (MR !24; Tier 2, drafted by the orchestrator from `plan.md`, Paawan notified 2026-10-07). Veto path: close/revert !24 (or revert the merge commit) and re-draft; no code depends on it until M2 work starts. Current milestone and Queued below are updated when !24 merges.
@@ -33,7 +33,7 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 | ID | Question | Owner | Blocks |
 |---|---|---|---|
 | OQ-1 | Does Gauntlet require anything beyond the deliverables in brief.md (written report, post, form)? | human | M4 |
-| OQ-2 | Credentials needed (Tier 3, one batch): Tiingo, Twelve Data, Finnhub API keys; Anthropic API key; GitLab token for the operator. (Vercel and Railway tokens are now protected CI variables, see [D-051](decisions.md).) | human | M1-09 live spike, M2 deploys, M3 agent |
+| OQ-2 | Credentials needed (Tier 3, one batch): Anthropic API key; GitLab token for the operator. (Vercel and Railway tokens are now protected CI variables, see [D-051](decisions.md); the Tiingo, Twelve Data and Finnhub API keys are CI variables too, see [D-053](decisions.md).) | human | M1-09 live spike, M2 deploys, M3 agent |
 | OQ-3 | Pyth inquiry outcome; if Pyth grants equities on devnet, decide whether to switch adapters (D-005). | human | none (Switchboard is default) |
 | OQ-4 | Switchboard spike: can the feed job itself verify the bar date, and can API keys stay out of public feed definitions? (domain.md § Settlement rules) | M1-09 | M2 settlement |
 | OQ-5 | **RESOLVED 2026-10-08 14:37 CT (Paawan) → [D-053](decisions.md).** Devnet program, admin, automation and faucet keypairs generated on the box, kept in masked/protected GitLab CI variables with an encrypted backup on the box; the program ID is re-keyed to `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm` (M1 discarded the original keypair). The live deploy waits for the re-key MR and devnet SOL on the admin key. | human | — |
