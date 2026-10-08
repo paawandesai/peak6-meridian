@@ -57,6 +57,32 @@ describe("scheduleJobs", () => {
     expect(JSON.stringify(logger.lines)).not.toContain("SECRET");
   });
 
+  it("hands a crash to onCrash and survives a failing report", async () => {
+    const { cron, calls } = fakeCron();
+    const logger = recordingLogger();
+    const reported: [string, string][] = [];
+    scheduleJobs(
+      cron,
+      [{ name: "boom", cron: "* * * * *", run: () => Promise.reject(new Error("bad state")) }],
+      logger.log,
+      (job, message) => void reported.push([job, message]),
+    );
+    await calls[0]?.task();
+    expect(reported).toEqual([["boom", "bad state"]]);
+
+    const failing = fakeCron();
+    const logger2 = recordingLogger();
+    scheduleJobs(
+      failing.cron,
+      [{ name: "boom", cron: "* * * * *", run: () => Promise.reject(new Error("bad state")) }],
+      logger2.log,
+      () => Promise.reject(new Error("alerting down https://hooks.example/SECRET")),
+    );
+    await failing.calls[0]?.task();
+    expect(logger2.lines.map((l) => l.event)).toEqual(["job_crashed", "job_crash_report_failed"]);
+    expect(JSON.stringify(logger2.lines)).not.toContain("SECRET");
+  });
+
   it("runs the job body when the cron fires", async () => {
     const { cron, calls } = fakeCron();
     let ran = 0;

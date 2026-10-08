@@ -38,11 +38,15 @@ export interface ScheduledJob {
   readonly handle: ScheduledHandle;
 }
 
-/** Schedules every spec; a job that throws is logged and never takes the process down. */
+/**
+ * Schedules every spec. A job that throws never takes the process down: the crash is logged and
+ * handed to `onCrash`, so it can be recorded in `/health` and alerted (it is never swallowed).
+ */
 export function scheduleJobs(
   cron: CronLike,
   specs: readonly JobSpec[],
   log: Logger,
+  onCrash?: (job: string, message: string) => void | Promise<void>,
 ): ScheduledJob[] {
   return specs.map((spec) => ({
     name: spec.name,
@@ -54,7 +58,16 @@ export function scheduleJobs(
         try {
           await spec.run();
         } catch (error) {
-          log("error", "job_crashed", { job: spec.name, error: describeError(error) });
+          const message = describeError(error);
+          log("error", "job_crashed", { job: spec.name, error: message });
+          try {
+            await onCrash?.(spec.name, message);
+          } catch (reportError) {
+            log("error", "job_crash_report_failed", {
+              job: spec.name,
+              error: describeError(reportError),
+            });
+          }
         }
       },
       { timezone: ET_ZONE, name: spec.name, noOverlap: true },

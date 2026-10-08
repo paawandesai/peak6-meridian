@@ -49,7 +49,13 @@ export interface ServiceDeps {
   readonly log: Logger;
   readonly state?: RunState;
   readonly now?: () => Date;
+  /** Delay between the startup config reads; defaults to a real timer. */
+  readonly sleep?: (ms: number) => Promise<void>;
 }
+
+/** Startup reads of the config are tried this many times, waiting 2 s, 4 s, … between them. */
+export const STARTUP_ATTEMPTS = 3;
+const STARTUP_RETRY_MS = 2_000;
 
 export interface HealthReport {
   readonly service: "automation";
@@ -79,6 +85,37 @@ export interface RunningService {
   stop(): Promise<void>;
 }
 
+/**
+ * Builds the key-dependent deps and reads `config.automation_authority`, retrying a few times so
+ * an RPC blip at deploy time does not kill the service. After the last failure it sends one
+ * `startup_failed` alert (there is no `/health` yet) and rethrows, so the supervisor restarts it.
+ */
+async function readConfigWithRetry(
+  deps: ServiceDeps,
+  signer: Keypair,
+): Promise<{ signerDeps: SignerDeps; authority: PublicKey }> {
+  const sleep =
+    deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const signerDeps = await deps.withSigner(signer);
+      return { signerDeps, authority: await signerDeps.readAutomationAuthority() };
+    } catch (error) {
+      const message = describeError(error);
+      deps.log("warn", "startup_config_read_failed", { attempt, message });
+      if (attempt >= STARTUP_ATTEMPTS) {
+        await deps.alerter.send({
+          kind: "startup_failed",
+          summary: `the service cannot read its config after ${String(attempt)} attempts and is exiting: ${message}`,
+          details: { attempts: attempt },
+        });
+        throw error;
+      }
+      await sleep(STARTUP_RETRY_MS * 2 ** (attempt - 1));
+    }
+  }
+}
+
 export async function startService(deps: ServiceDeps): Promise<RunningService> {
   const now = deps.now ?? (() => new Date());
   const state = deps.state ?? new RunState();
@@ -101,8 +138,7 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
         "Fix the environment and redeploy, or settle manually with the settle-now CLI (M2-04) using any funded devnet keypair.",
     };
   } else {
-    const signerDeps = await deps.withSigner(deps.signer);
-    const authority = await signerDeps.readAutomationAuthority();
+    const { signerDeps, authority } = await readConfigWithRetry(deps, deps.signer);
     specs.push(signerDeps.settlement);
     if (deps.signer.publicKey.equals(authority)) {
       specs.push({
@@ -124,7 +160,15 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
       };
     }
   }
-  const jobs = scheduleJobs(deps.cron, specs, deps.log);
+  const jobs = scheduleJobs(deps.cron, specs, deps.log, async (job, message) => {
+    // A crash is recorded for /health and alerted once per crash, never only logged.
+    state.failure(job, `crashed: ${message}`);
+    await deps.alerter.send({
+      kind: "job_crashed",
+      summary: `the ${job} job crashed: ${message}`,
+      details: { job },
+    });
+  });
 
   if (degraded !== null && alert !== null) {
     deps.log("error", "degraded_mode", { reason: degraded });

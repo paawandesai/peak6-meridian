@@ -24,7 +24,11 @@ function fakeCron() {
   return { cron, scheduled, stopped };
 }
 
-async function start(options: { loaded: Keypair | null; configured: Keypair }) {
+async function start(options: {
+  loaded: Keypair | null;
+  configured: Keypair;
+  settlementCrashes?: boolean;
+}) {
   const cronFake = fakeCron();
   const alerter = new RecordingAlerter();
   const chain = new FakeChain();
@@ -59,7 +63,13 @@ async function start(options: { loaded: Keypair | null; configured: Keypair }) {
           prevClose: (ticker, date) =>
             fetchPrevClose({ http, tiingoApiKey: "k", twelveDataApiKey: "k" }, ticker, date),
         },
-        settlement: placeholderSettlementJob(signer),
+        settlement:
+          options.settlementCrashes === true
+            ? {
+                ...placeholderSettlementJob(signer),
+                run: () => Promise.reject(new Error("settlement exploded")),
+              }
+            : placeholderSettlementJob(signer),
       });
     },
     cron: cronFake.cron,
@@ -68,6 +78,32 @@ async function start(options: { loaded: Keypair | null; configured: Keypair }) {
   });
   running.push(service);
   return { service, alerter, chain, logger, builtWith, ...cronFake };
+}
+
+function signerDeps(signer: Keypair) {
+  return {
+    readAutomationAuthority: () => Promise.resolve(signer.publicKey),
+    morning: {
+      now: () => new Date(),
+      sleep: () => Promise.resolve(),
+      marketOps: new FakeChain(),
+      prevClose: () => Promise.reject(new Error("unused")),
+    },
+    settlement: placeholderSettlementJob(signer),
+  };
+}
+
+function baseDeps(signer: Keypair, alerter: RecordingAlerter) {
+  return {
+    serviceToken: TOKEN,
+    port: 0,
+    host: "127.0.0.1",
+    signer,
+    withSigner: (s: Keypair) => Promise.resolve(signerDeps(s)),
+    cron: fakeCron().cron,
+    alerter,
+    log: recordingLogger().log,
+  };
 }
 
 async function health(service: RunningService, token: string | null = TOKEN) {
@@ -113,6 +149,23 @@ describe("startService with the right automation key", () => {
       lastMorning: { status: string; created: number };
     };
     expect(body.lastMorning).toMatchObject({ status: "ok", created: 38 });
+  });
+
+  it("records a crashed job in /health and alerts once (never swallowed)", async () => {
+    const key = Keypair.generate();
+    const t = await start({ loaded: key, configured: key, settlementCrashes: true });
+    await t.scheduled.find((s) => s.name === "settlement")?.task();
+    expect(t.alerter.alerts).toHaveLength(1);
+    expect(t.alerter.alerts[0]).toMatchObject({
+      kind: "job_crashed",
+      details: { job: "settlement" },
+    });
+    const body = (await (await health(t.service)).json()) as {
+      failures: { job: string; message: string }[];
+    };
+    expect(body.failures).toEqual([
+      expect.objectContaining({ job: "settlement", message: "crashed: settlement exploded" }),
+    ]);
   });
 
   it("stops its jobs and the server", async () => {
@@ -171,30 +224,48 @@ describe("degraded mode: automation key mismatch (AC5)", () => {
     ]);
   });
 
-  it("aborts startup when the config cannot be read", async () => {
+  it("retries the startup config read, and recovers without any alert", async () => {
     const key = Keypair.generate();
+    const alerter = new RecordingAlerter();
+    const sleeps: number[] = [];
+    let reads = 0;
+    const service = await startService({
+      ...baseDeps(key, alerter),
+      withSigner: (signer) =>
+        Promise.resolve({
+          ...signerDeps(signer),
+          readAutomationAuthority: () =>
+            ++reads < 3 ? Promise.reject(new Error("rpc blip")) : Promise.resolve(key.publicKey),
+        }),
+      sleep: (ms) => Promise.resolve(void sleeps.push(ms)),
+    });
+    running.push(service);
+    expect(reads).toBe(3);
+    expect(sleeps).toEqual([2_000, 4_000]);
+    expect(service.degraded).toBeNull();
+    expect(alerter.alerts).toEqual([]);
+  });
+
+  it("alerts once with startup_failed and then aborts when the config stays unreadable", async () => {
+    const key = Keypair.generate();
+    const alerter = new RecordingAlerter();
+    const sleeps: number[] = [];
     await expect(
       startService({
-        serviceToken: TOKEN,
-        port: 0,
-        host: "127.0.0.1",
-        signer: key,
+        ...baseDeps(key, alerter),
         withSigner: (signer) =>
           Promise.resolve({
-            readAutomationAuthority: () => Promise.reject(new Error("account not found")),
-            morning: {
-              now: () => new Date(),
-              sleep: () => Promise.resolve(),
-              marketOps: new FakeChain(),
-              prevClose: () => Promise.reject(new Error("unused")),
-            },
-            settlement: placeholderSettlementJob(signer),
+            ...signerDeps(signer),
+            readAutomationAuthority: () =>
+              Promise.reject(new Error("account not found https://rpc.example/?k=SECRET")),
           }),
-        cron: fakeCron().cron,
-        alerter: new RecordingAlerter(),
-        log: recordingLogger().log,
+        sleep: (ms) => Promise.resolve(void sleeps.push(ms)),
       }),
     ).rejects.toThrow("account not found");
+    expect(sleeps).toEqual([2_000, 4_000]);
+    expect(alerter.alerts).toHaveLength(1);
+    expect(alerter.alerts[0]).toMatchObject({ kind: "startup_failed" });
+    expect(JSON.stringify(alerter.alerts)).not.toContain("SECRET");
   });
 });
 
