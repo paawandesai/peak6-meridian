@@ -24,8 +24,16 @@ const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ
 export const SIGNATURE_LIMIT = 200;
 const TX_BATCH = 25;
 
-/** Wallet token balances of one market. */
-export type Holdings = { readonly yes: bigint; readonly no: bigint };
+/**
+ * Wallet token balances of one market, and the token accounts that hold them (the largest one
+ * per mint; `null` when the wallet has none), so a redeem burns from the accounts that exist.
+ */
+export type Holdings = {
+  readonly yes: bigint;
+  readonly no: bigint;
+  readonly yesAccount: string | null;
+  readonly noAccount: string | null;
+};
 
 export type OpenOrdersRow = {
   readonly market: string;
@@ -67,29 +75,42 @@ const tokenAccounts = z.object({
           }),
         }),
       }),
+      pubkey: z.union([z.string(), z.instanceof(PublicKey)]),
     }),
   ),
 });
+
+/** The owner's total for one mint and the account holding the most of it (base58). */
+export type MintBalance = { readonly amount: bigint; readonly account: string };
 
 /** Sum of the owner's token balances by mint (base58). */
 export async function fetchBalancesByMint(
   connection: Pick<Connection, "getParsedTokenAccountsByOwner">,
   owner: PublicKey,
-): Promise<Map<string, bigint>> {
+): Promise<Map<string, MintBalance>> {
   const response = tokenAccounts.parse(
     await connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID }),
   );
-  const balances = new Map<string, bigint>();
-  for (const { account } of response.value) {
+  const balances = new Map<string, MintBalance>();
+  const largest = new Map<string, bigint>();
+  for (const { account, pubkey } of response.value) {
     const { mint, tokenAmount } = account.data.parsed.info;
-    balances.set(mint, (balances.get(mint) ?? 0n) + BigInt(tokenAmount.amount));
+    const amount = BigInt(tokenAmount.amount);
+    const previous = balances.get(mint);
+    const best = largest.get(mint);
+    const isLargest = best === undefined || amount > best;
+    if (isLargest) largest.set(mint, amount);
+    balances.set(mint, {
+      amount: (previous?.amount ?? 0n) + amount,
+      account: isLargest ? String(pubkey) : (previous?.account ?? String(pubkey)),
+    });
   }
   return balances;
 }
 
 /** Wallet YES and NO balances for each market (markets with neither are left out). */
 export function holdingsFor(
-  balances: ReadonlyMap<string, bigint>,
+  balances: ReadonlyMap<string, MintBalance>,
   markets: readonly MarketRow[],
   programId: PublicKey,
 ): Record<string, Holdings> {
@@ -99,9 +120,16 @@ export function holdingsFor(
       { symbol: market.ticker, tradingDate: market.tradingDate, strikeCents: market.strikeCents },
       programId,
     );
-    const yes = balances.get(addresses.yesMint.toBase58()) ?? 0n;
-    const no = balances.get(addresses.noMint.toBase58()) ?? 0n;
-    if (yes > 0n || no > 0n) out[market.address] = { yes, no };
+    const yes = balances.get(addresses.yesMint.toBase58());
+    const no = balances.get(addresses.noMint.toBase58());
+    if ((yes?.amount ?? 0n) > 0n || (no?.amount ?? 0n) > 0n) {
+      out[market.address] = {
+        yes: yes?.amount ?? 0n,
+        no: no?.amount ?? 0n,
+        yesAccount: yes?.account ?? null,
+        noAccount: no?.account ?? null,
+      };
+    }
   }
   return out;
 }

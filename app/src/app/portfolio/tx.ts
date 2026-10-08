@@ -35,6 +35,12 @@ const ata = (mint: PublicKey, owner: PublicKey): PublicKey =>
 const createAta = (payer: PublicKey, mint: PublicKey, owner: PublicKey): TransactionInstruction =>
   createAssociatedTokenAccountIdempotentInstruction(payer, ata(mint, owner), owner, mint);
 
+/** Token accounts to use instead of the associated ones (the wallet's existing accounts). */
+export type TokenAccountOverrides = {
+  readonly yes?: PublicKey | null;
+  readonly no?: PublicKey | null;
+};
+
 export type RedeemParams = {
   readonly program: Program<Meridian>;
   readonly user: PublicKey;
@@ -42,6 +48,8 @@ export type RedeemParams = {
   readonly market: MarketRow;
   readonly yesQty: bigint;
   readonly noQty: bigint;
+  /** Existing YES and NO token accounts of the wallet; an absent one falls back to the ATA. */
+  readonly accounts?: TokenAccountOverrides;
 };
 
 /** Winner-mode redeem of the wallet's YES and NO in one settled market. */
@@ -50,14 +58,16 @@ export async function buildRedeem(params: RedeemParams): Promise<TransactionInst
   if (!market.settled) throw new Error("only a settled market can be redeemed from the Portfolio");
   if (params.yesQty <= 0n && params.noQty <= 0n) throw new Error("nothing to redeem");
   const a = addressesOf(market, program.programId);
+  const userYes = params.accounts?.yes ?? ata(a.yesMint, user);
+  const userNo = params.accounts?.no ?? ata(a.noMint, user);
   const instruction = await program.methods
     .redeem(new BN(params.yesQty.toString()), new BN(params.noQty.toString()))
     .accountsStrict({
       market: a.market,
       user,
       userUsdc: ata(usdcMint, user),
-      userYes: ata(a.yesMint, user),
-      userNo: ata(a.noMint, user),
+      userYes,
+      userNo,
       yesMint: a.yesMint,
       noMint: a.noMint,
       vault: a.vault,
@@ -66,8 +76,8 @@ export async function buildRedeem(params: RedeemParams): Promise<TransactionInst
     .instruction();
   return [
     createAta(user, usdcMint, user),
-    createAta(user, a.yesMint, user),
-    createAta(user, a.noMint, user),
+    ...(params.accounts?.yes ? [] : [createAta(user, a.yesMint, user)]),
+    ...(params.accounts?.no ? [] : [createAta(user, a.noMint, user)]),
     instruction,
   ];
 }

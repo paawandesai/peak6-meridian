@@ -16,6 +16,9 @@ export type RedeemItem = {
   readonly market: MarketRow;
   readonly yesQty: bigint;
   readonly noQty: bigint;
+  /** The wallet's existing YES/NO token accounts (base58), when known. */
+  readonly yesAccount?: string | null;
+  readonly noAccount?: string | null;
 };
 
 export type TxResult = { readonly signature: string; readonly slot: number };
@@ -93,6 +96,10 @@ export function createActions(
             market: item.market,
             yesQty: item.yesQty,
             noQty: item.noQty,
+            accounts: {
+              yes: item.yesAccount ? new PublicKey(item.yesAccount) : null,
+              no: item.noAccount ? new PublicKey(item.noAccount) : null,
+            },
           }),
         ),
       );

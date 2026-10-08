@@ -56,6 +56,24 @@ describe("buildRedeem", () => {
     expect(redeem.keys[1]?.isSigner).toBe(true);
   });
 
+  it("uses the wallet's existing token accounts and skips creating them", async () => {
+    const yes = Keypair.generate().publicKey;
+    const no = Keypair.generate().publicKey;
+    const instructions = await buildRedeem({
+      program,
+      user,
+      usdcMint,
+      market: AAPL,
+      yesQty: 1n,
+      noQty: 1n,
+      accounts: { yes, no },
+    });
+    expect(instructions).toHaveLength(2); // the USDC account, then the redeem
+    const keys = instructions.at(-1)?.keys.map((key) => key.pubkey.toBase58());
+    expect(keys?.[3]).toBe(yes.toBase58());
+    expect(keys?.[4]).toBe(no.toBase58());
+  });
+
   it("refuses an unsettled market and an empty redemption", async () => {
     await expect(
       buildRedeem({ program, user, usdcMint, market: NVDA, yesQty: 1n, noQty: 0n }),
