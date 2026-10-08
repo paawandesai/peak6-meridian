@@ -26,6 +26,7 @@ _Last updated: 2026-10-07 12:05 CT by operator (merge main into M1-09 after D-04
 - M1-09 live spike / feed create on devnet: needs keys usable outside sandbox (see OQ-2 / OQ-11). Offline `--dry-run` is the CI path.
 
 ## Awaiting human veto
+- **M2 tickets M2-01..M2-13** (MR !24; Tier 2, drafted by the orchestrator from `plan.md`, Paawan notified 2026-10-07). Veto path: close/revert !24 (or revert the merge commit) and re-draft; no code depends on it until M2 work starts. Current milestone and Queued below are updated when !24 merges.
 - D-048 · UI clarity and usability pass (`/design` spec → UI-01, then UI-02+ tickets). **Already approved** by Paawan 2026-10-07 ~20:32 CT; listed for visibility.
 
 ## Open questions
@@ -44,7 +45,7 @@ _Last updated: 2026-10-07 12:05 CT by operator (merge main into M1-09 after D-04
 | OQ-11 | M1-09 live spike (AC3): **blocked: needs keys.** Offline `--dry-run` covered in CI. Manual (devnet only; ~0.5 SOL airdrop): `pnpm tsx scripts/switchboard/create-feeds.ts --cluster devnet --keypair <funded>`, put `SWITCHBOARD_FEEDS_JSON=…` in `.env`, then `pnpm tsx scripts/switchboard/spike.ts --cluster devnet` with keys exported. Options: (a) human runs commands; (b) allow agent key egress for this run. | human | OQ-4 answer, M2 settlement |
 | OQ-12 | **Resolved (D-046):** chose option **(b)** isolate/override. `pnpm.overrides` `@solana/buffer-layout-utils>bigint-buffer` → `link:./packages/bigint-buffer-js` (upstream 1.1.5 pure-JS path, native addon removed). JS fallback matches upstream 1.1.5 semantics; u64/u128 layout behavior through `@solana/buffer-layout-utils` / Switchboard SDK chain unchanged (no feature loss). Rejected (a) audit ignore and (c) third-party forks. | operator (human-approved) | none (`audit:deps` should pass without ignore) |
 | OQ-13 | M1-12 (!17): `pnpm audit` HIGH GHSA-vfj7-8cjw-p6xm (`braces` <=3.0.3, stack-exhaustion DoS), no patched version exists (3.0.3 is the latest). Only path: `app` > `@solana/wallet-adapter-react` > `@solana-mobile/wallet-adapter-mobile` > `react-native` > `metro` > `micromatch` > `braces`: React Native build tooling, never in the browser bundle. Ignored via root `package.json` `pnpm.auditConfig.ignoreGhsas` (operator-approved 2026-10-07 21:20 CT); remove when `braces` is patched or wallet-adapter drops the mobile adapter. Operator to log in decisions.md. | human | none |
-| OQ-17 | M2-09 faucet limit = atomic marker accounts (transfer + allocateWithSeed + assignWithSeed) for UTC day buckets N and N+1 per claim (no program change, no off-chain store). The two-bucket rule guarantees a gap of at least 24 h (worst case about 48 h), so NFR-13 holds; FYI, not blocking. Confirm. | human | none |
+| OQ-17 | M2-09 faucet limit = atomic marker accounts (transfer + allocateWithSeed, space 1, owner SystemProgram) for UTC day buckets N and N+1 per claim (no program change, no off-chain store). The two-bucket rule guarantees a gap of at least 24 h (worst case about 48 h), so NFR-13 holds; FYI, not blocking. Also confirm: no per-IP/global cap in M2; a sybil drain of faucet SOL is bounded only by a balance floor (503 + alert) and accepted for devnet. | human | none |
 
 ## Requirements coverage
 | ID | Status |
