@@ -31,7 +31,8 @@ export async function creationBlockTime(
       { limit: PAGE, ...(before === undefined ? {} : { before }) },
       "confirmed",
     );
-    if (batch.length === 0) break;
+    // An empty page after a full one means the previous page ended at the creation transaction.
+    if (batch.length === 0) return oldest?.blockTime ?? null;
     oldest = batch[batch.length - 1];
     if (batch.length < PAGE) return oldest?.blockTime ?? null;
     before = oldest?.signature;

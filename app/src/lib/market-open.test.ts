@@ -27,6 +27,15 @@ describe("creationBlockTime", () => {
     expect(getSignaturesForAddress.mock.calls[1]?.[1]).toMatchObject({ before: "s999" });
   });
 
+  it("a history that is an exact multiple of the page size ends at the creation transaction", async () => {
+    const getSignaturesForAddress = vi
+      .fn()
+      .mockResolvedValueOnce(sigs(1_000, 0))
+      .mockResolvedValueOnce([]);
+    expect(await creationBlockTime({ getSignaturesForAddress } as never, key)).toBe(1_000 - 999);
+    expect(getSignaturesForAddress).toHaveBeenCalledTimes(2);
+  });
+
   it("is null for no history, an unknown block time and a history longer than the pages read", async () => {
     expect(
       await creationBlockTime({ getSignaturesForAddress: () => Promise.resolve([]) } as never, key),

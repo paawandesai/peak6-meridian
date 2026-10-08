@@ -108,6 +108,26 @@ describe("active date scoping (AC1)", () => {
     expect(screen.queryByText(/Showing markets from/)).toBeNull();
   });
 
+  it("with the clock on the earlier date, that date is today: only its markets, no 'Showing' line", async () => {
+    // Two NVDA dates: Oct 7 (3 strikes) and Oct 8 (1 strike); the clock is on Oct 7 (15:00 ET).
+    renderView([earlier(1), earlier(2), earlier(3), m(4)], { now: utc("2026-10-07T19:00:00Z") });
+    const section = await screen.findByRole("region", { name: "NVDA" });
+    expect(within(section).getAllByRole("row")).toHaveLength(4); // header + the 3 earlier strikes
+    expect(within(section).getByText(/^3 strikes/)).toBeInTheDocument();
+    expect(screen.queryByText(/Showing markets from/)).toBeNull();
+  });
+
+  it("with the clock on the later date, each ladder has its own strike count and ONE live marker", async () => {
+    renderView([earlier(1), earlier(2), m(3), m(4), m(5)], {
+      sources: sources({ prices: [{ ticker: "NVDA", price_cents: 21_142 }] }),
+    });
+    const section = await screen.findByRole("region", { name: "NVDA" });
+    await vi.waitFor(() => expect(section).toHaveTextContent("$211.42"));
+    expect(within(section).getByText(/^3 strikes/)).toBeInTheDocument(); // not 5: Oct 7 is excluded
+    expect(section.querySelectorAll('[data-testid="live-marker"]')).toHaveLength(1);
+    expect(within(section).getAllByRole("row")).toHaveLength(4);
+  });
+
   it("falls back to the most recent date with a 'Showing markets from' line when today has none", async () => {
     renderView([earlier(1), earlier(2)], { now: utc("2026-10-10T15:00:00Z") }); // Saturday
     expect(await screen.findByText("Showing markets from 2026-10-07 (closed)")).toBeInTheDocument();
