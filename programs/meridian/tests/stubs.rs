@@ -1,7 +1,7 @@
 //! M1-02 AC3: every instruction from architecture.md § Interfaces exists in the IDL built by
 //! `make build-local`, and every one not implemented yet returns `MeridianError::NotImplemented`.
 //! Implemented so far: config (M1-02); markets, mint/redeem (pair mode) and pause (M1-04);
-//! settlement, override, winner redeem and the local oracle (M1-07).
+//! settlement, override, winner redeem and the local oracle (M1-07); orders (M1-05).
 
 // Test code: the program rules on unwrap/panic/arithmetic do not apply here.
 #![allow(
