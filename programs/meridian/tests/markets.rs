@@ -506,13 +506,13 @@ fn redeem_pair_cannot_spend_another_users_tokens() {
 }
 
 #[test]
-fn redeem_after_settlement_is_winner_mode_which_arrives_with_m1_07() {
+fn redeem_after_settlement_is_winner_mode_and_minting_is_closed() {
     let mut h = MarketHarness::new();
     let addresses = h.base_market();
     let user = h.harness.user_for(&addresses, 5 * USDC);
     expect_success(&h.harness.mint_pair(&user, &addresses, 5));
 
-    // Write a settled market directly (no settlement instruction exists yet).
+    // Write a settled market directly; full settlement flows are covered in settlement.rs.
     let mut account = h.harness.svm.get_account(&addresses.market).unwrap();
     let mut market = h.harness.market(addresses.market);
     market.status = MarketStatus::Settled;
@@ -526,15 +526,14 @@ fn redeem_after_settlement_is_winner_mode_which_arrives_with_m1_07() {
         .set_account(addresses.market, account)
         .unwrap();
 
-    assert_meridian_error(
-        &h.harness.redeem(&user, &addresses, 1, 1),
-        MeridianError::NotImplemented,
-    );
+    // Winner mode (M1-07): YES won, so the YES token pays 1 USDC and the NO token 0.
+    expect_success(&h.harness.redeem(&user, &addresses, 1, 1));
+    assert_eq!(h.harness.token_amount(user.usdc), USDC);
     assert_meridian_error(
         &h.harness.mint_pair(&user, &addresses, 1),
         MeridianError::AlreadySettled,
     );
-    assert_eq!(h.harness.token_amount(user.yes), 5);
+    assert_eq!(h.harness.token_amount(user.yes), 4);
     h.harness.assert_market_invariants(&addresses);
 }
 

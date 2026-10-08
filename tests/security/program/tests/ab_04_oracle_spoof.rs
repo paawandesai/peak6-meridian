@@ -23,10 +23,7 @@ fn good_data(hash: [u8; 32]) -> Vec<u8> {
 }
 
 fn assert_still_open(s: &mut SettlementHarness) {
-    assert_eq!(
-        s.h().market(s.addresses.market).status,
-        MarketStatus::Open
-    );
+    assert_eq!(s.market().status, MarketStatus::Open);
 }
 
 #[test]
@@ -36,7 +33,8 @@ fn wrong_owner_is_rejected() {
         s.publish_close(scaled_cents(BASE_STRIKE_CENTS));
         let (key, hash) = s.pinned("META", source);
         // A perfect copy of a Switchboard feed, owned by an attacker program.
-        s.h().set_feed_account(key, Pubkey::new_unique(), good_data(hash));
+        s.h()
+            .set_feed_account(key, Pubkey::new_unique(), good_data(hash));
         assert_meridian_error(&s.settle(), MeridianError::OracleWrongOwner);
         // Or by the system program.
         s.h()
@@ -54,7 +52,8 @@ fn wrong_feed_hash_is_rejected() {
         let (key, hash) = s.pinned("META", source);
         let mut wrong = hash;
         wrong[31] ^= 1;
-        s.h().set_feed_account(key, SWITCHBOARD_DEVNET_PID, good_data(wrong));
+        s.h()
+            .set_feed_account(key, SWITCHBOARD_DEVNET_PID, good_data(wrong));
         assert_meridian_error(&s.settle(), MeridianError::OracleFeedHashMismatch);
         assert_still_open(&mut s);
     }
@@ -68,7 +67,8 @@ fn an_unpinned_feed_with_the_right_hash_is_rejected() {
     let (pinned_second, _) = s.pinned("META", 1);
     // The attacker's own Switchboard-owned feed (even carrying the pinned hash) is not pinned.
     let rogue = Pubkey::new_unique();
-    s.h().set_feed_account(rogue, SWITCHBOARD_DEVNET_PID, good_data(hash));
+    s.h()
+        .set_feed_account(rogue, SWITCHBOARD_DEVNET_PID, good_data(hash));
     assert_meridian_error(
         &s.settle_with(rogue, pinned_second),
         MeridianError::OracleFeedHashMismatch,
@@ -137,6 +137,7 @@ fn a_feed_for_the_local_oracle_cannot_be_forged_by_a_foreign_account() {
     let mut s = SettlementHarness::new();
     s.publish_close(scaled_cents(BASE_STRIKE_CENTS));
     let (key, _) = s.pinned("META", 0);
-    s.h().set_feed_account(key, Pubkey::new_unique(), vec![0u8; 100]);
+    s.h()
+        .set_feed_account(key, Pubkey::new_unique(), vec![0u8; 100]);
     assert_meridian_error(&s.settle(), MeridianError::OracleWrongOwner);
 }

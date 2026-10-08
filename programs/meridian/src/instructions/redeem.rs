@@ -96,10 +96,7 @@ fn redeem_winner(ctx: Context<Redeem>, yes_qty: u64, no_qty: u64) -> Result<()> 
         Outcome::No => no_qty,
         Outcome::None => return Err(MeridianError::NotSettled.into()),
     };
-    require!(
-        yes_qty > 0 || no_qty > 0,
-        MeridianError::NothingToRedeem
-    );
+    require!(yes_qty > 0 || no_qty > 0, MeridianError::NothingToRedeem);
     let usdc = winning_qty
         .checked_mul(PAIR_COLLATERAL)
         .ok_or(MeridianError::MathOverflow)?;

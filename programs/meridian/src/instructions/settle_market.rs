@@ -8,8 +8,7 @@ use crate::errors::MeridianError;
 use crate::events::MarketSettled;
 use crate::oracle::{combine, read_close, yes_wins};
 use crate::state::{
-    Config, Market, MarketStatus, Outcome, SettleSource, CONFIG_SEED, FEEDS_PER_TICKER,
-    MARKET_SEED,
+    Config, Market, MarketStatus, Outcome, SettleSource, CONFIG_SEED, FEEDS_PER_TICKER, MARKET_SEED,
 };
 
 #[derive(Accounts)]
@@ -46,7 +45,10 @@ pub fn handle_settle_market(ctx: Context<SettleMarket>) -> Result<()> {
         market.status == MarketStatus::Open,
         MeridianError::AlreadySettled
     );
-    require!(clock.unix_timestamp >= market.close_ts, MeridianError::NotClosed);
+    require!(
+        clock.unix_timestamp >= market.close_ts,
+        MeridianError::NotClosed
+    );
     let ticker = config
         .ticker(&market.ticker)
         .ok_or(MeridianError::UnknownTicker)?;

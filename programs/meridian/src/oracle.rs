@@ -233,9 +233,8 @@ mod tests {
     use base64::prelude::{Engine, BASE64_STANDARD};
     use proptest::prelude::*;
 
-    const FIXTURE: &str = include_str!(
-        "../../../tests/fixtures/switchboard/pull_feed_meta_tiingo.json"
-    );
+    const FIXTURE: &str =
+        include_str!("../../../tests/fixtures/switchboard/pull_feed_meta_tiingo.json");
     const CLOSE_TS: i64 = 1_791_057_600;
 
     /// The `data` field of the account JSON fixture (`solana account --output json` shape).
@@ -269,9 +268,21 @@ mod tests {
     fn recorded_fixture_passes_all_checks_and_fails_each_one() {
         let (_, data) = fixture();
         let reading = parse_pull_feed(&data).unwrap();
-        let ok = check_reading(&reading, &[0xab; 32], &clock(reading.slot + 30), CLOSE_TS, 30);
+        let ok = check_reading(
+            &reading,
+            &[0xab; 32],
+            &clock(reading.slot + 30),
+            CLOSE_TS,
+            30,
+        );
         assert_eq!(ok.unwrap().value_scaled, reading.value_scaled);
-        let stale = check_reading(&reading, &[0xab; 32], &clock(reading.slot + 31), CLOSE_TS, 30);
+        let stale = check_reading(
+            &reading,
+            &[0xab; 32],
+            &clock(reading.slot + 31),
+            CLOSE_TS,
+            30,
+        );
         assert!(stale.is_err());
         let wrong_hash = check_reading(&reading, &[0xcd; 32], &clock(reading.slot), CLOSE_TS, 30);
         assert!(wrong_hash.is_err());
@@ -283,7 +294,13 @@ mod tests {
             30,
         );
         assert!(early.is_err());
-        let future = check_reading(&reading, &[0xab; 32], &clock(reading.slot - 1), CLOSE_TS, 30);
+        let future = check_reading(
+            &reading,
+            &[0xab; 32],
+            &clock(reading.slot - 1),
+            CLOSE_TS,
+            30,
+        );
         assert!(future.is_err());
     }
 
@@ -305,7 +322,10 @@ mod tests {
         let price = 680 * 10i128.pow(18);
         // 5 bps of the ~680 mean is ~0.34: a spread of 0.34 passes, 0.341 fails.
         let spread = 340_000_000_000_000_000i128;
-        assert_eq!(combine(price, price + spread, 5).unwrap(), price + spread / 2);
+        assert_eq!(
+            combine(price, price + spread, 5).unwrap(),
+            price + spread / 2
+        );
         assert!(combine(price, price + 341_000_000_000_000_000, 5).is_err());
         assert!(combine(0, price, 5).is_err());
         assert!(combine(price, -price, 5).is_err());

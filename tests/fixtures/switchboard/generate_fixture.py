@@ -35,9 +35,11 @@ def build() -> bytes:
     out += bytes([0x11] * 32)  # authority
     out += bytes([0x22] * 32)  # queue
     out += FEED_HASH
-    out += struct.pack("<qQQI", 1_700_000_000, 0, 0, 1)  # initialized_at, permissions, max_variance, min_responses
+    # initialized_at, permissions, max_variance, min_responses
+    out += struct.pack("<qQQI", 1_700_000_000, 0, 0, 1)
     out += b"META close tiingo".ljust(32, b"\0")  # name
-    out += bytes([0, 0, 0, 1])  # padding1, permit_write_by_authority, historical_result_idx, min_sample_size
+    # padding1, permit_write_by_authority, historical_result_idx, min_sample_size
+    out += bytes([0, 0, 0, 1])
     out += struct.pack("<qQ", CLOSE_TS + 301, 0)  # last_update_timestamp, lut_slot
     out += bytes(32)  # _reserved1
     # CurrentResult: value, std_dev, mean, range, min_value, max_value, then counters and slots.

@@ -39,7 +39,11 @@ fn every_mention_is_gated(source: &str, needle: &str) -> bool {
 
 #[test]
 fn local_oracle_set_is_gated_in_the_source() {
-    for needle in ["pub fn local_oracle_set", "mod local_oracle_set", "use local_oracle_set"] {
+    for needle in [
+        "pub fn local_oracle_set",
+        "mod local_oracle_set",
+        "use local_oracle_set",
+    ] {
         assert!(every_mention_is_gated(LIB, needle), "lib.rs: {needle}");
         assert!(
             every_mention_is_gated(INSTRUCTIONS, needle),

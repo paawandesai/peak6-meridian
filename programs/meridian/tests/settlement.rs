@@ -25,14 +25,6 @@ use solana_sdk::signature::Signer;
 const STRIKE: u64 = BASE_STRIKE_CENTS;
 const USDC: u64 = PAIR_COLLATERAL;
 
-/// Mints `pairs` for a fresh user (who then holds `pairs` YES and `pairs` NO).
-fn holder(s: &mut SettlementHarness, pairs: u64) -> User {
-    let addresses = s.addresses;
-    let user = s.h().user_for(&addresses, pairs * USDC);
-    expect_success(&s.h().mint_pair(&user, &addresses, pairs));
-    user
-}
-
 // ---- AC1: outcomes -------------------------------------------------------------------------
 
 #[test]
@@ -45,7 +37,7 @@ fn close_above_strike_settles_yes() {
     assert_eq!(event.source, SettleSource::Oracle);
     assert_eq!(event.price, scaled_cents(STRIKE + 1));
     assert_eq!(event.oracle_slot, START_SLOT);
-    let market = s.h().market(s.addresses.market);
+    let market = s.market();
     assert_eq!(market.status, MarketStatus::Settled);
     assert_eq!(market.outcome, Outcome::Yes);
     assert_eq!(market.settle_source, SettleSource::Oracle);
@@ -57,14 +49,14 @@ fn close_above_strike_settles_yes() {
 fn close_below_strike_settles_no() {
     let mut s = SettlementHarness::new();
     s.settle_at(STRIKE - 1);
-    assert_eq!(s.h().market(s.addresses.market).outcome, Outcome::No);
+    assert_eq!(s.market().outcome, Outcome::No);
 }
 
 #[test]
 fn close_exactly_at_strike_settles_yes() {
     let mut s = SettlementHarness::new();
     s.settle_at(STRIKE);
-    assert_eq!(s.h().market(s.addresses.market).outcome, Outcome::Yes);
+    assert_eq!(s.market().outcome, Outcome::Yes);
 }
 
 #[test]
@@ -73,7 +65,7 @@ fn settle_price_is_the_mean_of_the_two_feeds() {
     // 680.00 and 680.30 differ by ~4.4 bps: allowed; mean 680.15 is at or above the strike.
     s.publish_pair(scaled_cents(68_000), scaled_cents(68_030));
     expect_success(&s.settle());
-    let market = s.h().market(s.addresses.market);
+    let market = s.market();
     assert_eq!(market.settle_price_scaled, scaled_cents(68_015));
     assert_eq!(market.outcome, Outcome::Yes);
 }
@@ -84,7 +76,7 @@ fn the_mean_decides_not_either_feed() {
     // 679.90 (below) and 680.10 (above) average to exactly the strike.
     s.publish_pair(scaled_cents(67_990), scaled_cents(68_010));
     expect_success(&s.settle());
-    assert_eq!(s.h().market(s.addresses.market).outcome, Outcome::Yes);
+    assert_eq!(s.market().outcome, Outcome::Yes);
 }
 
 #[test]
@@ -93,10 +85,7 @@ fn spread_above_max_conf_bps_is_rejected_and_at_the_limit_passes() {
     // 5 bps of a ~$680 mean is ~34.0 cents; 35 cents is over, 34 cents is inside.
     s.publish_pair(scaled_cents(68_000), scaled_cents(68_035));
     assert_meridian_error(&s.settle(), MeridianError::OracleSpreadTooWide);
-    assert_eq!(
-        s.h().market(s.addresses.market).status,
-        MarketStatus::Open
-    );
+    assert_eq!(s.market().status, MarketStatus::Open);
     s.publish_pair(scaled_cents(68_000), scaled_cents(68_034));
     expect_success(&s.settle());
 }
@@ -138,12 +127,20 @@ fn recorded_fixture_settles_a_market() {
     s.h().set_unix_timestamp(BASE_CLOSE_TS + 301);
     // Twelve Data agrees within 5 bps.
     let (key1, hash1) = s.pinned("META", 1);
-    let data1 = pull_feed_data(hash1, scaled_cents(68_130), 412_345_678, BASE_CLOSE_TS + 301);
+    let data1 = pull_feed_data(
+        hash1,
+        scaled_cents(68_130),
+        412_345_678,
+        BASE_CLOSE_TS + 301,
+    );
     s.h().set_feed_account(key1, SWITCHBOARD_MAINNET_PID, data1);
     expect_success(&s.settle());
-    let market = s.h().market(s.addresses.market);
+    let market = s.market();
     assert_eq!(market.outcome, Outcome::Yes);
-    assert_eq!(market.settle_price_scaled, scaled_cents(68_127) + 5 * 10i128.pow(15));
+    assert_eq!(
+        market.settle_price_scaled,
+        scaled_cents(68_127) + 5 * 10i128.pow(15)
+    );
     assert_eq!(market.settle_slot, 412_345_678);
 }
 
@@ -157,7 +154,7 @@ fn override_after_the_delay_settles_with_the_manual_price() {
     let event = find_event::<MarketSettled>(expect_success(&result)).expect("MarketSettled");
     assert_eq!(event.source, SettleSource::Override);
     assert_eq!(event.outcome, Outcome::No);
-    let market = s.h().market(s.addresses.market);
+    let market = s.market();
     assert_eq!(market.settle_source, SettleSource::Override);
     assert_eq!(market.settle_slot, 0);
     assert_eq!(market.settle_price_scaled, scaled_cents(STRIKE - 500));
@@ -169,7 +166,7 @@ fn override_at_the_strike_is_yes_and_zero_price_is_rejected() {
     s.h().set_unix_timestamp(BASE_CLOSE_TS + 3_600);
     assert_meridian_error(&s.admin_override(0), MeridianError::OracleInvalidValue);
     expect_success(&s.admin_override(STRIKE));
-    assert_eq!(s.h().market(s.addresses.market).outcome, Outcome::Yes);
+    assert_eq!(s.market().outcome, Outcome::Yes);
 }
 
 // ---- local oracle ---------------------------------------------------------------------------
@@ -191,12 +188,15 @@ fn local_oracle_feeds_settle_a_market() {
     expect_success(&s.h().update_config(&params));
 
     let admin = s.h().admin.insecure_clone();
-    for (source, value) in [(0u8, scaled_cents(STRIKE + 10)), (1u8, scaled_cents(STRIKE + 12))] {
+    for (source, value) in [
+        (0u8, scaled_cents(STRIKE + 10)),
+        (1u8, scaled_cents(STRIKE + 12)),
+    ] {
         let ix = Harness::local_oracle_set_ix(admin.pubkey(), meta, source, value, START_SLOT);
         expect_success(&s.h().send(ix, &[&admin]));
     }
     expect_success(&s.settle_with(feeds[0], feeds[1]));
-    let market = s.h().market(s.addresses.market);
+    let market = s.market();
     assert_eq!(market.outcome, Outcome::Yes);
     assert_eq!(market.settle_price_scaled, scaled_cents(STRIKE + 11));
 }
@@ -221,8 +221,8 @@ fn local_oracle_set_is_admin_only_and_validates_its_arguments() {
 #[test]
 fn winners_redeem_one_usdc_per_token_and_the_vault_empties() {
     let mut s = SettlementHarness::new();
-    let alice = holder(&mut s, 4);
-    let bob = holder(&mut s, 6);
+    let alice = s.holder(4);
+    let bob = s.holder(6);
     s.settle_at(STRIKE + 100);
     let addresses = s.addresses;
 
@@ -250,7 +250,7 @@ fn winners_redeem_one_usdc_per_token_and_the_vault_empties() {
 #[test]
 fn no_wins_pays_the_no_holders() {
     let mut s = SettlementHarness::new();
-    let alice = holder(&mut s, 3);
+    let alice = s.holder(3);
     s.settle_at(STRIKE - 100);
     let addresses = s.addresses;
     expect_success(&s.h().redeem(&alice, &addresses, 3, 3));
@@ -261,7 +261,7 @@ fn no_wins_pays_the_no_holders() {
 #[test]
 fn redeeming_nothing_fails_in_winner_mode() {
     let mut s = SettlementHarness::new();
-    let alice = holder(&mut s, 1);
+    let alice = s.holder(1);
     s.settle_at(STRIKE);
     let addresses = s.addresses;
     assert_meridian_error(
@@ -285,7 +285,7 @@ proptest! {
     ) {
         let strike = strike_tens * 1_000;
         let mut s = SettlementHarness::with_strike(strike);
-        let user = holder(&mut s, pairs);
+        let user = s.holder(pairs);
         // Both feeds agree exactly, so the spread rule never interferes.
         s.settle_at(close_cents);
         let addresses = s.addresses;

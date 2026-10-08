@@ -3,16 +3,16 @@
 //! META market. Included through `common/mod.rs`.
 
 use anchor_lang::prelude::Pubkey;
-use anchor_lang::solana_program::hash::hash;
 use anchor_lang::solana_program::clock::Clock;
+use anchor_lang::solana_program::hash::hash;
 use anchor_lang::{AnchorSerialize, InstructionData, ToAccountMetas};
+use litesvm::types::TransactionResult;
 use meridian::oracle::{PULL_FEED_DISCRIMINATOR, PULL_FEED_LEN, SWITCHBOARD_DEVNET_PID};
 use meridian::state::{STRIKE_CENTS_TO_SCALED, SYMBOL_LEN};
 use solana_sdk::account::Account as SdkAccount;
 use solana_sdk::instruction::{AccountMeta, Instruction};
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::system_program;
-use litesvm::types::TransactionResult;
 
 use super::{
     config_pda, expect_success, symbol, Harness, MarketAddresses, MarketArgs, MarketHarness,
@@ -121,7 +121,9 @@ impl Harness {
         slot: u64,
     ) -> Instruction {
         let mut data = hash(b"global:local_oracle_set").to_bytes()[..8].to_vec();
-        (ticker, source_slot, value, slot).serialize(&mut data).unwrap();
+        (ticker, source_slot, value, slot)
+            .serialize(&mut data)
+            .unwrap();
         Instruction {
             program_id: meridian::ID,
             accounts: vec![
@@ -163,9 +165,30 @@ impl SettlementHarness {
             addresses,
             payer,
         };
-        this.h().set_unix_timestamp(BASE_CLOSE_TS + SETTLE_DELAY_SECS);
+        this.h()
+            .set_unix_timestamp(BASE_CLOSE_TS + SETTLE_DELAY_SECS);
         this.h().set_slot(START_SLOT);
         this
+    }
+
+    /// The stored market.
+    pub fn market(&mut self) -> meridian::state::Market {
+        let address = self.addresses.market;
+        self.h().market(address)
+    }
+
+    /// A funded user holding `pairs` YES and `pairs` NO. The clock is rewound to before close for
+    /// the mint (no minting at or after close) and restored afterwards.
+    pub fn holder(&mut self, pairs: u64) -> super::User {
+        let addresses = self.addresses;
+        let clock: Clock = self.h().clock();
+        self.h().set_unix_timestamp(super::BASE_UNIX_TS);
+        let user = self
+            .h()
+            .user_for(&addresses, pairs * super::PAIR_COLLATERAL);
+        expect_success(&self.h().mint_pair(&user, &addresses, pairs));
+        self.h().set_unix_timestamp(clock.unix_timestamp);
+        user
     }
 
     pub fn h(&mut self) -> &mut Harness {

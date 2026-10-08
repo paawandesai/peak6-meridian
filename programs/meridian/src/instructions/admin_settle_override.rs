@@ -7,9 +7,7 @@ use anchor_lang::prelude::*;
 use crate::errors::MeridianError;
 use crate::instructions::settle_market::record_settlement;
 use crate::oracle::{cents_to_scaled, yes_wins};
-use crate::state::{
-    Config, Market, MarketStatus, Outcome, SettleSource, CONFIG_SEED, MARKET_SEED,
-};
+use crate::state::{Config, Market, MarketStatus, Outcome, SettleSource, CONFIG_SEED, MARKET_SEED};
 
 #[derive(Accounts)]
 pub struct AdminSettleOverride<'info> {

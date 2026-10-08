@@ -13,7 +13,7 @@ use solana_sdk::signature::Signer;
 const DELAY: i64 = 3_600;
 
 fn snapshot(s: &mut SettlementHarness) -> Market {
-    s.h().market(s.addresses.market)
+    s.market()
 }
 
 fn same_record(a: &Market, b: &Market) -> bool {
@@ -90,7 +90,9 @@ enum Path {
 fn settle_by(s: &mut SettlementHarness, path: Path) {
     match path {
         Path::Oracle => s.settle_at(BASE_STRIKE_CENTS),
-        Path::Override => expect_success(&s.admin_override(BASE_STRIKE_CENTS - 1)),
+        Path::Override => {
+            expect_success(&s.admin_override(BASE_STRIKE_CENTS - 1));
+        }
     }
 }
 

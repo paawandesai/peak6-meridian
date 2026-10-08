@@ -20,10 +20,7 @@ fn publish_at(s: &mut SettlementHarness, source: usize, slot: u64, updated_at: i
 }
 
 fn assert_still_open(s: &mut SettlementHarness) {
-    assert_eq!(
-        s.h().market(s.addresses.market).status,
-        MarketStatus::Open
-    );
+    assert_eq!(s.market().status, MarketStatus::Open);
 }
 
 #[test]
