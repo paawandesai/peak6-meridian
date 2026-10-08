@@ -7,7 +7,15 @@
  * Environment (optional): E2E_RPC_PORT (8899), E2E_FAUCET_PORT (9900), E2E_APP_PORT (3100).
  */
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -137,13 +145,14 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     if (usdcMint === undefined) throw new Error("the seed did not report the USDC mint");
 
     log(`starting the app on ${APP_URL}`);
+    const appLog = openSync(join(work, "app.log"), "a");
     const app = spawn(
       "pnpm",
       ["--filter", "app", "exec", "next", "dev", "--port", String(APP_PORT)],
       {
         cwd: ROOT,
         detached: true,
-        stdio: ["ignore", "ignore", "ignore"],
+        stdio: ["ignore", appLog, appLog],
         env: {
           ...process.env,
           NEXT_PUBLIC_CLUSTER: "localnet",
@@ -160,8 +169,16 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       },
     );
     children.push(app);
-    // Warm the first compile so the specs do not pay for it.
-    await until("app", 180_000, async () => ((await fetch(APP_URL)).ok ? true : undefined));
+    // Warm the first compile so the specs do not pay for it; a non-2xx (for example a config
+    // error) keeps waiting and the app log tail goes into the failure.
+    await until("app", 300_000, async () => {
+      const response = await fetch(APP_URL, { signal: AbortSignal.timeout(120_000) });
+      return response.ok ? true : undefined;
+    }).catch((error: unknown) => {
+      const tail = readFileSync(join(work, "app.log"), "utf8").split("\n").slice(-25).join("\n");
+      throw new Error(`${String(error)}\napp log (tail):\n${tail}`);
+    });
+    closeSync(appLog);
 
     const state: StackState = {
       rpcUrl: RPC_URL,

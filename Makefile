@@ -12,9 +12,9 @@ export NEXT_TELEMETRY_DISABLED := 1
 
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
+.PHONY: help toolchain install install-rust install-js-py build-local build-devnet \
 	client lint lint-rust lint-js-py typecheck test test-rust-unit test-js-py-unit test-security \
-	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet deploy-vercel deploy-railway test-deploy-devnet e2e e2e-ui dev
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet deploy-vercel deploy-railway test-deploy-devnet e2e e2e-ui e2e-ui-browser dev
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -141,6 +141,10 @@ e2e:
 e2e-ui:
 	@[ "$$E2E_PREBUILT" = "1" ] || $(MAKE) build-local
 	pnpm --filter e2e exec playwright test
+
+## Chromium for the Playwright smoke (CI; `--with-deps` installs the system libraries too).
+e2e-ui-browser:
+	pnpm --filter e2e exec playwright install --with-deps chromium
 
 dev:
 	scripts/dev.sh
