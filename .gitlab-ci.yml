@@ -157,6 +157,9 @@ secrets:gitleaks:
     entrypoint: [""]
   variables:
     GIT_DEPTH: "0"
+    # Fresh clone every run: a reused build dir keeps refs from old pipelines, and
+    # `gitleaks git` scans all of them, so rewritten MR commits kept failing the scan.
+    GIT_STRATEGY: clone
   before_script: []
   script:
     - scripts/ci/gitleaks-selftest.sh
