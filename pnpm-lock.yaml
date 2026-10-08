@@ -184,6 +184,9 @@ importers:
       luxon:
         specifier: 3.7.2
         version: 3.7.2
+      node-cron:
+        specifier: 4.6.0
+        version: 4.6.0
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -209,6 +212,9 @@ importers:
       '@solana/web3.js':
         specifier: 1.99.0
         version: 1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      automation:
+        specifier: workspace:*
+        version: link:../../services/automation
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -3154,6 +3160,10 @@ packages:
         optional: true
       sass:
         optional: true
+
+  node-cron@4.6.0:
+    resolution: {integrity: sha512-Si/bzYiKRHOB8/a99T2+SDGN582ONDMSTlJr5oCkT6GtnqPjZ2s10eoQRYkW9ZHwjVxONL+W8Fb+qR0AHMQsdg==}
+    engines: {node: '>=20'}
 
   node-fetch@2.7.0:
     resolution: {integrity: sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==}
@@ -7010,6 +7020,8 @@ snapshots:
       - '@babel/core'
       - '@types/node'
       - babel-plugin-macros
+
+  node-cron@4.6.0: {}
 
   node-fetch@2.7.0:
     dependencies:

@@ -8,13 +8,15 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "start": "tsx src/main.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.31.1",
     "@meridian/client": "workspace:*",
     "@solana/web3.js": "1.99.0",
     "luxon": "3.7.2",
+    "node-cron": "4.6.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
