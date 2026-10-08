@@ -55,3 +55,5 @@ PRD/docs verification (local `.ao-ops/prd-docs-verification.md`):
 
 ## 2026-10-07 20:40 CT · operator
 - **D-048** (By: human): UI clarity/usability track approved by Paawan. Orchestrator designs with `/design` (UI-01 → `docs/design.md`, no code); Sonnet workers implement UI-02+; Cursor reviews against ticket + design.md. Never blocks M2/M3 exits or the 16:05 ET settlements; code freeze Sun 2026-10-11 09:00 CT.
+
+2026-10-08 — M2 tickets M2-01..M2-13 drafted by the orchestrator (Tier 2, Paawan notified); UI-04/05/06/08 design ACs folded into M2-06/07/08/10.
