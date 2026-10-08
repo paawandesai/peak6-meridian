@@ -24,15 +24,18 @@ const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ
 export const SIGNATURE_LIMIT = 200;
 const TX_BATCH = 25;
 
+/** One of the wallet's token accounts for a mint and the amount it holds. */
+export type TokenSlice = { readonly account: string; readonly amount: bigint };
+
 /**
- * Wallet token balances of one market, and the token accounts that hold them (the largest one
- * per mint; `null` when the wallet has none), so a redeem burns from the accounts that exist.
+ * Wallet token balances of one market: the totals and the accounts they are spread over, so a
+ * redeem burns from each account exactly what that account holds.
  */
 export type Holdings = {
   readonly yes: bigint;
   readonly no: bigint;
-  readonly yesAccount: string | null;
-  readonly noAccount: string | null;
+  readonly yesAccounts: readonly TokenSlice[];
+  readonly noAccounts: readonly TokenSlice[];
 };
 
 export type OpenOrdersRow = {
@@ -59,6 +62,8 @@ export type PortfolioSnapshot = {
   readonly events: readonly MeridianEvent[];
   /** True when any address returned a full page of signatures (older history is not read). */
   readonly eventsPartial: boolean;
+  /** The wallet's fullest test-USDC account (redeemed USDC is paid into it); `null` if none. */
+  readonly usdcAccount: string | null;
 };
 
 export type PortfolioSource = {
@@ -80,10 +85,10 @@ const tokenAccounts = z.object({
   ),
 });
 
-/** The owner's total for one mint and the account holding the most of it (base58). */
-export type MintBalance = { readonly amount: bigint; readonly account: string };
+/** The owner's total for one mint and the accounts holding it, fullest first (base58). */
+export type MintBalance = { readonly amount: bigint; readonly accounts: readonly TokenSlice[] };
 
-/** Sum of the owner's token balances by mint (base58). */
+/** The owner's token balances by mint (base58). */
 export async function fetchBalancesByMint(
   connection: Pick<Connection, "getParsedTokenAccountsByOwner">,
   owner: PublicKey,
@@ -91,19 +96,19 @@ export async function fetchBalancesByMint(
   const response = tokenAccounts.parse(
     await connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID }),
   );
-  const balances = new Map<string, MintBalance>();
-  const largest = new Map<string, bigint>();
+  const slices = new Map<string, TokenSlice[]>();
   for (const { account, pubkey } of response.value) {
     const { mint, tokenAmount } = account.data.parsed.info;
-    const amount = BigInt(tokenAmount.amount);
-    const previous = balances.get(mint);
-    const best = largest.get(mint);
-    const isLargest = best === undefined || amount > best;
-    if (isLargest) largest.set(mint, amount);
-    balances.set(mint, {
-      amount: (previous?.amount ?? 0n) + amount,
-      account: isLargest ? String(pubkey) : (previous?.account ?? String(pubkey)),
-    });
+    const list = slices.get(mint) ?? [];
+    list.push({ account: String(pubkey), amount: BigInt(tokenAmount.amount) });
+    slices.set(mint, list);
+  }
+  const balances = new Map<string, MintBalance>();
+  for (const [mint, list] of slices) {
+    const accounts = [...list].sort((x, y) =>
+      x.amount > y.amount ? -1 : x.amount < y.amount ? 1 : 0,
+    );
+    balances.set(mint, { amount: accounts.reduce((sum, item) => sum + item.amount, 0n), accounts });
   }
   return balances;
 }
@@ -126,9 +131,48 @@ export function holdingsFor(
       out[market.address] = {
         yes: yes?.amount ?? 0n,
         no: no?.amount ?? 0n,
-        yesAccount: yes?.account ?? null,
-        noAccount: no?.account ?? null,
+        yesAccounts: (yes?.accounts ?? []).filter((item) => item.amount > 0n),
+        noAccounts: (no?.accounts ?? []).filter((item) => item.amount > 0n),
       };
+    }
+  }
+  return out;
+}
+
+export type SignatureEntry = { readonly signature: string; readonly slot: number };
+
+/**
+ * One oldest-first list from several `getSignaturesForAddress` pages. Each page is newest-first,
+ * and within a slot that order is the only record of which transaction came first, so every page
+ * is reversed before merging. Across slots the slot decides; inside a slot the pages' relative
+ * orders are merged (a signature waits until nothing older than it, in any page, is left).
+ */
+export function orderSignatures(pages: readonly (readonly SignatureEntry[])[]): string[] {
+  const slotOf = new Map<string, number>();
+  const oldestFirst = pages.map((page) => [...page].reverse());
+  for (const page of oldestFirst) for (const entry of page) slotOf.set(entry.signature, entry.slot);
+  const slots = [...new Set(slotOf.values())].sort((a, b) => a - b);
+  const out: string[] = [];
+  for (const slot of slots) {
+    const queues = oldestFirst
+      .map((page) => page.filter((entry) => entry.slot === slot).map((entry) => entry.signature))
+      .filter((queue) => queue.length > 0);
+    const done = new Set<string>();
+    while (queues.some((queue) => queue.some((signature) => !done.has(signature)))) {
+      const heads = queues
+        .map((queue) => queue.find((signature) => !done.has(signature)))
+        .filter((signature): signature is string => signature !== undefined);
+      // A head is safe when it is not waiting behind another signature in any other queue.
+      const next =
+        heads.find((head) =>
+          queues.every((queue) => {
+            const at = queue.indexOf(head);
+            return at <= 0 || queue.slice(0, at).every((earlier) => done.has(earlier));
+          }),
+        ) ?? heads[0];
+      if (next === undefined) break;
+      done.add(next);
+      out.push(next);
     }
   }
   return out;
@@ -148,7 +192,7 @@ export async function fetchWalletEvents(
   programId: PublicKey,
 ): Promise<{ events: MeridianEvent[]; partial: boolean }> {
   let partial = false;
-  const seen = new Map<string, number>();
+  const pages: SignatureEntry[][] = [];
   for (const address of addresses) {
     const signatures = await connection.getSignaturesForAddress(
       address,
@@ -156,11 +200,9 @@ export async function fetchWalletEvents(
       "confirmed",
     );
     if (signatures.length >= SIGNATURE_LIMIT) partial = true;
-    for (const entry of signatures) {
-      if (entry.err === null) seen.set(entry.signature, entry.slot);
-    }
+    pages.push(signatures.filter((entry) => entry.err === null));
   }
-  const ordered = [...seen.entries()].sort((a, b) => a[1] - b[1]).map(([signature]) => signature);
+  const ordered = orderSignatures(pages);
   const events: MeridianEvent[] = [];
   for (let start = 0; start < ordered.length; start += TX_BATCH) {
     const batch = ordered.slice(start, start + TX_BATCH);
@@ -257,6 +299,10 @@ export function createPortfolioSource(config: PublicConfig): PortfolioSource {
         resting,
         events,
         eventsPartial: partial,
+        usdcAccount:
+          config.usdcMint === undefined
+            ? null
+            : (balances.get(config.usdcMint.toBase58())?.accounts[0]?.account ?? null),
       };
     },
   };

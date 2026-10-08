@@ -521,12 +521,11 @@ export function PortfolioView(props: PortfolioViewProps) {
   }
 
   const redeemAll: RedeemItem[] = model.redeemable.map(
-    ({ market, yesQty, noQty, yesAccount, noAccount }) => ({
+    ({ market, yesAccounts, noAccounts, usdcAccount }) => ({
       market,
-      yesQty,
-      noQty,
-      yesAccount,
-      noAccount,
+      yesAccounts,
+      noAccounts,
+      usdcAccount,
     }),
   );
 

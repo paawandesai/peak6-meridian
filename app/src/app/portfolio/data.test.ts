@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   type EventConnection,
+  orderSignatures,
   fetchBalancesByMint,
   fetchWalletEvents,
   holdingsFor,
@@ -119,17 +120,23 @@ describe("balances and holdings", () => {
       } as never,
       wallet,
     );
-    // The larger YES account (6) is the one a redeem should burn from.
+    // Totals are the sum; the accounts are listed fullest first, each with its own amount.
     expect(balances.get(a.yesMint.toBase58())).toEqual({
       amount: 10n,
-      account: accounts[1]?.toBase58(),
+      accounts: [
+        { account: accounts[1]?.toBase58(), amount: 6n },
+        { account: accounts[0]?.toBase58(), amount: 4n },
+      ],
     });
     expect(holdingsFor(balances, [NVDA, AAPL], programId)).toEqual({
       [NVDA.address]: {
         yes: 10n,
         no: 2n,
-        yesAccount: accounts[1]?.toBase58(),
-        noAccount: accounts[2]?.toBase58(),
+        yesAccounts: [
+          { account: accounts[1]?.toBase58(), amount: 6n },
+          { account: accounts[0]?.toBase58(), amount: 4n },
+        ],
+        noAccounts: [{ account: accounts[2]?.toBase58(), amount: 2n }],
       },
     });
   });
@@ -166,5 +173,48 @@ describe("restingOrders", () => {
       { market: "M", orderId: 1n, side: "Bid", price: 40, qty: 5n },
       { market: "M", orderId: 4n, side: "Ask", price: 60, qty: 2n },
     ]);
+  });
+});
+
+describe("orderSignatures: oldest first, including inside one slot", () => {
+  it("reverses each newest-first page so two fills in one slot keep their real order", () => {
+    // RPC returns newest-first: `b` (a sell) landed after `a` (a buy), both in slot 10.
+    const page = [
+      { signature: "c", slot: 11 },
+      { signature: "b", slot: 10 },
+      { signature: "a", slot: 10 },
+      { signature: "z", slot: 9 },
+    ];
+    expect(orderSignatures([page])).toEqual(["z", "a", "b", "c"]);
+  });
+
+  it("merges pages from several addresses: slots first, then each page's own order", () => {
+    const wallet = [
+      { signature: "w2", slot: 5 },
+      { signature: "w1", slot: 5 },
+    ];
+    const openOrders = [
+      { signature: "w2", slot: 5 },
+      { signature: "m1", slot: 5 }, // a taker's fill against the maker's OpenOrders
+      { signature: "w1", slot: 5 },
+      { signature: "early", slot: 4 },
+    ];
+    // w1 < m1 < w2 is the only order both pages agree on.
+    expect(orderSignatures([wallet, openOrders])).toEqual(["early", "w1", "m1", "w2"]);
+  });
+
+  it("an end-to-end fetch hands the decoder oldest-first events", async () => {
+    const { connection: c, getTransactions } = connection(
+      {
+        [wallet.toBase58()]: [
+          { signature: "second", slot: 10, err: null },
+          { signature: "first", slot: 10, err: null },
+        ],
+      },
+      { first: fixture.logs, second: fixture.logs },
+    );
+    const { events } = await fetchWalletEvents(c, [wallet], programId);
+    expect(getTransactions.mock.calls[0]?.[0]).toEqual(["first", "second"]);
+    expect([...new Set(events.map((event) => event.signature))]).toEqual(["first", "second"]);
   });
 });

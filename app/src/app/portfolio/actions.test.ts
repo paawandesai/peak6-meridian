@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { BorshInstructionCoder } from "@coral-xyz/anchor";
+import { MERIDIAN_IDL } from "@meridian/client";
 import { Keypair, type Transaction } from "@solana/web3.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,6 +9,8 @@ import { AAPL, MSFT, NVDA } from "./fixtures";
 import { parsePublicConfig } from "@/lib/config";
 
 const user = Keypair.generate();
+const coder = new BorshInstructionCoder(MERIDIAN_IDL);
+const program = { programId: parsePublicConfig({}).programId };
 const usdcMint = Keypair.generate().publicKey;
 const config = parsePublicConfig({ usdcMint: usdcMint.toBase58() });
 
@@ -32,10 +36,23 @@ function harness(err: unknown = null) {
   return { actions, signAllTransactions, sendRawTransaction };
 }
 
+const slice = (amount: bigint) => ({ account: Keypair.generate().publicKey.toBase58(), amount });
+const item = (
+  market: typeof AAPL,
+  yes: bigint[],
+  no: bigint[] = [],
+  usdc: string | null = null,
+) => ({
+  market,
+  yesAccounts: yes.map(slice),
+  noAccounts: no.map(slice),
+  usdcAccount: usdc,
+});
+
 describe("createActions", () => {
   it("one redeem is one transaction and one wallet approval", async () => {
     const { actions, signAllTransactions, sendRawTransaction } = harness();
-    const result = await actions.redeem([{ market: AAPL, yesQty: 40n, noQty: 0n }]);
+    const result = await actions.redeem([item(AAPL, [40n])]);
     expect(result).toEqual({ signature: "sig", slot: 77 });
     expect(signAllTransactions).toHaveBeenCalledTimes(1);
     expect(signAllTransactions.mock.calls[0]?.[0]).toHaveLength(1);
@@ -44,15 +61,35 @@ describe("createActions", () => {
 
   it("Redeem all over many markets is chunked but still ONE wallet approval", async () => {
     const { actions, signAllTransactions, sendRawTransaction } = harness();
-    const items = [AAPL, MSFT, AAPL, MSFT, AAPL].map((market) => ({
-      market,
-      yesQty: 1n,
-      noQty: 0n,
-    }));
+    const items = [AAPL, MSFT, AAPL, MSFT, AAPL].map((market) => item(market, [1n]));
     await actions.redeem(items);
     expect(signAllTransactions).toHaveBeenCalledTimes(1);
     expect(signAllTransactions.mock.calls[0]?.[0]).toHaveLength(2);
     expect(sendRawTransaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("a wallet with its YES split over two token accounts redeems each account's own amount, paying the passed USDC account", async () => {
+    const { actions, signAllTransactions } = harness();
+    const usdc = Keypair.generate().publicKey.toBase58();
+    const yes = [slice(6n), slice(4n)];
+    await actions.redeem([{ ...item(AAPL, [], [], usdc), yesAccounts: yes }]);
+    const transaction = signAllTransactions.mock.calls[0]?.[0][0];
+    const redeems = (transaction?.instructions ?? []).filter((instruction) =>
+      instruction.programId.equals(program.programId),
+    );
+    // One redeem per account pair: 6 from the first account, 4 from the second, never 10 from one.
+    const amounts = redeems.map((instruction) => {
+      const decoded = coder.decode(instruction.data);
+      const data = decoded?.data as { yes_qty: { toString(): string } };
+      return [data.yes_qty.toString(), instruction.keys[3]?.pubkey.toBase58()];
+    });
+    expect(amounts).toEqual([
+      ["6", yes[0]?.account],
+      ["4", yes[1]?.account],
+    ]);
+    expect(redeems.every((instruction) => instruction.keys[2]?.pubkey.toBase58() === usdc)).toBe(
+      true,
+    );
   });
 
   it("withdraw builds settle_funds for each market", async () => {
@@ -63,9 +100,7 @@ describe("createActions", () => {
 
   it("surfaces an on-chain failure", async () => {
     const { actions } = harness({ InstructionError: [0, "Custom"] });
-    await expect(actions.redeem([{ market: AAPL, yesQty: 1n, noQty: 0n }])).rejects.toThrow(
-      /failed on chain/,
-    );
+    await expect(actions.redeem([item(AAPL, [1n])])).rejects.toThrow(/failed on chain/);
   });
 
   it("needs a configured USDC mint", async () => {
@@ -74,8 +109,6 @@ describe("createActions", () => {
       signAllTransactions: () => Promise.reject(new Error("unused")),
     });
     await expect(noMint.withdraw([NVDA])).rejects.toThrow(/USDC_MINT/);
-    await expect(noMint.redeem([{ market: AAPL, yesQty: 1n, noQty: 0n }])).rejects.toThrow(
-      /USDC_MINT/,
-    );
+    await expect(noMint.redeem([item(AAPL, [1n])])).rejects.toThrow(/USDC_MINT/);
   });
 });

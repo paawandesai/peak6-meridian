@@ -15,7 +15,7 @@ vi.mock("@solana/wallet-adapter-react-ui", () => ({ useWalletModal: () => modal 
 
 import type { PortfolioActions } from "./actions";
 import type { PortfolioSource } from "./data";
-import { AAPL, fill, MSFT, NVDA, OTHER, snapshot, WALLET } from "./fixtures";
+import { AAPL, fill, held, MSFT, NVDA, OTHER, snapshot, WALLET } from "./fixtures";
 import { CONNECT_COPY, MARK_FOOTNOTE, PortfolioView } from "./portfolio-view";
 import type { MarketDataSources } from "@/lib/market-data";
 import { reader, withReader } from "@/test-utils";
@@ -112,7 +112,7 @@ describe("Portfolio page", () => {
   it("AC1/AC1b: every column is present and the half-cent mid and non-whole average print exactly", async () => {
     setup({
       snap: snapshot({
-        holdings: { [NVDA.address]: { yes: 7n, no: 0n, yesAccount: null, noAccount: null } },
+        holdings: { [NVDA.address]: held(7n, 0n) },
         events: as([buyNvda(41, 3n), buyNvda(42, 4n)]),
       }),
     });
@@ -147,7 +147,7 @@ describe("Portfolio page", () => {
   it("a fractional-cent loss is printed with a minus sign and in the loss colour", async () => {
     setup({
       snap: snapshot({
-        holdings: { [NVDA.address]: { yes: 1n, no: 0n, yesAccount: null, noAccount: null } },
+        holdings: { [NVDA.address]: held(1n, 0n) },
         events: as([buyNvda(60, 1n)]),
       }),
     });
@@ -162,8 +162,8 @@ describe("Portfolio page", () => {
     const { actions } = setup({
       snap: snapshot({
         holdings: {
-          [AAPL.address]: { yes: 40n, no: 0n, yesAccount: "Y1", noAccount: null },
-          [MSFT.address]: { yes: 5n, no: 0n, yesAccount: null, noAccount: null },
+          [AAPL.address]: held(40n, 0n),
+          [MSFT.address]: held(5n, 0n),
         },
         events: as([
           fill("a", AAPL.address, {
@@ -201,7 +201,11 @@ describe("Portfolio page", () => {
     expect(await screen.findByText(/Confirmed in slot 42/)).toBeInTheDocument();
     expect(actions.redeem).toHaveBeenCalledTimes(1);
     expect(actions.redeem).toHaveBeenCalledWith([
-      expect.objectContaining({ market: AAPL, yesQty: 40n, noQty: 0n }),
+      expect.objectContaining({
+        market: AAPL,
+        yesAccounts: [expect.objectContaining({ amount: 40n })],
+        noAccounts: [],
+      }),
     ]);
     expect(screen.getByRole("link", { name: /view on explorer/ })).toHaveAttribute(
       "href",
@@ -212,7 +216,7 @@ describe("Portfolio page", () => {
   it("Redeem all redeems every winning market in one call", async () => {
     const { actions } = setup({
       snap: snapshot({
-        holdings: { [AAPL.address]: { yes: 40n, no: 2n, yesAccount: null, noAccount: null } },
+        holdings: { [AAPL.address]: held(40n, 2n) },
         events: as([
           fill("a", AAPL.address, {
             taker: KEY.toBase58(),
@@ -229,7 +233,11 @@ describe("Portfolio page", () => {
     await screen.findByText(/Confirmed in slot 42/);
     expect(actions.redeem).toHaveBeenCalledTimes(1);
     expect(actions.redeem).toHaveBeenCalledWith([
-      expect.objectContaining({ market: AAPL, yesQty: 40n, noQty: 2n }),
+      expect.objectContaining({
+        market: AAPL,
+        yesAccounts: [expect.objectContaining({ amount: 40n })],
+        noAccounts: [expect.objectContaining({ amount: 2n })],
+      }),
     ]);
   });
 
@@ -241,7 +249,7 @@ describe("Portfolio page", () => {
     setup({
       actions,
       snap: snapshot({
-        holdings: { [AAPL.address]: { yes: 1n, no: 0n, yesAccount: null, noAccount: null } },
+        holdings: { [AAPL.address]: held(1n, 0n) },
         events: as([
           fill("a", AAPL.address, {
             taker: KEY.toBase58(),
@@ -262,7 +270,7 @@ describe("Portfolio page", () => {
   it("AC3: the MM block lists strikes and Withdraw calls settle_funds; it collapses with no open orders", async () => {
     const { actions } = setup({
       snap: snapshot({
-        holdings: { [NVDA.address]: { yes: 25n, no: 0n, yesAccount: null, noAccount: null } },
+        holdings: { [NVDA.address]: held(25n, 0n) },
         openOrders: [{ market: NVDA.address, freeUsdc: 12_400_000n, freeYes: 0n, restingCount: 3 }],
         resting: [{ market: NVDA.address, orderId: 1n, side: "Bid", price: 40, qty: 5n }],
         events: as([buyNvda(40, 25n)]),
@@ -289,8 +297,8 @@ describe("Portfolio page", () => {
     setup({
       snap: snapshot({
         holdings: {
-          [NVDA.address]: { yes: 10n, no: 0n, yesAccount: null, noAccount: null },
-          [AAPL.address]: { yes: 4n, no: 0n, yesAccount: null, noAccount: null },
+          [NVDA.address]: held(10n, 0n),
+          [AAPL.address]: held(4n, 0n),
         },
         openOrders: [{ market: NVDA.address, freeUsdc: 0n, freeYes: 0n, restingCount: 1 }],
         resting: [{ market: NVDA.address, orderId: 9n, side: "Bid", price: 44, qty: 6n }],
@@ -336,7 +344,7 @@ describe("Portfolio page", () => {
   it("states: an open market carries a badge and a countdown; history gaps are announced", async () => {
     setup({
       snap: snapshot({
-        holdings: { [NVDA.address]: { yes: 7n, no: 0n, yesAccount: null, noAccount: null } },
+        holdings: { [NVDA.address]: held(7n, 0n) },
         eventsPartial: true,
       }),
     });
@@ -351,7 +359,7 @@ describe("Portfolio page", () => {
   it("the total line carries the balance, redeemable, unrealized and realized figures", async () => {
     setup({
       snap: snapshot({
-        holdings: { [NVDA.address]: { yes: 10n, no: 0n, yesAccount: null, noAccount: null } },
+        holdings: { [NVDA.address]: held(10n, 0n) },
         events: as([buyNvda(40, 10n)]),
       }),
     });

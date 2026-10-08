@@ -5,7 +5,7 @@
  */
 import { BASE_UNITS_PER_USDC } from "@meridian/client";
 
-import type { PortfolioSnapshot, RestingOrder } from "./data";
+import type { PortfolioSnapshot, RestingOrder, TokenSlice } from "./data";
 import type { MarketRow } from "@/lib/markets";
 import {
   ifRightPays,
@@ -70,8 +70,9 @@ export type PortfolioModel = {
     readonly market: MarketRow;
     readonly yesQty: bigint;
     readonly noQty: bigint;
-    readonly yesAccount: string | null;
-    readonly noAccount: string | null;
+    readonly yesAccounts: readonly TokenSlice[];
+    readonly noAccounts: readonly TokenSlice[];
+    readonly usdcAccount: string | null;
     readonly payout: bigint;
   }[];
   /** True when the event history could not account for every contract held. */
@@ -86,6 +87,7 @@ export type PortfolioInput = {
   readonly usdcBalance: bigint | null;
 };
 
+const EMPTY_HOLDINGS = { yes: 0n, no: 0n, yesAccounts: [], noAccounts: [] };
 const SIDES: readonly Side[] = ["YES", "NO"];
 
 export function buildPortfolio(input: PortfolioInput): PortfolioModel {
@@ -106,7 +108,7 @@ export function buildPortfolio(input: PortfolioInput): PortfolioModel {
   const rows: PositionRow[] = [];
   let incomplete = snapshot.eventsPartial || extraction.skipped > 0;
   for (const market of markets) {
-    const wallet = snapshot.holdings[market.address] ?? { yes: 0n, no: 0n };
+    const wallet = snapshot.holdings[market.address] ?? EMPTY_HOLDINGS;
     const open = openOrdersByMarket.get(market.address);
     for (const side of SIDES) {
       const walletQty = side === "YES" ? wallet.yes : wallet.no;
@@ -159,8 +161,9 @@ export function buildPortfolio(input: PortfolioInput): PortfolioModel {
             market,
             yesQty: held.yes,
             noQty: held.no,
-            yesAccount: held.yesAccount,
-            noAccount: held.noAccount,
+            yesAccounts: held.yesAccounts,
+            noAccounts: held.noAccounts,
+            usdcAccount: snapshot.usdcAccount,
             payout: winner * BASE_UNITS_PER_USDC,
           },
         ]
