@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkBalance,
   createSettlementJob,
   isoDate,
   RETRY_EVERY_MS,
@@ -217,6 +218,39 @@ describe("runSettlement: wrong date, retries and the alert (AC2, AB-03)", () => 
     const result = await runSettlement(w.deps({ options: { ...w.deps().options, windowMs: 0 } }));
     expect(result.failures[0]?.reason).toMatch(/no feeds pinned/);
     expect(w.executor.sent).toEqual([]);
+  });
+});
+
+describe("checkBalance (startup and before each settle)", () => {
+  it("alerts once per low episode and again after a top-up that is drained", async () => {
+    const w = world([{ ticker: "META", strike: 680 }]);
+    const deps = w.deps();
+    const lows = () => w.alerter.alerts.filter((a) => a.kind === "settlement_low_balance").length;
+    w.balance = 10;
+    await checkBalance(deps, w.memory);
+    await checkBalance(deps, w.memory);
+    expect(lows()).toBe(1);
+    w.balance = 1_000_000_000; // topped up: the flag resets
+    await checkBalance(deps, w.memory);
+    expect(w.memory.lowBalanceAlerted).toBe(false);
+    w.balance = 10; // drained again: a new alert
+    await checkBalance(deps, w.memory);
+    expect(lows()).toBe(2);
+  });
+
+  it("a balance check that fails does not stop the settlement", async () => {
+    const w = world([{ ticker: "META", strike: 680 }]);
+    const deps = w.deps();
+    const result = await runSettlement({
+      ...deps,
+      chain: {
+        ...deps.chain,
+        balanceLamports: () => Promise.reject(new Error("rpc down https://rpc.example/?k=SECRET")),
+      },
+    });
+    expect(result).toMatchObject({ status: "ok", settled: 1 });
+    expect(w.logger.lines.map((l) => l.event)).toContain("balance_check_failed");
+    expect(JSON.stringify(w.logger.lines)).not.toContain("SECRET");
   });
 });
 

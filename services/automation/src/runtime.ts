@@ -24,8 +24,8 @@ import { buildSettleInstructions } from "./settleTx";
 import {
   localOracleAdapter,
   selectAdapter,
+  sdkFeedUpdater,
   switchboardAdapter,
-  type FeedUpdate,
 } from "./switchboard";
 
 const httpGet: HttpGet = (url, init) =>
@@ -81,15 +81,12 @@ export function buildRuntime(
         client ??= import("switchboard-scripts/devnet").then((m) => m.sdkClient(connection, payer));
         return client;
       };
-      return switchboardAdapter(async (feed): Promise<FeedUpdate> => {
-        const update = await (
-          await sdk()
-        ).fetchUpdate(feed, {
-          TIINGO_API_KEY: env.tiingoApiKey,
-          TWELVEDATA_API_KEY: env.twelveDataApiKey,
-        });
-        return { ixs: update.ixs ?? [], luts: update.luts };
-      });
+      return switchboardAdapter(
+        sdkFeedUpdater({
+          client: sdk,
+          overrides: { TIINGO_API_KEY: env.tiingoApiKey, TWELVEDATA_API_KEY: env.twelveDataApiKey },
+        }),
+      );
     },
   });
 

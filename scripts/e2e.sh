@@ -122,6 +122,7 @@ fi
 pnpm --filter e2e run lifecycle
 # The on-chain halves of AB-03/04/05 (settlement abuse cases) need this validator and the
 # initialised config the lifecycle left behind; outside `make e2e` they are skipped.
-E2E_REQUIRE_VALIDATOR=1 pnpm --filter security-tests-ts exec vitest run \
+# Serially (--no-file-parallelism): ab_03 and ab_04 both rewrite the shared META LocalFeed PDAs.
+E2E_REQUIRE_VALIDATOR=1 pnpm --filter security-tests-ts exec vitest run --no-file-parallelism \
   ab_03_stale_or_wrong_date ab_04_spoofed_feed ab_05_settle_before_close
 log "PASS"

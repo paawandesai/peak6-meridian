@@ -9,7 +9,7 @@ import { createAlerter } from "./alerts";
 import { chainMarketOps } from "./cli/createMarkets";
 import { assertCluster } from "./cluster";
 import { loadAutomationKey, parseEnv } from "./config";
-import { createSettlementJob, JOB_OPTIONS, SettleMemory } from "./jobs/settle";
+import { checkBalance, createSettlementJob, JOB_OPTIONS, SettleMemory } from "./jobs/settle";
 import { consoleLogger, describeError } from "./log";
 import { buildRuntime, readKeypairFile } from "./runtime";
 import { defaultCron } from "./scheduler";
@@ -39,6 +39,7 @@ async function main(): Promise<void> {
     post: (url, init) => fetch(url, { method: "POST", ...init }),
   });
   const state = new RunState();
+  const memory = new SettleMemory();
 
   const service = await startService({
     serviceToken: env.SERVICE_TOKEN,
@@ -95,8 +96,11 @@ async function main(): Promise<void> {
           state,
           log,
           options: JOB_OPTIONS,
-          memory: new SettleMemory(),
+          memory,
         }),
+        // The payer must be funded before the first settlement is due (ticket: checked at startup).
+        startupCheck: () =>
+          checkBalance({ chain: runtime.chain, alerter, options: JOB_OPTIONS }, memory),
       };
     },
     cron: defaultCron,

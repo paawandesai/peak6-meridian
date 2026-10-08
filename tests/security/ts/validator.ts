@@ -71,7 +71,8 @@ let nextStrike = 0;
 export async function createMarket(v: Validator, closeInSecs: number) {
   const { marketAddresses } = await import("@meridian/client");
   nextStrike += 1;
-  // Unique across the three abuse-case files, which may run in parallel against one validator.
+  // Unique per market. The three abuse-case files still run one after another (`e2e.sh` passes
+  // --no-file-parallelism), because ab_03 and ab_04 rewrite the same META LocalFeed accounts.
   const strikeCents =
     900_000_000n + BigInt(randomInt(0, 1_000_000)) * 1_000n + BigInt(nextStrike) * 1_000n;
   const key = { symbol: "META", tradingDate: 20_261_006, strikeCents };

@@ -39,6 +39,8 @@ export interface SignerDeps {
   readonly morning: Omit<MorningDeps, "alerter" | "state" | "log">;
   /** The settlement job, built with the loaded key as its signer. */
   readonly settlement: JobSpec;
+  /** Runs once at startup (e.g. the payer balance check); a failure is logged, never fatal. */
+  readonly startupCheck?: () => Promise<void>;
 }
 
 export interface ServiceDeps {
@@ -151,6 +153,9 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
     };
   } else {
     const { signerDeps, authority } = await readConfigWithRetry(deps, deps.signer);
+    await signerDeps.startupCheck?.().catch((error: unknown) => {
+      deps.log("warn", "startup_check_failed", { error: describeError(error) });
+    });
     specs.push(signerDeps.settlement);
     if (deps.signer.publicKey.equals(authority)) {
       morningDeps = signerDeps.morning;

@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { connectionExecutor } from "./executor";
 import type { PlannedTx } from "./settleTx";
 
-function fakeConnection(options: { error?: object | null } = {}) {
+function fakeConnection(options: { error?: object | null; txSlot?: number | null } = {}) {
   const sent: Uint8Array[] = [];
   const connection = {
     getSlot: () => Promise.resolve(42),
@@ -23,6 +23,10 @@ function fakeConnection(options: { error?: object | null } = {}) {
       sent.push(raw);
       return Promise.resolve("sig-1");
     },
+    getSignatureStatus: () =>
+      Promise.resolve({
+        value: options.txSlot === null ? null : { slot: options.txSlot ?? 75 },
+      }),
     confirmTransaction: () =>
       Promise.resolve({ context: { slot: 77 }, value: { err: options.error ?? null } }),
   } as unknown as Connection;
@@ -57,7 +61,8 @@ describe("connectionExecutor", () => {
     const payer = Keypair.generate();
     const { connection, sent } = fakeConnection();
     const result = await connectionExecutor(connection, payer).send(planned(payer, false), []);
-    expect(result).toEqual({ signature: "sig-1", slot: 77 });
+    // The slot the transaction was processed in (75), not the confirmation's context slot (77).
+    expect(result).toEqual({ signature: "sig-1", slot: 75 });
     const tx = Transaction.from(sent[0] ?? new Uint8Array());
     expect(tx.feePayer?.equals(payer.publicKey)).toBe(true);
     expect(tx.verifySignatures()).toBe(true);
@@ -84,6 +89,15 @@ describe("connectionExecutor", () => {
     expect(decoded.message.header.numRequiredSignatures).toBe(2);
     expect(decoded.signatures).toHaveLength(2);
     expect(decoded.signatures.every((s) => s.some((byte) => byte !== 0))).toBe(true);
+  });
+
+  it("falls back to the confirmation slot when the status is not available", async () => {
+    const payer = Keypair.generate();
+    const { connection } = fakeConnection({ txSlot: null });
+    expect(await connectionExecutor(connection, payer).send(planned(payer, false), [])).toEqual({
+      signature: "sig-1",
+      slot: 77,
+    });
   });
 
   it("throws when the confirmation carries an error", async () => {

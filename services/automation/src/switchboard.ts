@@ -21,6 +21,7 @@ import {
 } from "@solana/web3.js";
 
 import type { ClusterName } from "./cluster";
+import { describeError } from "./log";
 
 /** Oracle values carry 18 fractional digits; cents × 10^16 (matches `STRIKE_CENTS_TO_SCALED`). */
 export const CENTS_TO_SCALED = 10n ** 16n;
@@ -118,4 +119,57 @@ export function selectAdapter(params: {
   readonly local: () => OracleUpdateAdapter;
 }): OracleUpdateAdapter {
   return params.cluster === "localnet" ? params.local() : params.switchboard();
+}
+
+// ---- the on-demand SDK, behind an interface ---------------------------------------------------
+
+/** What `sdkClient` (scripts/switchboard, M1-09) offers; a fake in tests. */
+export interface UpdateClient {
+  fetchUpdate(
+    feed: PublicKey,
+    variableOverrides: Record<string, string>,
+  ): Promise<{
+    readonly ixs: TransactionInstruction[] | undefined;
+    readonly luts: AddressLookupTableAccount[];
+    readonly oracles: readonly {
+      readonly oracle: string;
+      readonly value: string | null;
+      readonly error: string | null;
+    }[];
+  }>;
+}
+
+/** `text` with every secret replaced, so API keys echoed by oracles or the SDK never surface. */
+export function redactSecrets(text: string, secrets: readonly string[]): string {
+  return secrets
+    .filter((secret) => secret.length > 0)
+    .reduce((out, secret) => out.split(secret).join("[redacted]"), text);
+}
+
+/**
+ * The real feed-update fetcher: asks the oracles (through `client`) for a signed update of one
+ * feed. An update that no oracle signed is an error naming the oracles' reasons, never an empty
+ * instruction list that would send `settle_market` into a stale feed. The API keys travel as
+ * `variableOverrides` and are redacted from every error raised here, URLs are stripped too.
+ */
+export function sdkFeedUpdater(params: {
+  readonly client: () => Promise<UpdateClient>;
+  readonly overrides: Readonly<Record<string, string>>;
+}): FetchFeedUpdate {
+  const secrets = Object.values(params.overrides);
+  return async (feed) => {
+    try {
+      const update = await (await params.client()).fetchUpdate(feed, { ...params.overrides });
+      if (update.ixs === undefined || update.ixs.length === 0) {
+        const reasons = update.oracles.map((o) => o.error ?? "no value").join("; ");
+        throw new Error(
+          `no oracle signed an update for feed ${feed.toBase58()}: ${reasons.length > 0 ? reasons : "no oracle responded"}`,
+        );
+      }
+      return { ixs: update.ixs, luts: update.luts };
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
+      throw new Error(describeError(new Error(redactSecrets(raw, secrets))));
+    }
+  };
 }

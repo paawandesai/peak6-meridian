@@ -171,6 +171,29 @@ describe("startService with the right automation key", () => {
     });
   });
 
+  it("runs the startup check once, and a failing check is logged, not fatal", async () => {
+    const key = Keypair.generate();
+    let calls = 0;
+    const logger = recordingLogger();
+    const service = await startService({
+      ...baseDeps(key, new RecordingAlerter()),
+      log: logger.log,
+      withSigner: (signer) =>
+        Promise.resolve({
+          ...signerDeps(signer),
+          startupCheck: () => {
+            calls += 1;
+            return Promise.reject(new Error("balance rpc down https://rpc.example/?k=SECRET"));
+          },
+        }),
+    });
+    running.push(service);
+    expect(calls).toBe(1);
+    expect(service.degraded).toBeNull();
+    expect(logger.lines.map((l) => l.event)).toContain("startup_check_failed");
+    expect(JSON.stringify(logger.lines)).not.toContain("SECRET");
+  });
+
   it("records a crashed job in /health and alerts once (never swallowed)", async () => {
     const key = Keypair.generate();
     const t = await start({ loaded: key, configured: key, settlementCrashes: true });

@@ -48,7 +48,10 @@ export function connectionExecutor(connection: Connection, payer: Keypair): TxEx
           `transaction ${signature} failed: ${JSON.stringify(confirmation.value.err)}`,
         );
       }
-      return { signature, slot: confirmation.context.slot };
+      // The slot the transaction was processed in (what the oracle's staleness is measured
+      // against), not the RPC's context slot, which can be a few slots later.
+      const status = await connection.getSignatureStatus(signature);
+      return { signature, slot: status.value?.slot ?? confirmation.context.slot };
     },
   };
 }

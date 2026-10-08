@@ -6,8 +6,11 @@ import { describe, expect, it } from "vitest";
 import {
   CENTS_TO_SCALED,
   localOracleAdapter,
+  redactSecrets,
+  sdkFeedUpdater,
   selectAdapter,
   switchboardAdapter,
+  type UpdateClient,
 } from "./switchboard";
 import { loadUpdateFixture } from "./testing";
 
@@ -115,5 +118,96 @@ describe("selectAdapter (AB-22: the local oracle is unreachable off localnet)", 
       selectAdapter({ cluster: "devnet", local, switchboard: () => sentinel("switchboard") }).kind,
     ).toBe("switchboard");
     expect(localBuilt).toBe(1);
+  });
+});
+
+describe("sdkFeedUpdater (the real Switchboard path, with a fake client)", () => {
+  const feed = Keypair.generate().publicKey;
+  const overrides = {
+    TIINGO_API_KEY: "dummy-dummy-1",
+    TWELVEDATA_API_KEY: "dummy-dummy-2",
+  };
+  const oracle = (error: string | null) => ({
+    oracle: "O1",
+    value: error === null ? "681.25" : null,
+    error,
+  });
+
+  it("returns the signed instructions and passes the keys only as overrides", async () => {
+    const fx = loadUpdateFixture();
+    const seen: Record<string, string>[] = [];
+    const client: UpdateClient = {
+      fetchUpdate: async (f, o) => {
+        seen.push(o);
+        return {
+          ...(await fx.fetchUpdate(f)),
+          ixs: [...(await fx.fetchUpdate(f)).ixs],
+          luts: [fx.lookupTable],
+          oracles: [oracle(null)],
+        };
+      },
+    };
+    const update = await sdkFeedUpdater({ client: () => Promise.resolve(client), overrides })(
+      fx.feeds[0],
+    );
+    expect(update.ixs).toHaveLength(2);
+    expect(update.luts).toEqual([fx.lookupTable]);
+    expect(seen).toEqual([overrides]);
+  });
+
+  it("is an error, naming the oracles' reasons, when no oracle signed", async () => {
+    for (const ixs of [undefined, []]) {
+      const client: UpdateClient = {
+        fetchUpdate: () =>
+          Promise.resolve({ ixs, luts: [], oracles: [oracle("job failed"), oracle("timeout")] }),
+      };
+      const updater = sdkFeedUpdater({ client: () => Promise.resolve(client), overrides });
+      await expect(updater(feed)).rejects.toThrow(
+        /no oracle signed an update for feed .*: job failed; timeout/,
+      );
+    }
+    const silent: UpdateClient = {
+      fetchUpdate: () => Promise.resolve({ ixs: undefined, luts: [], oracles: [] }),
+    };
+    await expect(
+      sdkFeedUpdater({ client: () => Promise.resolve(silent), overrides })(feed),
+    ).rejects.toThrow(/no oracle responded/);
+  });
+
+  it("redacts the API keys and URLs from every error, whether from the oracles or the SDK", async () => {
+    const echoing: UpdateClient = {
+      fetchUpdate: () =>
+        Promise.resolve({
+          ixs: undefined,
+          luts: [],
+          oracles: [oracle("401 for https://api.tiingo.com/x?token=dummy-dummy-1")],
+        }),
+    };
+    const throwing: UpdateClient = {
+      fetchUpdate: () =>
+        Promise.reject(
+          new Error("fetch failed: header dummy-dummy-2 rejected by https://crossbar.example/v1"),
+        ),
+    };
+    for (const client of [echoing, throwing]) {
+      const message = await sdkFeedUpdater({ client: () => Promise.resolve(client), overrides })(
+        feed,
+      ).then(
+        () => "resolved",
+        (error: unknown) => String(error),
+      );
+      expect(message).not.toMatch(/dummy-dummy-[12]|https?:\/\//);
+      expect(message).toContain("<url>");
+    }
+    // A failure to even build the client is handled the same way.
+    const failing = sdkFeedUpdater({
+      client: () => Promise.reject(new Error("boot failed with dummy-dummy-1")),
+      overrides,
+    });
+    await expect(failing(feed)).rejects.not.toThrow(/dummy-dummy-[12]/);
+  });
+
+  it("redactSecrets ignores empty secrets", () => {
+    expect(redactSecrets("abc abc", ["", "b"])).toBe("a[redacted]c a[redacted]c");
   });
 });

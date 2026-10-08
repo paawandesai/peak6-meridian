@@ -227,6 +227,29 @@ export async function runSettlement(deps: SettleDeps): Promise<SettleResult> {
   return { status, settled, attempts, failures };
 }
 
+/**
+ * Alerts once per low-balance episode: the flag resets as soon as the balance is back above the
+ * threshold, so a later drop alerts again. Called at startup and before every settlement.
+ */
+export async function checkBalance(
+  deps: Pick<SettleDeps, "chain" | "alerter" | "options">,
+  memory: SettleMemory,
+): Promise<void> {
+  const balance = await deps.chain.balanceLamports();
+  if (balance >= deps.options.minBalanceLamports) {
+    memory.lowBalanceAlerted = false;
+    return;
+  }
+  if (!memory.lowBalanceAlerted) {
+    memory.lowBalanceAlerted = true;
+    await deps.alerter.send({
+      kind: "settlement_low_balance",
+      summary: `the settlement payer holds ${String(balance)} lamports, below ${String(deps.options.minBalanceLamports)}; fund it`,
+      details: { lamports: balance },
+    });
+  }
+}
+
 /** One ticker on one date: verify the date, update the oracle, settle every open market. */
 async function settleGroup(
   deps: SettleDeps,
@@ -252,15 +275,10 @@ async function settleGroup(
     throw new Error(`no feeds pinned in the config for ${first.ticker}`);
   }
 
-  const balance = await deps.chain.balanceLamports();
-  if (balance < deps.options.minBalanceLamports && !memory.lowBalanceAlerted) {
-    memory.lowBalanceAlerted = true;
-    await deps.alerter.send({
-      kind: "settlement_low_balance",
-      summary: `the settlement payer holds ${String(balance)} lamports, below ${String(deps.options.minBalanceLamports)}; fund it`,
-      details: { lamports: balance },
-    });
-  }
+  // A balance check that cannot be made must not stop a settlement.
+  await checkBalance(deps, memory).catch((error: unknown) => {
+    deps.log("warn", "balance_check_failed", { error: describeError(error) });
+  });
 
   const slot = await deps.executor.currentSlot();
   const update = await deps.adapter.build({
