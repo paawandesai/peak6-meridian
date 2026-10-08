@@ -51,16 +51,24 @@ export function MarketsView({
 }) {
   const reader = useReader();
   const ticking = useNow();
-  const now = nowSecs ?? ticking ?? 0;
+  // `null` until the clock has mounted (server render and first paint): the date-dependent parts
+  // wait for it rather than treating a missing clock as the unix epoch.
+  const clock = nowSecs ?? ticking;
+  const now = clock ?? 0;
   const state = useAsync(() => reader.listMarkets(), [reader]);
   const config = useAsync(() => reader.getConfig(), [reader]);
   const sources = useMarketSources();
   const all = state.status === "ready" ? state.value : [];
-  const active = useMemo(() => activeDateMarkets(all, now), [all, now]);
+  const active = useMemo(
+    () => (clock === null ? [] : activeDateMarkets(all, now)),
+    [all, now, clock],
+  );
   const data = useMarketData(active, sources.data ?? NO_SOURCES);
   const openTimes = useOpenTimes(active);
 
-  if (state.status === "loading") return <p role="status">Loading markets…</p>;
+  if (state.status === "loading" || clock === null) {
+    return <p role="status">Loading markets…</p>;
+  }
   if (state.status === "error") return <p role="alert">Could not load markets: {state.message}</p>;
   if (state.value.length === 0)
     return <p>No markets today. Markets are created each trading day.</p>;
