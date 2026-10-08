@@ -73,7 +73,7 @@ Rule for everything below: **text plus colour, never colour alone.** Every colou
 | Override pending | settle failed, override draft exists | Override pending, available at {HH:mm} ET | warn outline |
 | Paused | global pause flag | Paused: trading and minting stopped; cancel, withdraw and redeem still work | danger outline, banner on every page |
 
-Override time: `{HH:mm}` is `close_ts + override_delay_secs` (from the on-chain config, default 3600 s) rendered in ET with the `America/New_York` tz library, so it is 17:00 ET on a normal close, 14:00 ET on an early-close day with the default delay, and follows any change to the delay. It is never hardcoded.
+Override time: `{HH:mm}` is `close_ts + override_delay_secs` (from the on-chain config, default 3600 s) rendered in ET with `Intl.DateTimeFormat` (`timeZone: "America/New_York"`), so it is 17:00 ET on a normal close, 14:00 ET on an early-close day with the default delay, and follows any change to the delay. It is never hardcoded.
 
 Settle price display: `settle_price_scaled` has 18 fractional digits and `packages/client` has no formatter in that direction today. UI-02 adds one small additive helper to `packages/client/src/units.ts` as an **explicit, single exception** to the "UI tickets touch no `packages/client`" rule: `scaledToCentsFloor(scaled: bigint): bigint`, a **display-only** conversion (integer division by `STRIKE_CENTS_TO_SCALED`, rounding **down**, rejects negatives), documented in `units.ts` as the one lossy conversion there (the rest of the file throws instead of rounding). It floors because settlement is exact (`close_scaled >= strike_cents × 10^16`) and strikes are whole cents, so `floor(close) >= strike` iff `close >= strike`: the displayed price can never contradict the outcome (a $179.996 close settles NO and shows $179.99, never $180.00). Display is `formatUsdCents(scaledToCentsFloor(x))` (next paragraph), so no UI code does arithmetic on money. Every settle price in the badges and mockups (`$181.42`, `$178.10`, `$231.02`) comes from this path.
 
@@ -92,10 +92,10 @@ When the wallet holds NO on this strike, Buy YES is replaced in place by an inli
 - Fair value (M3): `Fair 58¢` next to the market price; edge = market − fair, signed, in cents: `Edge +4¢ (rich)` / `Edge −3¢ (cheap)`. Rich/cheap is always written, never only coloured.
 
 ### Data staleness and time
-- Every page header shows the current time in ET ("14:52:07 ET") and the next close countdown.
+- Every page header shows the current time in ET ("14:52:07 ET") and the next close countdown. The next close is the smallest on-chain `close_ts` that is still in the future among the loaded markets in state `Open`, so early-close days need no calendar in the app. Empty states, always as text: no markets loaded → "No markets today"; markets exist, none `Open` with a future close, some unsettled → "Closed · settling"; all settled → "Closed for today". The header never counts down to a time it computed itself.
 - Every live number shows its "as of" time on hover and inline where space allows ("as of 14:52:05 ET").
 - Staleness: data older than 10 s (domain.md MM threshold) gets a "stale" label and a muted style. Older than 60 s gets a banner: "Prices are 1 min old. Trading still works; check the book before you sign."
-- Times are always ET, computed with an `America/New_York` timezone library. No UTC offsets.
+- Times are always ET, formatted with the platform's IANA time zone support (`Intl.DateTimeFormat` with `timeZone: "America/New_York"`), which handles DST and adds no dependency (the app has no tz library and the NYSE calendar stays in `services/automation`). No UTC offsets, no calendar in the app.
 
 ### Transaction state
 One inline status line under the sign button, never a modal: `Simulating…` → `Review and sign in your wallet` → `Confirming…` → `Confirmed in slot 123456 (view on explorer)` or `Failed: <program error in plain words>. Nothing was charged.` Each state has text and an icon. The confirmed row shows in the book and in Portfolio within 3 s (NFR-01).
