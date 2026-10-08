@@ -123,7 +123,7 @@ The operator or an AO worker creates the day's markets before 09:00 ET with the 
 
 ### Testing the script without devnet
 
-Against a local validator: `SOLANA_CLUSTER=localnet` with a loopback `SOLANA_RPC_URL`, the markets seeded by `E2E_SEED_ONLY=1 ... pnpm --filter e2e run lifecycle` (use `E2E_CLOSE_IN_SECS` of about 420), then `--phase trade`, then `--phase redeem --local-settle` (the local oracle settles; the flag is refused on devnet). Unit tests: `pnpm --filter e2e run test`.
+Against a local validator: `SOLANA_CLUSTER=localnet` with a loopback `SOLANA_RPC_URL`, the markets seeded by `E2E_SEED_ONLY=1 ... pnpm --filter e2e run lifecycle` (use `E2E_CLOSE_IN_SECS` of about 420), then `--phase trade --fund direct` (the default `--fund faucet` needs `FAUCET_URL` and a running app; on a seeded local validator the admin is the mint authority, so set `FAUCET_KEYPAIR` to the admin keypair's JSON array), then `--phase redeem --local-settle` (the local oracle settles; the flag is refused on devnet). Unit tests: `pnpm --filter e2e run test`.
 
 ## Faucet (M2-09)
 
