@@ -13,3 +13,13 @@ regexTarget = "line"
 regexes = [
   '''=(test-[a-z0-9]+-(key|token)|sk-ant-test-placeholder|local-dev-token)$''',
 ]
+
+[[allowlists]]
+description = """Superseded pre-rewrite commits (fake test fixtures, never on main) that CI runners
+still scan through stale refs/pipelines/* refs in their reused build directories. The fixtures
+were replaced on the branches; this exempts only these exact commits."""
+commits = [
+  "93e6a8e6710cdd2a4f14c575a29fa337183d9383", # MR !28 old head: fake KEY in market-data-server.test.ts
+  "6d3fd0f3d822519e62283c574246b41296043902", # MR !27 old head: fake API keys in switchboard.test.ts
+  "5eb5bbfab1b3ab4313e438057fef67e6be3fed5d", # MR !27 old head: public lookup-table address in a fixture
+]
