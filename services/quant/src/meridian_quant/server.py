@@ -18,7 +18,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from meridian_quant.fair_value import fair_cents, remaining_session_seconds
+from meridian_quant.fair_value import FairValueError, fair_cents, remaining_session_seconds
 from meridian_quant.prices import PriceError, Spot
 from meridian_quant.vol import VolError, realized_vol
 
@@ -77,19 +77,25 @@ def compute_fair_values(service: Service) -> list[FairValue]:
                 spot = service.sources.spot(info.ticker)
                 spots[info.ticker] = (spot, realized_vol(service.sources.closes(info.ticker)))
             except (PriceError, VolError) as error:
-                log.warning("skipping %s: %s", info.ticker, error)
+                log.warning("skipping ticker %s: %s", info.ticker, error)
                 spots[info.ticker] = None
         entry = spots[info.ticker]
         if entry is None:
             continue
         spot, sigma = entry
-        remaining = remaining_session_seconds(now, info.close_ts)
+        try:
+            remaining = remaining_session_seconds(now, info.close_ts)
+            cents = fair_cents(spot.price, info.strike_cents, sigma, remaining)
+        except FairValueError as error:
+            # One unpriceable market (e.g. a non-positive strike) must not 500 every other market.
+            log.warning("skipping market %s (%s): %s", info.market, info.ticker, error)
+            continue
         out.append(
             FairValue(
                 market=info.market,
                 ticker=info.ticker,
                 strike_cents=info.strike_cents,
-                fair_cents=fair_cents(spot.price, info.strike_cents, sigma, remaining),
+                fair_cents=cents,
                 sigma=sigma,
                 spot=spot.price,
                 as_of=spot.as_of,

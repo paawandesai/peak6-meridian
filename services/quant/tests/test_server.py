@@ -132,3 +132,24 @@ def test_http_server_end_to_end_on_loopback() -> None:
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_one_unpriceable_market_is_skipped_not_a_500(caplog: pytest.LogCaptureFixture) -> None:
+    class BadStrike(FakeSources):
+        def markets(self) -> list[MarketInfo]:
+            bad = MarketInfo(market="BAD", ticker="NVDA", strike_cents=0, close_ts=CLOSE)
+            return [bad, *super().markets()]
+
+    with caplog.at_level("WARNING", logger="meridian_quant.server"):
+        status, body = get(service(BadStrike()), AUTH)
+    assert status == 200
+    assert isinstance(body, list)
+    assert [row["market"] for row in body] == ["M180", "M190"]
+    assert "BAD" in caplog.text
+    assert "NVDA" in caplog.text
+
+
+def test_skipped_ticker_is_named_in_the_log(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING", logger="meridian_quant.server"):
+        get(service(), AUTH)
+    assert "AAPL" in caplog.text
