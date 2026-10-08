@@ -5,7 +5,7 @@
  */
 import { NextResponse } from "next/server";
 
-import { fairValuesSchema } from "@/lib/fair-values";
+import { fairValuesSchema } from "@/lib/fair-values-core";
 
 export const dynamic = "force-dynamic";
 
