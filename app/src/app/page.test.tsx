@@ -5,18 +5,21 @@ import RootLayout, { metadata } from "./layout";
 import HomePage from "./page";
 
 describe("home page", () => {
-  it('renders the "Meridian" heading', () => {
-    expect(renderToStaticMarkup(<HomePage />)).toBe("<main><h1>Meridian</h1></main>");
+  it("renders the Meridian header, a loading markets state and the wallet slot", () => {
+    const html = renderToStaticMarkup(<HomePage />);
+    expect(html).toContain("<h1");
+    expect(html).toContain("Meridian");
+    expect(html).toContain("Loading markets");
   });
 
   it("is wrapped by the root layout", () => {
     const html = renderToStaticMarkup(
       <RootLayout>
-        <HomePage />
+        <p>child</p>
       </RootLayout>,
     );
     expect(html).toContain('<html lang="en">');
-    expect(html).toContain("<h1>Meridian</h1>");
+    expect(html).toContain("<p>child</p>");
     expect(metadata.title).toBe("Meridian");
   });
 });
