@@ -98,7 +98,7 @@ importers:
         version: 1.1.1(@switchboard-xyz/common@5.8.5(bufferutil@4.1.0)(typescript@5.9.3))
       '@switchboard-xyz/on-demand':
         specifier: 3.10.6
-        version: 3.10.6(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)
+        version: 3.10.6(bufferutil@4.1.0)(typescript@5.9.3)
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -112,6 +112,15 @@ importers:
 
   services/automation:
     dependencies:
+      '@coral-xyz/anchor':
+        specifier: 0.31.1
+        version: 0.31.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      '@meridian/client':
+        specifier: workspace:*
+        version: link:../../packages/client
+      '@solana/web3.js':
+        specifier: 1.99.0
+        version: 1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
       luxon:
         specifier: 3.7.2
         version: 3.7.2
@@ -131,9 +140,18 @@ importers:
       '@coral-xyz/anchor':
         specifier: 0.31.1
         version: 0.31.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      '@meridian/client':
+        specifier: workspace:*
+        version: link:../../packages/client
+      '@solana/spl-token':
+        specifier: 0.4.15
+        version: 0.4.15(@solana/web3.js@1.99.0(bufferutil@4.1.0)(typescript@5.9.3))(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)
       '@solana/web3.js':
         specifier: 1.99.0
         version: 1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      automation:
+        specifier: workspace:*
+        version: link:../../services/automation
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -2605,7 +2623,7 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@switchboard-xyz/on-demand@3.10.6(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)':
+  '@switchboard-xyz/on-demand@3.10.6(bufferutil@4.1.0)(typescript@5.9.3)':
     dependencies:
       '@coral-xyz/anchor-31': '@coral-xyz/anchor@0.31.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)'
       '@isaacs/ttlcache': 1.4.1

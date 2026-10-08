@@ -97,4 +97,4 @@ e2e:
 	scripts/e2e.sh
 
 dev:
-	@echo "make dev: available from M1-10"
+	scripts/dev.sh

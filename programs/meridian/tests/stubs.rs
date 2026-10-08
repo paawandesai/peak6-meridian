@@ -124,7 +124,10 @@ fn every_stub_is_covered_by_this_test() {
 fn every_stub_returns_not_implemented() {
     let mut harness = Harness::new();
     let signer = harness.funded_keypair();
-    let accounts = vec![anchor_lang::prelude::AccountMeta::new(signer.pubkey(), true)];
+    let accounts = vec![anchor_lang::prelude::AccountMeta::new(
+        signer.pubkey(),
+        true,
+    )];
     for (name, data) in stub_instructions() {
         let instruction = Instruction {
             program_id: meridian::ID,

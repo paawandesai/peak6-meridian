@@ -11,6 +11,9 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "0.31.1",
+    "@meridian/client": "workspace:*",
+    "@solana/web3.js": "1.99.0",
     "luxon": "3.7.2",
     "zod": "4.6.5"
   },

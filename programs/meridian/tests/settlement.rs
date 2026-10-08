@@ -109,6 +109,11 @@ fn recorded_fixture_settles_a_market() {
     let data = BASE64_STANDARD
         .decode(json["account"]["data"][0].as_str().unwrap())
         .unwrap();
+    let mut data = data;
+    // The recording's update time was taken relative to the close of the day it was recorded on;
+    // re-stamp it to close + 301 s of this suite's market so only the price/slot/hash are "recorded".
+    let stamp = (BASE_CLOSE_TS + 301).to_le_bytes();
+    data[LAST_UPDATE_TS_OFFSET..LAST_UPDATE_TS_OFFSET + 8].copy_from_slice(&stamp);
     let mut s = SettlementHarness::with_strike(68_000);
     // The fixture is the Tiingo feed: pin its hash (0xab…) and place it at the pinned key.
     let (key, _) = s.pinned("META", 0);
