@@ -12,6 +12,8 @@
 //! their `OpenOrders`; those accounts are passed as `remaining_accounts` (the taker's own is a
 //! named account, created on first use). Amounts are checked before any token moves.
 //!
+//! `buy_no` and `sell_no` reuse [`execute_order`] (M1-06).
+//!
 //! Rejected: while paused, at or after `close_ts`, after settlement, price outside 1–99, zero
 //! quantity, owner cap, full book without a better price (AB-09, AB-10, AB-11).
 
@@ -235,32 +237,113 @@ pub(crate) fn engine_book(book: &mut Book) -> &mut meridian_book::Book {
     }
 }
 
+/// Rejects new orders while paused, after settlement and at or after `close_ts` (AB-11).
+pub(crate) fn ensure_tradable(config: &Config, market: &Market) -> Result<()> {
+    require!(!config.paused, MeridianError::Paused);
+    require!(
+        market.status == MarketStatus::Open,
+        MeridianError::AlreadySettled
+    );
+    let now = Clock::get()?.unix_timestamp;
+    require!(now < market.close_ts, MeridianError::MarketClosed);
+    Ok(())
+}
+
+/// Fills in a freshly created `OpenOrders` (its owner is still the default key).
+pub(crate) fn init_open_orders(
+    open_orders: &mut OpenOrders,
+    owner: Pubkey,
+    market: Pubkey,
+    bump: u8,
+) {
+    if open_orders.owner == Pubkey::default() {
+        open_orders.owner = owner;
+        open_orders.market = market;
+        open_orders.bump = bump;
+    }
+}
+
+/// Everything an order needs; shared by `place_order`, `buy_no` and `sell_no`.
+pub(crate) struct OrderEnv<'a, 'info, 'r> {
+    pub market: &'a Account<'info, Market>,
+    pub book: &'a AccountLoader<'info, Book>,
+    pub user: &'a Signer<'info>,
+    pub open_orders: &'a mut Account<'info, OpenOrders>,
+    pub user_usdc: &'a Account<'info, TokenAccount>,
+    pub user_yes: &'a Account<'info, TokenAccount>,
+    pub escrow_usdc: &'a Account<'info, TokenAccount>,
+    pub escrow_yes: &'a Account<'info, TokenAccount>,
+    pub token_program: &'a Program<'info, Token>,
+    pub remaining: &'a [AccountInfo<'r>],
+}
+
+/// What an order did to the taker.
+pub(crate) struct Placed {
+    /// Contracts matched against resting orders.
+    pub filled: u64,
+    /// Contracts left resting on the book.
+    pub rested_qty: u64,
+}
+
 pub fn handle_place_order(
-    ctx: Context<PlaceOrder>,
+    mut ctx: Context<PlaceOrder>,
     side: Side,
     price: u8,
     qty: u64,
     kind: OrderKind,
 ) -> Result<()> {
-    require!(!ctx.accounts.config.paused, MeridianError::Paused);
-    require!(
-        ctx.accounts.market.status == MarketStatus::Open,
-        MeridianError::AlreadySettled
+    ensure_tradable(&ctx.accounts.config, &ctx.accounts.market)?;
+    let accounts = &mut ctx.accounts;
+    init_open_orders(
+        &mut accounts.open_orders,
+        accounts.user.key(),
+        accounts.market.key(),
+        ctx.bumps.open_orders,
     );
-    let now = Clock::get()?.unix_timestamp;
-    require!(
-        now < ctx.accounts.market.close_ts,
-        MeridianError::MarketClosed
-    );
+    execute_order(
+        OrderEnv {
+            market: &accounts.market,
+            book: &accounts.book,
+            user: &accounts.user,
+            open_orders: &mut accounts.open_orders,
+            user_usdc: &accounts.user_usdc,
+            user_yes: &accounts.user_yes,
+            escrow_usdc: &accounts.escrow_usdc,
+            escrow_yes: &accounts.escrow_yes,
+            token_program: &accounts.token_program,
+            remaining: ctx.remaining_accounts,
+        },
+        side,
+        price,
+        qty,
+        kind,
+    )?;
+    Ok(())
+}
 
-    let user = ctx.accounts.user.key();
-    let market_key = ctx.accounts.market.key();
-    if ctx.accounts.open_orders.owner == Pubkey::default() {
-        let open_orders = &mut ctx.accounts.open_orders;
-        open_orders.owner = user;
-        open_orders.market = market_key;
-        open_orders.bump = ctx.bumps.open_orders;
-    }
+/// Matches, escrows, pays and credits one order (see the module docs). The caller has already
+/// checked [`ensure_tradable`] and initialised the taker's `OpenOrders`.
+pub(crate) fn execute_order(
+    env: OrderEnv<'_, '_, '_>,
+    side: Side,
+    price: u8,
+    qty: u64,
+    kind: OrderKind,
+) -> Result<Placed> {
+    let OrderEnv {
+        market,
+        book,
+        user,
+        open_orders,
+        user_usdc,
+        user_yes,
+        escrow_usdc,
+        escrow_yes,
+        token_program,
+        remaining,
+    } = env;
+    let user_key = user.key();
+    let market_key = market.key();
 
     let engine_kind = match kind {
         OrderKind::Limit => meridian_book::OrderKind::Limit,
@@ -268,10 +351,10 @@ pub fn handle_place_order(
     };
     let engine_side = engine_side(side);
     let (result, consumed) = {
-        let mut guard = ctx.accounts.book.load_mut()?;
+        let mut guard = book.load_mut()?;
         let engine = engine_book(&mut guard);
         let result = engine
-            .place(engine_side, price, qty, engine_kind, user.to_bytes())
+            .place(engine_side, price, qty, engine_kind, user_key.to_bytes())
             .map_err(engine_error)?;
         let consumed: Vec<bool> = result
             .fills
@@ -327,37 +410,36 @@ pub fn handle_place_order(
     let (deposit, deposit_from, deposit_to, payout, payout_from, payout_to) = match side {
         Side::Bid => (
             add(fill_notional, rested_notional)?,
-            &ctx.accounts.user_usdc,
-            &ctx.accounts.escrow_usdc,
+            user_usdc,
+            escrow_usdc,
             filled,
-            &ctx.accounts.escrow_yes,
-            &ctx.accounts.user_yes,
+            escrow_yes,
+            user_yes,
         ),
         Side::Ask => (
             add(filled, rested_qty)?,
-            &ctx.accounts.user_yes,
-            &ctx.accounts.escrow_yes,
+            user_yes,
+            escrow_yes,
             fill_notional,
-            &ctx.accounts.escrow_usdc,
-            &ctx.accounts.user_usdc,
+            escrow_usdc,
+            user_usdc,
         ),
     };
 
     if deposit > 0 {
         token::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
+                token_program.to_account_info(),
                 Transfer {
                     from: deposit_from.to_account_info(),
                     to: deposit_to.to_account_info(),
-                    authority: ctx.accounts.user.to_account_info(),
+                    authority: user.to_account_info(),
                 },
             ),
             deposit,
         )?;
     }
     if payout > 0 {
-        let market = &ctx.accounts.market;
         let signer_seeds: &[&[&[u8]]] = &[&[
             MARKET_SEED,
             &market.ticker,
@@ -367,7 +449,7 @@ pub fn handle_place_order(
         ]];
         token::transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                token_program.to_account_info(),
                 Transfer {
                     from: payout_from.to_account_info(),
                     to: payout_to.to_account_info(),
@@ -380,19 +462,18 @@ pub fn handle_place_order(
     }
 
     {
-        let open_orders = &mut ctx.accounts.open_orders;
         if result.rested.is_some() {
             open_orders.resting_count = open_orders
                 .resting_count
                 .checked_add(1)
                 .ok_or(MeridianError::MathOverflow)?;
         }
-        apply_credits(&credits, open_orders, ctx.remaining_accounts, &market_key)?;
+        apply_credits(&credits, open_orders, remaining, &market_key)?;
     }
 
     emit!(OrderPlaced {
         market: market_key,
-        owner: user,
+        owner: user_key,
         order_id: result.order_id,
         side,
         price,
@@ -403,7 +484,7 @@ pub fn handle_place_order(
         emit!(Fill {
             market: market_key,
             maker: Pubkey::new_from_array(fill.maker),
-            taker: user,
+            taker: user_key,
             price: fill.price,
             qty: fill.qty,
             taker_side: program_side(fill.taker_side),
@@ -417,5 +498,5 @@ pub fn handle_place_order(
             qty: cancelled.order.qty,
         });
     }
-    Ok(())
+    Ok(Placed { filled, rested_qty })
 }

@@ -257,3 +257,111 @@ impl Harness {
         )
     }
 }
+
+// ---- M1-06: buy_no / sell_no ------------------------------------------------------------------
+
+fn no_path_accounts(
+    user: &User,
+    addresses: &MarketAddresses,
+    makers: &[Pubkey],
+) -> Vec<AccountMeta> {
+    let mut accounts = meridian::accounts::BuyNo {
+        config: config_pda(),
+        market: addresses.market,
+        book: addresses.book,
+        user: user.pubkey(),
+        open_orders: open_orders_pda(&addresses.market, &user.pubkey()),
+        user_usdc: user.usdc,
+        user_yes: user.yes,
+        user_no: user.no,
+        yes_mint: addresses.yes_mint,
+        no_mint: addresses.no_mint,
+        vault: addresses.vault,
+        escrow_usdc: addresses.escrow_usdc,
+        escrow_yes: addresses.escrow_yes,
+        token_program: spl_token::ID,
+        system_program: system_program::ID,
+    }
+    .to_account_metas(None);
+    accounts.extend(
+        makers
+            .iter()
+            .map(|owner| AccountMeta::new(open_orders_pda(&addresses.market, owner), false)),
+    );
+    accounts
+}
+
+/// `buy_no` with `price` = the YES price floor (100 − the NO limit).
+pub fn buy_no_ix(
+    user: &User,
+    addresses: &MarketAddresses,
+    qty: u64,
+    price: u8,
+    kind: OrderKind,
+    makers: &[Pubkey],
+) -> Instruction {
+    Instruction {
+        program_id: meridian::ID,
+        accounts: no_path_accounts(user, addresses, makers),
+        data: meridian::instruction::BuyNo { qty, price, kind }.data(),
+    }
+}
+
+/// `sell_no` with `price` = the YES price cap (100 − the NO price accepted).
+pub fn sell_no_ix(
+    user: &User,
+    addresses: &MarketAddresses,
+    qty: u64,
+    price: u8,
+    makers: &[Pubkey],
+) -> Instruction {
+    Instruction {
+        program_id: meridian::ID,
+        accounts: no_path_accounts(user, addresses, makers),
+        data: meridian::instruction::SellNo { qty, price }.data(),
+    }
+}
+
+impl Harness {
+    /// Sends `buy_no` for `user`.
+    pub fn buy_no(
+        &mut self,
+        user: &User,
+        addresses: &MarketAddresses,
+        qty: u64,
+        price: u8,
+        kind: OrderKind,
+        makers: &[&User],
+    ) -> TransactionResult {
+        let owners: Vec<Pubkey> = makers.iter().map(|m| m.pubkey()).collect();
+        self.send(
+            buy_no_ix(user, addresses, qty, price, kind, &owners),
+            &[&user.keypair],
+        )
+    }
+
+    /// Sends `sell_no` for `user`.
+    pub fn sell_no(
+        &mut self,
+        user: &User,
+        addresses: &MarketAddresses,
+        qty: u64,
+        price: u8,
+        makers: &[&User],
+    ) -> TransactionResult {
+        let owners: Vec<Pubkey> = makers.iter().map(|m| m.pubkey()).collect();
+        self.send(
+            sell_no_ix(user, addresses, qty, price, &owners),
+            &[&user.keypair],
+        )
+    }
+
+    /// `(usdc, yes, no)` wallet balances of `user`.
+    pub fn wallet(&self, user: &User) -> (u64, u64, u64) {
+        (
+            self.token_amount(user.usdc),
+            self.token_amount(user.yes),
+            self.token_amount(user.no),
+        )
+    }
+}
