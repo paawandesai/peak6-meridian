@@ -4,6 +4,7 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useMemo } from "react";
 
 import { TradeView } from "./trade-view";
+import { TickerInsight } from "@/components/fair-value/ticker-insight";
 import { createTradeReader } from "../_lib/reader";
 import { createTradeActions } from "../_lib/tx";
 import { AppHeader } from "@/components/app-header";
@@ -28,8 +29,15 @@ function Page({ address }: { readonly address: string }) {
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
   const market =
     markets.status === "ready" ? markets.value.find((m) => m.address === address) : undefined;
-  // Prices only: the Trade page reads its own full book (an empty market list skips book polling).
-  const marketData = useMarketData([]);
+  // Live prices, plus the books of the ticker's ladder for the distribution chart. The Trade
+  // panel reads its own full book separately.
+  const ladder =
+    market === undefined || markets.status !== "ready"
+      ? []
+      : markets.value.filter(
+          (m) => m.ticker === market.ticker && m.tradingDate === market.tradingDate,
+        );
+  const marketData = useMarketData(ladder);
   const tradeReader = useMemo(
     () => (market === undefined ? null : createTradeReader(config, market)),
     [config, market],
@@ -53,16 +61,19 @@ function Page({ address }: { readonly address: string }) {
     body = <p role="alert">{NOT_FOUND_TEXT}</p>;
   } else {
     body = (
-      <TradeView
-        market={market}
-        config={appConfig.value}
-        nowSecs={nowSecs}
-        reader={tradeReader}
-        actions={actions}
-        wallet={publicKey}
-        marketData={marketData}
-        explorerUrl={(signature) => explorerTxUrl(signature, config)}
-      />
+      <div className="grid gap-mer-8">
+        <TradeView
+          market={market}
+          config={appConfig.value}
+          nowSecs={nowSecs}
+          reader={tradeReader}
+          actions={actions}
+          wallet={publicKey}
+          marketData={marketData}
+          explorerUrl={(signature) => explorerTxUrl(signature, config)}
+        />
+        <TickerInsight market={market} ladder={ladder} books={marketData.books} nowSecs={nowSecs} />
+      </div>
     );
   }
   return (
