@@ -93,7 +93,7 @@ One inline status line under the sign button, never a modal: `Simulating…` →
 
 ### Payoff sentence and simulated result (NFR-12, NFR-15)
 Directly above the single sign button, always visible before signing:
-> You pay **$6.20** for 10 contracts. You win **$10.00** (profit $3.80) if NVDA closes **below $180** today. Max loss $6.20.
+> You pay **$3.80** for 10 contracts. You win **$10.00** (profit $6.20) if NVDA closes **below $180** today. Max loss $3.80.
 Below it, the simulation result: "Simulated: fills 10 at 38¢ NO (62¢ YES bid). 1 signature." The sign button stays disabled until simulation succeeds.
 
 ### Win/lose P&L
