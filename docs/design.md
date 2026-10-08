@@ -170,7 +170,7 @@ After:
 │  ...                                                                                    │
 └───────────────────────────────────────────────────────────────────────────────────────┘
 ```
-Strikes are listed ascending (UI-03 AC1). Annotations: (a) the ladder bar length = YES price, labelled with the number; (b) the live-price line sits between the two strikes it falls between; (c) each row links to Trade (2 clicks from landing: ticker row → strike row); (d) state badge text per §3; (e) 390 px: the bar collapses under the strike and the NO column hides behind a "YES/NO" toggle.
+Strikes are listed ascending (UI-03 AC1). Annotations: (a) the ladder bar length = YES price, labelled with the number; (b) the live-price line sits between the two strikes it falls between; (c) each row links to Trade (2 clicks from landing: ticker row → strike row); (d) state badge text per §3; (e) 390 px: the bar collapses under the strike and the NO column hides behind a "YES/NO" toggle. (f) the ladder is a semantic table: one `row` per strike under a `region` per ticker, and the pairs outstanding count from M1-12 stays as a muted figure on each row (behind the same toggle at 390 px), so the M1-12 tests map onto it one-to-one.
 
 ### Trade
 Before: does not exist (M2).
