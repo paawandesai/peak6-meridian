@@ -15,6 +15,9 @@
 #   E2E_RPC_PORT       validator RPC port (default 8899; the websocket port is this plus one)
 #   E2E_FAUCET_PORT    validator faucet port (default 9900)
 #   E2E_CLOSE_IN_SECS  seconds between market creation and close (default 150)
+#   E2E_PREBUILT       1 (CI): load the existing target/deploy/meridian.so (built with the program ID
+#                      declared in Anchor.toml) into the validator at genesis, instead of keys sync +
+#                      build + deploy, so the job compiles nothing. Unset: build and deploy as before.
 set -euo pipefail
 
 MODE="e2e"
@@ -28,6 +31,9 @@ cd "$ROOT"
 readonly PROGRAM_SRC="programs/meridian/src/lib.rs"
 readonly ANCHOR_TOML="Anchor.toml"
 readonly PROGRAM_KEYPAIR="target/deploy/meridian-keypair.json"
+readonly PROGRAM_SO="target/deploy/meridian.so"
+readonly PROGRAM_IDL="target/idl/meridian.json"
+PREBUILT="${E2E_PREBUILT:-0}"
 RPC_PORT="${E2E_RPC_PORT:-8899}"
 FAUCET_PORT="${E2E_FAUCET_PORT:-9900}"
 RPC_URL="http://127.0.0.1:$RPC_PORT"
@@ -40,8 +46,11 @@ die() {
 
 # `anchor keys sync` rewrites the program ID in these two files and the exit trap restores them
 # with `git checkout --`; refuse to run if that would discard someone's uncommitted work.
-git diff --quiet HEAD -- "$PROGRAM_SRC" "$ANCHOR_TOML" ||
-  die "$PROGRAM_SRC or $ANCHOR_TOML has uncommitted changes; commit them before running make e2e"
+# Prebuilt mode never rewrites them.
+if [ "$PREBUILT" != "1" ]; then
+  git diff --quiet HEAD -- "$PROGRAM_SRC" "$ANCHOR_TOML" ||
+    die "$PROGRAM_SRC or $ANCHOR_TOML has uncommitted changes; commit them before running make e2e"
+fi
 
 if solana cluster-version --url "$RPC_URL" > /dev/null 2>&1; then
   die "something is already serving $RPC_URL; stop it or set E2E_RPC_PORT"
@@ -57,8 +66,10 @@ cleanup() {
     kill "$VALIDATOR_PID" 2> /dev/null || true
     wait "$VALIDATOR_PID" 2> /dev/null || true
   fi
-  git checkout -- "$PROGRAM_SRC" "$ANCHOR_TOML"
-  rm -f "$PROGRAM_KEYPAIR"
+  if [ "$PREBUILT" != "1" ]; then
+    git checkout -- "$PROGRAM_SRC" "$ANCHOR_TOML"
+    rm -f "$PROGRAM_KEYPAIR"
+  fi
   if [ "$rc" -ne 0 ] && [ -f "$WORK/validator.log" ]; then
     log "validator log (last 40 lines):"
     tail -n 40 "$WORK/validator.log" || true
@@ -77,8 +88,25 @@ if [ -z "$PAYER" ] || [ ! -f "$PAYER" ]; then
   log "created throwaway payer $(solana-keygen pubkey "$PAYER")"
 fi
 
+# Build before starting the validator (~1.4 GB RSS), so the two never hold memory at once.
+# Prebuilt mode skips keys sync + build and loads the .so at genesis instead.
+VALIDATOR_ARGS=()
+if [ "$PREBUILT" = "1" ]; then
+  [ -f "$PROGRAM_SO" ] && [ -f "$PROGRAM_IDL" ] ||
+    die "E2E_PREBUILT=1 needs $PROGRAM_SO and $PROGRAM_IDL (the CI build job's artifacts)"
+  PROGRAM_ID="$(sed -n 's/^meridian = "\(.*\)"$/\1/p' "$ANCHOR_TOML" | head -n 1)"
+  [ -n "$PROGRAM_ID" ] || die "no meridian program ID in $ANCHOR_TOML"
+  VALIDATOR_ARGS=(--bpf-program "$PROGRAM_ID" "$PROGRAM_SO")
+else
+  mkdir -p "$(dirname "$PROGRAM_KEYPAIR")"
+  solana-keygen new --no-bip39-passphrase -s --force -o "$PROGRAM_KEYPAIR"
+  anchor keys sync
+  log "throwaway program ID $(solana-keygen pubkey "$PROGRAM_KEYPAIR")"
+  make build-local
+fi
+
 log "starting solana-test-validator on $RPC_URL"
-solana-test-validator --reset --quiet --ledger "$WORK/ledger" \
+solana-test-validator --reset --quiet --ledger "$WORK/ledger" "${VALIDATOR_ARGS[@]}" \
   --rpc-port "$RPC_PORT" --faucet-port "$FAUCET_PORT" > "$WORK/validator.log" 2>&1 &
 VALIDATOR_PID=$!
 
@@ -94,15 +122,13 @@ solana cluster-version --url "$RPC_URL" > /dev/null 2>&1 || die "validator not r
 solana airdrop 100 --url "$RPC_URL" --keypair "$PAYER" > /dev/null
 log "airdropped 100 SOL to the payer"
 
-mkdir -p "$(dirname "$PROGRAM_KEYPAIR")"
-solana-keygen new --no-bip39-passphrase -s --force -o "$PROGRAM_KEYPAIR"
-anchor keys sync
-log "throwaway program ID $(solana-keygen pubkey "$PROGRAM_KEYPAIR")"
+if [ "$PREBUILT" = "1" ]; then
+  log "prebuilt program $PROGRAM_ID loaded at genesis from $PROGRAM_SO"
+else
+  anchor deploy --provider.cluster "$RPC_URL" --provider.wallet "$PAYER"
+  PROGRAM_ID="$(solana-keygen pubkey "$PROGRAM_KEYPAIR")"
+fi
 
-make build-local
-anchor deploy --provider.cluster "$RPC_URL" --provider.wallet "$PAYER"
-
-PROGRAM_ID="$(solana-keygen pubkey "$PROGRAM_KEYPAIR")"
 export ANCHOR_PROVIDER_URL="$RPC_URL" ANCHOR_WALLET="$PAYER" E2E_PROGRAM_ID="$PROGRAM_ID"
 
 if [ "$MODE" = "dev" ]; then
@@ -120,4 +146,9 @@ if [ "$MODE" = "dev" ]; then
 fi
 
 pnpm --filter e2e run lifecycle
+# The on-chain halves of AB-03/04/05 (settlement abuse cases) need this validator and the
+# initialised config the lifecycle left behind; outside `make e2e` they are skipped.
+# Serially (--no-file-parallelism): ab_03 and ab_04 both rewrite the shared META LocalFeed PDAs.
+E2E_REQUIRE_VALIDATOR=1 pnpm --filter security-tests-ts exec vitest run --no-file-parallelism \
+  ab_03_stale_or_wrong_date ab_04_spoofed_feed ab_05_settle_before_close
 log "PASS"

@@ -6,10 +6,24 @@
 #
 # Merge-request pipelines are manual: they are created but blocked at `ci:run` until the operator
 # plays it (operator-rules §6). Main-branch and scheduled pipelines run automatically.
+#
+# Memory budget (the Gauntlet admin flagged high runner RAM). The project runner runs several jobs
+# at once and the `heavy` runner is shared with another project, so:
+#   - ONE `build` job compiles the program (anchor build) and the Rust test binaries. Later jobs get
+#     target/deploy + target/idl as artifacts and only pull (never push) its cargo cache.
+#   - rustc / Rust test threads / vitest workers / pnpm -r concurrency are capped (variables).
+#   - Memory-heavy jobs (rustc, next build, coverage, the e2e validator ~1.4 GB RSS) share
+#     `resource_group: meridian-heavy`: one at a time across all Meridian pipelines and both runners.
+#   - MR pipelines skip the Rust jobs when no Rust/program input changed; MR coverage is manual.
+#   - e2e prefers the prebuilt program artifact when `build` ran; otherwise it builds locally
+#     (so app/services-only MRs still get e2e without forcing lint:rust / test:rust).
+#   - Cargo caches use a stable key (toolchain + CARGO_CACHE_VERSION), not Cargo.lock: a new
+#     dependency no longer means a cold 60–90 min rebuild. Bump CARGO_CACHE_VERSION to reset.
 
 stages:
   - .pre
   - check
+  - build
   - test
   - e2e
 
@@ -29,12 +43,25 @@ variables:
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE_DEV_DEBUG: "0"
   CARGO_PROFILE_TEST_DEBUG: "0"
+  # Memory caps. Unset, cargo starts one rustc per CPU the container sees and each Solana-tree
+  # rustc/link takes 0.25–0.75 GB (measured); vitest starts CPUs-1 workers per package and `pnpm -r`
+  # runs 4 packages at once. before_script sets CARGO_BUILD_JOBS, RUST_TEST_THREADS and
+  # VITEST_FLAGS to min(nproc, CI_MAX_JOBS), so a 1-vCPU host stays at 1. The Makefile reads
+  # VITEST_FLAGS / PNPM_R_FLAGS.
+  CI_MAX_JOBS: "2"
+  PNPM_R_FLAGS: "--workspace-concurrency=1"
+  # Part of the cargo cache key; bump (v2, v3, ...) to drop a target/ that has grown too big.
+  CARGO_CACHE_VERSION: "v1"
 
 default:
   image: ubuntu:24.04
   # A newer push auto-cancels superseded pipelines' jobs.
   interruptible: true
+  # Warm paths finish in minutes; only `build` (cold cargo cache) gets a long timeout.
+  timeout: 30 minutes
   before_script:
+    - "export CI_JOBS=$(( $(nproc) < CI_MAX_JOBS ? $(nproc) : CI_MAX_JOBS ))"
+    - export CARGO_BUILD_JOBS=$CI_JOBS RUST_TEST_THREADS=$CI_JOBS VITEST_FLAGS="--maxWorkers=$CI_JOBS"
     - scripts/ci/link-cache.sh
     - scripts/toolchain.sh $TOOLCHAIN
   # Runner infrastructure failures only: a failing script is never retried.
@@ -57,11 +84,12 @@ default:
     - .ci-cache/.local/share/solana
     - .ci-cache/.cache/solana
 
-# Downloaded crates and compiled artifacts.
+# Downloaded crates and compiled artifacts. Keyed on the toolchain only (not Cargo.lock), so a
+# dependency change rebuilds just the changed crates. Writers: build, lint:rust, coverage.
 .cache-cargo: &cache-cargo
   key:
-    files: [rust-toolchain.toml, Cargo.lock]
-    prefix: cargo-$CACHE_GROUP
+    files: [rust-toolchain.toml]
+    prefix: cargo-$CACHE_GROUP-$CARGO_CACHE_VERSION
   paths:
     - .ci-cache/.cargo/registry
     - .ci-cache/.cargo/git
@@ -87,6 +115,63 @@ default:
 .on-mr-and-main:
   rules:
     - if: $CI_PIPELINE_SOURCE != "schedule"
+
+# Inputs of the Rust/program jobs. MR pipelines run those jobs only when one of these changed;
+# main-branch pipelines always run them (full validation, keeps the caches warm).
+.rust-paths: &rust-paths
+  - programs/**/*
+  - crates/**/*
+  - tests/security/program/**/*
+  - tests/e2e/**/*
+  - packages/client/src/idl/**/*
+  - Cargo.toml
+  - Cargo.lock
+  - rust-toolchain.toml
+  - Anchor.toml
+  - clippy.toml
+  - rustfmt.toml
+  - .cargo/**/*
+  - Makefile
+  - scripts/toolchain.sh
+  - scripts/e2e.sh
+  - scripts/ci/**/*
+  - .gitlab-ci.yml
+
+.on-rust-change:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        paths: *rust-paths
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# e2e also runs when app/services/packages/tests/oracle change (not only Rust inputs).
+.e2e-paths: &e2e-paths
+  - programs/**/*
+  - crates/**/*
+  - tests/**/*
+  - packages/**/*
+  - app/**/*
+  - services/**/*
+  - oracle/**/*
+  - Cargo.toml
+  - Cargo.lock
+  - rust-toolchain.toml
+  - Anchor.toml
+  - clippy.toml
+  - rustfmt.toml
+  - .cargo/**/*
+  - Makefile
+  - scripts/toolchain.sh
+  - scripts/e2e.sh
+  - scripts/ci/**/*
+  - .gitlab-ci.yml
+
+.on-e2e-change:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        paths: *e2e-paths
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 # ---- manual MR gate ------------------------------------------------------------------------
 # MR pipelines are created but blocked here (operator-rules §6). The operator plays this ONE job
@@ -121,19 +206,32 @@ guard:human-files:
   script:
     - scripts/ci/guard-human-files.sh
 
-lint:
+# clippy checks the whole Solana dependency tree: cold (new cache key) it needs more than 30 min.
+lint:rust:
   stage: check
-  extends: .on-mr-and-main
+  extends: .on-rust-change
+  resource_group: meridian-heavy
+  timeout: 45 minutes
   variables:
-    TOOLCHAIN: apt rust node uv
+    TOOLCHAIN: apt rust
     CACHE_GROUP: lint
   cache:
     - *cache-cargo
+  script:
+    - make install-rust
+    - make lint-rust
+
+lint:js-py:
+  stage: check
+  extends: .on-mr-and-main
+  variables:
+    TOOLCHAIN: apt node uv
+  cache:
     - *cache-pnpm
     - *cache-uv
   script:
-    - make install
-    - make lint
+    - make install-js install-py
+    - make lint-js-py
 
 typecheck:
   stage: check
@@ -157,6 +255,9 @@ secrets:gitleaks:
     entrypoint: [""]
   variables:
     GIT_DEPTH: "0"
+    # Fresh clone every run: a reused build dir keeps refs from old pipelines, and
+    # `gitleaks git` scans all of them, so rewritten MR commits kept failing the scan.
+    GIT_STRATEGY: clone
   before_script: []
   script:
     - scripts/ci/gitleaks-selftest.sh
@@ -166,6 +267,8 @@ secrets:gitleaks:
 audit:deps:
   stage: check
   extends: .on-mr-and-main
+  # Cold toolchain cache: `cargo install cargo-audit` alone took ~27 min on this host (OQ-8).
+  timeout: 45 minutes
   variables:
     TOOLCHAIN: apt rust cargo-audit node uv
     CACHE_GROUP: audit
@@ -174,30 +277,77 @@ audit:deps:
   script:
     - make audit
 
-# ---- test ---------------------------------------------------------------------------------
-# Cold first builds (empty cargo/toolchain caches) can take 40–60+ min of Rust compile on the
-# small runner; warm runs are much faster. Job timeout 2h covers first-pipeline cold install
-# without raising every lightweight check job.
-test:
-  stage: test
-  extends: .on-mr-and-main
+# ---- build --------------------------------------------------------------------------------
+# The only Rust compile of the program per pipeline: anchor build (local-oracle, AB-22) plus the
+# Rust test binaries, so test:rust only links/runs. Cold (empty cargo cache) this is 60–90 min,
+# hence the one 2h timeout; warm it is a few minutes.
+build:
+  stage: build
+  extends: .on-rust-change
+  resource_group: meridian-heavy
   timeout: 2 hours
   variables:
-    TOOLCHAIN: apt rust solana anchor node uv
+    TOOLCHAIN: apt rust solana anchor node
     CACHE_GROUP: sbf
   cache:
     - *cache-toolchain
     - *cache-cargo
+  script:
+    - make install-rust
+    - make build-local test-rust-build
+  artifacts:
+    paths:
+      - target/deploy/meridian.so
+      - target/idl/
+      - target/types/
+    expire_in: 2 days
+
+# ---- test ---------------------------------------------------------------------------------
+# Same commands as `make test test-security`, split so the Rust half reuses `build` and the
+# JS/Python half needs no Rust toolchain.
+test:rust:
+  stage: test
+  extends: .on-rust-change
+  needs: [build]
+  resource_group: meridian-heavy
+  variables:
+    TOOLCHAIN: apt rust
+    CACHE_GROUP: sbf
+    MERIDIAN_PREBUILT: "1"
+  cache:
+    - <<: *cache-toolchain
+      policy: pull
+    - <<: *cache-cargo
+      policy: pull
+  script:
+    - make install-rust
+    - make test-rust-unit test-rust-security
+
+test:js-py:
+  stage: test
+  extends: .on-mr-and-main
+  resource_group: meridian-heavy
+  variables:
+    TOOLCHAIN: apt node uv
+  cache:
     - *cache-pnpm
     - *cache-uv
   script:
-    - make install
-    - make test test-security
+    - make install-js install-py
+    - make test-js-py-unit test-js-py-security
 
+# Coverage gate: automatic on main, manual (non-blocking) on MRs. meridian-book has no
+# dependencies, so its own small cargo cache stays separate from `sbf`.
 coverage:
   stage: test
-  extends: .on-mr-and-main
-  timeout: 2 hours
+  resource_group: meridian-heavy
+  # Cold toolchain cache compiles cargo-llvm-cov (like cargo-audit, ~25 min); warm ~5–10 min.
+  timeout: 45 minutes
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
   variables:
     TOOLCHAIN: apt rust cargo-llvm-cov node uv
     CACHE_GROUP: coverage
@@ -211,12 +361,20 @@ coverage:
     - make coverage
 
 # ---- e2e ----------------------------------------------------------------------------------
-# Tagged `heavy`: end-to-end jobs run one at a time on the shared runner; every other job is
-# untagged and runs on the dedicated Meridian runner. Runner caches are local, so this job keeps
-# its own copy of the `sbf` caches there.
+# Tagged `heavy` (unchanged): end-to-end jobs run one at a time on the shared runner; every other
+# job is untagged and runs on the dedicated Meridian runner. When `build` produced artifacts,
+# scripts/e2e.sh loads the prebuilt .so at genesis (E2E_PREBUILT=1). Otherwise it builds and
+# deploys as before (app/services-only MRs). Cargo cache kept for that fallback path.
 e2e:
   stage: e2e
-  extends: .on-mr-and-main
+  extends: .on-e2e-change
+  needs:
+    - job: build
+      optional: true
+    - job: test:rust
+      optional: true
+    - job: test:js-py
+  resource_group: meridian-heavy
   timeout: 2 hours
   tags:
     - heavy
@@ -229,6 +387,10 @@ e2e:
     - *cache-pnpm
   script:
     - make install-rust install-js
+    - |
+      if [ -f target/deploy/meridian.so ] && [ -f target/idl/meridian.json ]; then
+        export E2E_PREBUILT=1
+      fi
     - make e2e
 
 # ---- schedules ----------------------------------------------------------------------------

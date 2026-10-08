@@ -17,6 +17,8 @@ export interface RunRecord {
   readonly created: number;
   readonly existed: number;
   readonly attempts: number;
+  /** Markets settled by this run (settlement). */
+  readonly settled?: number;
   /** Why it failed or was skipped. */
   readonly notes: readonly string[];
 }

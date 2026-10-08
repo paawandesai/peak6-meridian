@@ -18,10 +18,12 @@ import { fileURLToPath } from "node:url";
 import { AnchorProvider, type Program, Wallet } from "@coral-xyz/anchor";
 import {
   BN,
+  bookAccountApi,
   buildTrade,
   configParamsArg,
   configParamsBatches,
   createMeridianProgram,
+  fetchBookQuotes,
   findConfigPda,
   findOpenOrdersPda,
   type Intent,
@@ -41,7 +43,16 @@ import {
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { z } from "zod";
 
-import { chainMarketOps, fetchPrevClose, RunState, runMorning, silentLogger } from "automation";
+import {
+  assertCluster,
+  buildRuntime,
+  chainMarketOps,
+  fetchPrevClose,
+  RunState,
+  runMorning,
+  settleNow,
+  silentLogger,
+} from "automation";
 import { fakeSourcesHttp } from "automation/testing";
 
 import { Ledger, UNITS_PER_CENT, UNITS_PER_USDC } from "./ledger";
@@ -503,11 +514,39 @@ async function main(): Promise<void> {
     await trade(b, "SELL_YES", "limit", 60, 10n, [], sigs);
   });
   await check("sell yes (rest)");
+  // M2-05 AC4 / NFR-01: a confirmed order is visible through the app's book quotes (the same
+  // `fetchBookQuotes` the market-data hook polls every second). The read must see it within 2 s so
+  // that hook poll interval (1 s) + read stays inside the 3 s budget.
+  await step("NFR-01: the resting 60¢ ask shows in the book quotes within 3 s", async () => {
+    const quotesOf = async () =>
+      (await fetchBookQuotes(bookAccountApi(program), [addresses.market], programId))[
+        addresses.market.toBase58()
+      ];
+    const started = Date.now();
+    let quotes = await quotesOf();
+    while (quotes?.yesAsk !== 60 && Date.now() - started < 2_000) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      quotes = await quotesOf();
+    }
+    const elapsed = Date.now() - started;
+    if (quotes?.yesAsk !== 60 || quotes.yesBid !== null || quotes.yesMid !== null) {
+      throw new Error(`the resting ask was not visible in the book quotes after ${elapsed} ms`);
+    }
+    say(
+      `          book quotes saw the confirmed ask after ${elapsed} ms (budget: 2000 ms + 1000 ms poll)`,
+    );
+  });
   await step("BUY YES: trader-a buys 10 @ 60¢ (IOC)", async (sigs) => {
     await trade(a, "BUY_YES", "ioc", 60, 10n, [b], sigs);
     ledger.trade(a.name, b.name, 60n, 10n);
   });
   await check("buy yes");
+  await step("NFR-01: the filled ask is gone from the book quotes", async () => {
+    const quotes = (await fetchBookQuotes(bookAccountApi(program), [addresses.market], programId))[
+      addresses.market.toBase58()
+    ];
+    if (quotes?.yesAsk !== null) throw new Error("the filled ask still shows in the book quotes");
+  });
 
   await step("SELL YES: trader-b bids 4 @ 55¢, trader-a sells 4 into it (IOC)", async (sigs) => {
     await trade(b, "BUY_YES", "limit", 55, 4n, [], sigs);
@@ -707,6 +746,94 @@ async function main(): Promise<void> {
     }
   });
   await check("redeem");
+
+  // M2-04 AC1, AC3, AC7: `settle-now` settles every other open market (all closed by now) on this
+  // validator with a payer that is not the automation key, through the local oracle signed by
+  // the Config admin; a second run finds nothing to do. Data sources are mocked (no network).
+  await step(
+    "settle-now settles all remaining open markets with a non-automation payer",
+    async () => {
+      const closes = fixture.closes;
+      const outcomes = async (): Promise<{ open: number; settled: number }> => {
+        const all = await program.account.market.all();
+        return {
+          open: all.filter((m) => "open" in m.account.status).length,
+          settled: all.filter((m) => "settled" in m.account.status).length,
+        };
+      };
+      const before = await outcomes();
+      const sentSignatures: string[] = [];
+      const run = () =>
+        settleNow({
+          argv: ["--payer", "trader-a"],
+          cluster: "localnet",
+          rpcUrl: env.ANCHOR_PROVIDER_URL,
+          assertCluster,
+          getGenesisHash: () => connection.getGenesisHash(),
+          loadKeypair: () => a.keypair, // trader-a: funded, and not the automation key (the admin)
+          runtime: async ({ cluster, payer }) => {
+            const runtime = buildRuntime(
+              {
+                rpcUrl: env.ANCHOR_PROVIDER_URL,
+                programId,
+                tiingoApiKey: "test-key",
+                twelveDataApiKey: "test-key",
+                adminKeypair: admin,
+              },
+              cluster,
+              payer,
+            );
+            const http = fakeSourcesHttp({ closes, date: fixture.tradingDate });
+            return {
+              ...runtime,
+              verifyClose: (ticker, date) =>
+                fetchPrevClose(
+                  { http, tiingoApiKey: "test-key", twelveDataApiKey: "test-key" },
+                  ticker,
+                  date,
+                ),
+              executor: {
+                currentSlot: () => runtime.executor.currentSlot(),
+                send: async (tx, extra) => {
+                  const sent = await runtime.executor.send(tx, extra);
+                  sentSignatures.push(sent.signature);
+                  return sent;
+                },
+              },
+            };
+          },
+          now: () => new Date(),
+          out: (line) => say(`          ${line}`),
+        });
+      const first = await run();
+      const after = await outcomes();
+      if (first.failed !== 0 || first.settled !== before.open || after.open !== 0) {
+        throw new Error(`settle-now: ${JSON.stringify({ first, before, after })}`);
+      }
+      // One transaction per ticker: all open markets of a ticker settled in one go (AC1).
+      if (sentSignatures.length !== Object.keys(closes).length) {
+        throw new Error(
+          `expected one transaction per ticker, sent ${String(sentSignatures.length)}`,
+        );
+      }
+      // Every market got the rule's outcome: YES iff the settle price is at or above the strike.
+      for (const { account } of await program.account.market.all()) {
+        const price = BigInt(account.settlePriceScaled.toString());
+        const strike = BigInt(account.strikeCents.toString()) * 10n ** 16n;
+        const expectYes = price >= strike;
+        if ("yes" in account.outcome !== expectYes) {
+          throw new Error("a market settled with the wrong outcome");
+        }
+      }
+      sentSignatures.forEach((s) => say(`          tx ${s}`));
+      // Re-run: nothing open, nothing sent (AC3).
+      const sentBefore = sentSignatures.length;
+      const second = await run();
+      if (second.settled !== 0 || second.failed !== 0 || sentSignatures.length !== sentBefore) {
+        throw new Error(`settle-now re-run must send nothing: ${JSON.stringify(second)}`);
+      }
+    },
+  );
 
   // ---- final balances (AC3: exact) -------------------------------------------------------------
   let sum = 0n;

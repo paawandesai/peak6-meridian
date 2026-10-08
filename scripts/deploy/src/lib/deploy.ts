@@ -13,7 +13,13 @@ import {
   sendConfigStep,
   verifyMint,
 } from "./chain-io";
-import { assertConfigAdmin, isPlaceholderPin, type OnChainConfig, planConfig } from "./config-plan";
+import {
+  assertConfigAdmin,
+  assertConfigMatches,
+  isPlaceholderPin,
+  type OnChainConfig,
+  planConfig,
+} from "./config-plan";
 import {
   assertHashesMatchDefinitions,
   bytesToHex,
@@ -408,11 +414,25 @@ async function deploy(
   const ctx: Context = { options, connection, admin, programId, log, actions: [], runSolana };
   const program = createProgram(connection, admin, programId);
   const before = await readOnChainConfig(program);
+  // Config identity is asserted before any tx (mint, buffer, upgrade): admin and automation now,
+  // the mint right after ensureMint, which takes it from the Config and so sends nothing here.
   if (before !== null) {
     assertConfigAdmin(before, admin.publicKey);
+    assertConfigMatches(before, {
+      admin: admin.publicKey,
+      automationAuthority: options.automation,
+      usdcMint: before.usdcMint,
+    });
   }
   const record = readRecord(options.outPath);
   const mint = await ensureMint(ctx, before, record);
+  if (before !== null) {
+    assertConfigMatches(before, {
+      admin: admin.publicKey,
+      automationAuthority: options.automation,
+      usdcMint: mint,
+    });
+  }
 
   const upgradeAuthority = await ensureProgram(ctx, soPath, soSha);
 
