@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { AppHeader, NAV_ITEMS, PAUSE_BANNER_TEXT } from "./app-header";
-import { AppShell } from "./app-shell";
+import HomePage from "@/app/page";
 import { market, reader, withReader } from "@/test-utils";
 
 vi.mock("@solana/wallet-adapter-react", async (importOriginal) => ({
@@ -38,7 +38,7 @@ describe("clock (AC4)", () => {
   });
 
   it("the prerendered shell contains the placeholder, so there is no hydration mismatch", () => {
-    const html = renderToStaticMarkup(<AppShell />);
+    const html = renderToStaticMarkup(<HomePage />);
     expect(html).toContain("--:--:-- ET");
     expect(html).toContain("Loading markets");
   });
