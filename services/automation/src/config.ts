@@ -11,6 +11,7 @@ const emptyToUndefined = (value: unknown): unknown =>
   typeof value === "string" && value.trim() === "" ? undefined : value;
 
 const envSchema = z.object({
+  SOLANA_CLUSTER: z.preprocess(emptyToUndefined, z.string().default("localnet")),
   SOLANA_RPC_URL: z.url(),
   MERIDIAN_PROGRAM_ID: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
   // Optional here: a missing key is a degraded service (M2-03 AC5b), not a crash.
@@ -19,6 +20,9 @@ const envSchema = z.object({
   TIINGO_API_KEY: z.string().min(1),
   TWELVEDATA_API_KEY: z.string().min(1),
   ALERT_WEBHOOK_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+  OPS_AGENT_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+  // Local validator only: the Config admin that signs the test-only local oracle.
+  ADMIN_KEYPAIR_PATH: z.preprocess(emptyToUndefined, z.string().optional()),
   PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).max(65_535).default(4000)),
 });
 

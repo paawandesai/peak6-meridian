@@ -13,13 +13,17 @@ import { join, relative } from "node:path";
 
 import {
   loadAutomationKey,
-  placeholderSettlementJob,
   startService,
   type CronLike,
   type RunningService,
   type SignerDeps,
 } from "automation";
-import { FakeChain, RecordingAlerter, recordingLogger } from "automation/testing";
+import {
+  FakeChain,
+  noopSettlementJob,
+  RecordingAlerter,
+  recordingLogger,
+} from "automation/testing";
 import { Keypair } from "@solana/web3.js";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -78,7 +82,7 @@ async function boot(signer: Keypair | null, configured: Keypair) {
           prevClose: () => Promise.reject(new Error("a mismatched key must not even read prices")),
         },
         settlement: {
-          ...placeholderSettlementJob(key),
+          ...noopSettlementJob(key),
           run: () => {
             r.settlementRuns.push("settlement");
             return Promise.resolve();
@@ -203,11 +207,27 @@ describe("AB-19 what the automation service can ever send", () => {
     return found;
   }
 
-  it("only calls create_strike_market and the permissionless settle_market", () => {
-    const allowed = new Set(["createStrikeMarket", "settleMarket"]);
+  /**
+   * Which production file may call which program method. `settle_market` is permissionless
+   * (the payer only pays fees); `local_oracle_set` is the admin-only, local-validator-only test
+   * oracle: it is built solely by the local adapter, signed by an injected Config-admin keypair
+   * that is never the automation key, and chosen only when the verified cluster is localnet.
+   */
+  const METHODS_BY_FILE: Record<string, string[]> = {
+    "services/automation/src/cli/createMarkets.ts": ["createStrikeMarket"],
+    "services/automation/src/settleTx.ts": ["settleMarket"],
+    "services/automation/src/switchboard.ts": ["localOracleSet"],
+  };
+
+  it("each program method is called only from the file allowed to call it", () => {
     const called = methodsCalled();
-    expect([...called.keys()].filter((name) => !allowed.has(name))).toEqual([]);
+    for (const [name, files] of called) {
+      for (const file of files) {
+        expect(METHODS_BY_FILE[file] ?? [], `${name} in ${file}`).toContain(name);
+      }
+    }
     expect(called.has("createStrikeMarket")).toBe(true);
+    expect(called.has("settleMarket")).toBe(true);
   });
 
   it("never references an admin-only instruction", () => {
@@ -218,7 +238,6 @@ describe("AB-19 what the automation service can ever send", () => {
       "addStrike",
       "adminSettleOverride",
       "initializeConfig",
-      "localOracleSet",
     ];
     const called = methodsCalled();
     for (const name of forbidden) {
@@ -234,17 +253,48 @@ describe("AB-19 what the automation service can ever send", () => {
   const SIGNING_SURFACE =
     /\b(?:sendTransaction|sendRawTransaction|sendAndConfirm|signTransaction|signAllTransactions|VersionedTransaction|new\s+Transaction)\b|\.\s*(?:rpc|signers|instruction|transaction|simulate)\s*\(|\bprogram\s*\.\s*instruction\b|\bmethods\s*\[|SystemProgram\s*\.\s*(?!programId\b)/;
 
-  /** The only production file allowed to sign: it builds `create_strike_market` and nothing else. */
-  const MAY_SIGN = ["services/automation/src/cli/createMarkets.ts"];
+  /**
+   * The only production files allowed to build or send transactions: market creation
+   * (`create_strike_market`), the settlement transaction builder (`settle_market`, permissionless),
+   * the local-oracle / Switchboard adapters, and the executor that signs and sends what they plan.
+   */
+  const MAY_SIGN = [
+    "services/automation/src/cli/createMarkets.ts",
+    "services/automation/src/executor.ts",
+    "services/automation/src/settleTx.ts",
+    "services/automation/src/switchboard.ts",
+  ];
 
-  it("fails closed: only the market-creation file contains any signing or sending code", () => {
+  it("fails closed: only the allowed files contain any signing or sending code", () => {
     const offenders = [...productionSources()]
       .filter(([, code]) => SIGNING_SURFACE.test(code))
       .map(([path]) => path)
       .sort();
-    // M2-04 adds a settlement signing path: it must be added here deliberately, with its own
-    // permissionless-only test, not slip in unnoticed.
+    // A new signing path must be added to MAY_SIGN deliberately, with its own test.
     expect(offenders).toEqual(MAY_SIGN);
+  });
+
+  it("the test-only local oracle (admin-signed local_oracle_set) is reachable only on localnet", () => {
+    const sources = productionSources();
+    // Chosen solely by selectAdapter's cluster switch ...
+    const select = sources.get("services/automation/src/switchboard.ts") ?? "";
+    expect(select).toMatch(/cluster === "localnet" \? params\.local\(\) : params\.switchboard\(\)/);
+    // ... and the admin keypair is only ever loaded when the verified cluster is localnet.
+    for (const file of [
+      "services/automation/src/main.ts",
+      "services/automation/src/settle-now.ts",
+    ]) {
+      const code = sources.get(file) ?? "";
+      expect(code, file).toMatch(/cluster === "localnet" &&\s*env\.ADMIN_KEYPAIR_PATH/);
+    }
+    // No other file builds the local adapter.
+    const builders = [...sources]
+      .filter(([, code]) => /localOracleAdapter\s*\(/.test(code))
+      .map(([path]) => path);
+    expect(builders.sort()).toEqual([
+      "services/automation/src/runtime.ts",
+      "services/automation/src/switchboard.ts",
+    ]);
   });
 
   it("the scan itself catches the patterns it is meant to (guard against a vacuous regex)", () => {

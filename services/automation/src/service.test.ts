@@ -3,11 +3,16 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { loadAutomationKey } from "./config";
 import { fetchPrevClose } from "./prevCloses";
-import { placeholderSettlementJob } from "./jobs/settle";
 import { type CronLike } from "./scheduler";
 import { startService, type RunningService } from "./service";
 import { fakeSourcesHttp } from "./testing/fakeHttp";
-import { FakeChain, FakeClock, RecordingAlerter, recordingLogger } from "./testing/harness";
+import {
+  FakeChain,
+  FakeClock,
+  noopSettlementJob,
+  RecordingAlerter,
+  recordingLogger,
+} from "./testing/harness";
 
 const TOKEN = "local-dev-token";
 const running: RunningService[] = [];
@@ -68,10 +73,10 @@ async function start(options: {
         settlement:
           options.settlementCrashes === true
             ? {
-                ...placeholderSettlementJob(signer),
+                ...noopSettlementJob(signer),
                 run: () => Promise.reject(new Error("settlement exploded")),
               }
-            : placeholderSettlementJob(signer),
+            : noopSettlementJob(signer),
       });
     },
     cron: cronFake.cron,
@@ -91,7 +96,7 @@ function signerDeps(signer: Keypair) {
       marketOps: new FakeChain(),
       prevClose: () => Promise.reject(new Error("unused")),
     },
-    settlement: placeholderSettlementJob(signer),
+    settlement: noopSettlementJob(signer),
   };
 }
 
@@ -154,18 +159,39 @@ describe("startService with the right automation key", () => {
     expect(body.lastMorning).toMatchObject({ status: "ok", created: 38 });
   });
 
-  it("reports the placeholder settlement job as such, signing with the loaded key", async () => {
+  it("reports the settlement job with the key that signs it", async () => {
     const key = Keypair.generate();
     const t = await start({ loaded: key, configured: key });
     const body = (await (await health(t.service)).json()) as {
-      jobs: { name: string; signer?: string; placeholder?: boolean; scheduled: boolean }[];
+      jobs: { name: string; signer?: string; scheduled: boolean }[];
     };
     expect(body.jobs.find((j) => j.name === "settlement")).toMatchObject({
       scheduled: true,
-      placeholder: true,
       signer: key.publicKey.toBase58(),
     });
-    expect(body.jobs.find((j) => j.name === "morning")?.placeholder).toBeUndefined();
+  });
+
+  it("runs the startup check once, and a failing check is logged, not fatal", async () => {
+    const key = Keypair.generate();
+    let calls = 0;
+    const logger = recordingLogger();
+    const service = await startService({
+      ...baseDeps(key, new RecordingAlerter()),
+      log: logger.log,
+      withSigner: (signer) =>
+        Promise.resolve({
+          ...signerDeps(signer),
+          startupCheck: () => {
+            calls += 1;
+            return Promise.reject(new Error("balance rpc down https://rpc.example/?k=SECRET"));
+          },
+        }),
+    });
+    running.push(service);
+    expect(calls).toBe(1);
+    expect(service.degraded).toBeNull();
+    expect(logger.lines.map((l) => l.event)).toContain("startup_check_failed");
+    expect(JSON.stringify(logger.lines)).not.toContain("SECRET");
   });
 
   it("records a crashed job in /health and alerts once (never swallowed)", async () => {
