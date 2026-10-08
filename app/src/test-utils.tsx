@@ -30,11 +30,14 @@ export function market(overrides: Partial<MarketRow> = {}): MarketRow {
 }
 
 export const OWNER = new PublicKey("11111111111111111111111111111112");
+/** The Config admin in tests. */
+export const ADMIN = new PublicKey("11111111111111111111111111111113");
 
 export function reader(overrides: Partial<MeridianReader> = {}): MeridianReader {
   return {
     listMarkets: () => Promise.resolve([]),
-    getConfig: () => Promise.resolve({ paused: false, overrideDelaySecs: 3600n }),
+    getConfig: () =>
+      Promise.resolve({ paused: false, overrideDelaySecs: 3600n, admin: ADMIN.toBase58() }),
     usdcBalance: () => Promise.resolve(0n),
     ...overrides,
   };
