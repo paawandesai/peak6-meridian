@@ -6,14 +6,19 @@ never logged or put in error text. Every response is validated with pydantic; an
 """
 
 import json
+import re
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from urllib.parse import quote
 
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 TIMEOUT = httpx.Timeout(3.0)
 CLOSE_LOOKBACK_DAYS = 45  # calendar days; comfortably holds 21 trading closes
+
+
+TICKER_PATTERN = re.compile(r"[A-Z]{1,8}")
 
 
 class PriceError(RuntimeError):
@@ -38,6 +43,13 @@ class _TiingoBar(BaseModel):
     close: Decimal
 
 
+def _check_ticker(ticker: str) -> str:
+    """A ticker is 1-8 capital letters; anything else could change the request URL."""
+    if TICKER_PATTERN.fullmatch(ticker) is None:
+        raise PriceError("invalid ticker symbol")
+    return ticker
+
+
 def _get(client: httpx.Client, url: str, headers: dict[str, str], params: dict[str, str]) -> bytes:
     try:
         response = client.get(url, headers=headers, params=params, timeout=TIMEOUT)
@@ -51,6 +63,7 @@ def _get(client: httpx.Client, url: str, headers: dict[str, str], params: dict[s
 
 def fetch_spot(client: httpx.Client, ticker: str, finnhub_key: str) -> Spot:
     """Latest price from Finnhub; `c == 0` / `t == 0` (unknown symbol) is an error."""
+    ticker = _check_ticker(ticker)
     body = _get(
         client,
         "https://finnhub.io/api/v1/quote",
@@ -70,9 +83,10 @@ def fetch_daily_closes(
     client: httpx.Client, ticker: str, tiingo_key: str, today: date
 ) -> list[Decimal]:
     """Daily closes, oldest first, ending at or before `today`."""
+    symbol = quote(_check_ticker(ticker).lower(), safe="")
     body = _get(
         client,
-        f"https://api.tiingo.com/tiingo/daily/{ticker.lower()}/prices",
+        f"https://api.tiingo.com/tiingo/daily/{symbol}/prices",
         {"Authorization": f"Token {tiingo_key}"},
         {
             "startDate": (today - timedelta(days=CLOSE_LOOKBACK_DAYS)).isoformat(),

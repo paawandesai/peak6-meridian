@@ -61,3 +61,28 @@ def test_daily_closes_sorted_oldest_first() -> None:
 def test_daily_closes_reject_malformed(content: bytes) -> None:
     with pytest.raises(PriceError, match="malformed"):
         fetch_daily_closes(client(content=content), "NVDA", "k", date(2026, 10, 8))
+
+
+@pytest.mark.parametrize(
+    "ticker", ["", "nvda", "NV/DA", "NVDA?x=1", "../x", "TOOLONGSYM", "NVDA\n"]
+)
+def test_bad_ticker_is_rejected_before_any_request(ticker: str) -> None:
+    def unreachable(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("no request may be sent")
+
+    http = client(httpx.MockTransport(unreachable))
+    with pytest.raises(PriceError, match="invalid ticker"):
+        fetch_spot(http, ticker, "k")
+    with pytest.raises(PriceError, match="invalid ticker"):
+        fetch_daily_closes(http, ticker, "k", date(2026, 10, 8))
+
+
+def test_tiingo_path_uses_the_quoted_lowercase_symbol() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[])
+
+    fetch_daily_closes(client(httpx.MockTransport(handler)), "NVDA", "k", date(2026, 10, 8))
+    assert seen[0].url.path == "/tiingo/daily/nvda/prices"
