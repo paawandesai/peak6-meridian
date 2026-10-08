@@ -35,6 +35,7 @@ import {
   type Meridian,
   type OrderKindName,
   symbolBytes,
+  symbolFromBytes,
   type TickerInput,
 } from "@meridian/client";
 import {
@@ -58,6 +59,8 @@ import {
 } from "automation";
 import { fakeSourcesHttp } from "automation/testing";
 
+import { buildRedeem } from "../../../app/src/app/portfolio/tx";
+import type { MarketRow } from "../../../app/src/lib/markets";
 import { runFaucetChecks } from "./faucet";
 import { Ledger, UNITS_PER_CENT, UNITS_PER_USDC } from "./ledger";
 import { wantsRehearsal } from "./rehearsal-plan";
@@ -735,27 +738,41 @@ async function main(): Promise<void> {
     }
   }
 
-  await step("winner redeem for both traders (YES wins)", async (sigs) => {
+  // M2-07 AC2: the Portfolio's own redeem builder (app/src/app/portfolio/tx.ts) pays $1.00 per
+  // winning contract (YES won) and leaves the losing side at $0.00, on a real validator.
+  await step("winner redeem for both traders (YES wins), built by the Portfolio", async (sigs) => {
+    const account = await program.account.market.fetch(addresses.market);
+    const row: MarketRow = {
+      address: addresses.market.toBase58(),
+      ticker: symbolFromBytes(account.ticker),
+      tradingDate: account.tradingDate,
+      strikeCents: BigInt(account.strikeCents.toString()),
+      closeTs: BigInt(account.closeTs.toString()),
+      settled: "settled" in account.status,
+      outcome: "yes" in account.outcome ? "Yes" : "No",
+      settlePriceScaled: BigInt(account.settlePriceScaled.toString()),
+      pairsOutstanding: BigInt(account.pairsOutstanding.toString()),
+    };
     for (const trader of traders) {
       const yes = await amount(trader.yes);
       const no = await amount(trader.no);
-      sigs.push(
-        await program.methods
-          .redeem(new BN(yes.toString()), new BN(no.toString()))
-          .accountsStrict({
-            market: addresses.market,
-            user: trader.keypair.publicKey,
-            userUsdc: trader.usdc,
-            userYes: trader.yes,
-            userNo: trader.no,
-            yesMint: addresses.yesMint,
-            noMint: addresses.noMint,
-            vault: addresses.vault,
-            tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
-          })
-          .signers([trader.keypair])
-          .rpc({ commitment: "confirmed" }),
-      );
+      const usdcBefore = await amount(trader.usdc);
+      const instructions = await buildRedeem({
+        program,
+        user: trader.keypair.publicKey,
+        usdcMint,
+        market: row,
+        yesQty: yes,
+        noQty: no,
+      });
+      await send(new Transaction().add(...instructions), [trader.keypair], sigs);
+      const paid = (await amount(trader.usdc)) - usdcBefore;
+      if (paid !== yes * UNITS_PER_USDC) {
+        throw new Error(`${trader.name} redeemed ${yes} winners and was paid ${paid}`);
+      }
+      if ((await amount(trader.yes)) !== 0n || (await amount(trader.no)) !== 0n) {
+        throw new Error(`${trader.name} still holds tokens after the redeem`);
+      }
       ledger.redeemWinners(trader.name, true);
     }
   });
