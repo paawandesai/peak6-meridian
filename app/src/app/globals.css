@@ -109,6 +109,17 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* A slow spinner for "Settling…"; the word is always present, so motion is never the only cue. */
+.mer-spin {
+  display: inline-block;
+  animation: mer-spin 1.2s linear infinite;
+}
+@keyframes mer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.001ms !important;
