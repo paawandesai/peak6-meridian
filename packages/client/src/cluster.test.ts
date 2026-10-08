@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -10,29 +12,27 @@ import {
   TESTNET_GENESIS_HASH,
 } from "./cluster";
 
-const genesis = (hash: string) => ({ getGenesisHash: () => Promise.resolve(hash) });
-const unreachable = {
-  getGenesisHash: () => Promise.reject(new Error("fetch failed")),
-};
+const genesis = (hash: string) => () => Promise.resolve(hash);
+const unreachable = () => Promise.reject(new Error("fetch failed"));
 
 describe("assertCluster (genesis hash, not hostname)", () => {
   it("allows a non-standard hostname that serves the devnet genesis hash", async () => {
     await expect(
       assertCluster({
-        connection: genesis(DEVNET_GENESIS_HASH),
+        getGenesisHash: genesis(DEVNET_GENESIS_HASH),
         rpcUrl: "https://my-provider.example.com/devnet-rpc",
-        solanaCluster: "devnet",
+        cluster: "devnet",
       }),
     ).resolves.toBe("devnet");
   });
 
   it("treats an unset SOLANA_CLUSTER as devnet and still checks the genesis hash", async () => {
     await expect(
-      assertCluster({ connection: genesis(DEVNET_GENESIS_HASH), rpcUrl: "https://x.example" }),
+      assertCluster({ getGenesisHash: genesis(DEVNET_GENESIS_HASH), rpcUrl: "https://x.example" }),
     ).resolves.toBe("devnet");
     await expect(
       assertCluster({
-        connection: genesis(MAINNET_BETA_GENESIS_HASH),
+        getGenesisHash: genesis(MAINNET_BETA_GENESIS_HASH),
         rpcUrl: "https://x.example",
       }),
     ).rejects.toThrow(/mainnet-beta/);
@@ -41,28 +41,28 @@ describe("assertCluster (genesis hash, not hostname)", () => {
   it("refuses the mainnet-beta genesis hash even behind a devnet-looking domain", async () => {
     await expect(
       assertCluster({
-        connection: genesis(MAINNET_BETA_GENESIS_HASH),
+        getGenesisHash: genesis(MAINNET_BETA_GENESIS_HASH),
         rpcUrl: "https://api.devnet.solana.com",
-        solanaCluster: "devnet",
+        cluster: "devnet",
       }),
     ).rejects.toThrow(/mainnet-beta/);
   });
 
   it("refuses testnet and unknown genesis hashes", async () => {
     await expect(
-      assertCluster({ connection: genesis(TESTNET_GENESIS_HASH), rpcUrl: "https://x.example" }),
+      assertCluster({ getGenesisHash: genesis(TESTNET_GENESIS_HASH), rpcUrl: "https://x.example" }),
     ).rejects.toThrow(/testnet/);
     await expect(
-      assertCluster({ connection: genesis("1".repeat(44)), rpcUrl: "https://x.example" }),
+      assertCluster({ getGenesisHash: genesis("1".repeat(44)), rpcUrl: "https://x.example" }),
     ).rejects.toThrow(/unknown cluster/);
   });
 
   it("refuses an unreachable RPC (fail closed)", async () => {
     await expect(
       assertCluster({
-        connection: unreachable,
+        getGenesisHash: unreachable,
         rpcUrl: "https://x.example",
-        solanaCluster: "devnet",
+        cluster: "devnet",
       }),
     ).rejects.toThrow(/cannot reach the RPC/);
   });
@@ -70,22 +70,22 @@ describe("assertCluster (genesis hash, not hostname)", () => {
   it("allows localnet only with SOLANA_CLUSTER=localnet and a loopback URL", async () => {
     await expect(
       assertCluster({
-        connection: unreachable,
+        getGenesisHash: unreachable,
         rpcUrl: "http://127.0.0.1:8899",
-        solanaCluster: "localnet",
+        cluster: "localnet",
       }),
     ).resolves.toBe("localnet");
     await expect(
       assertCluster({
-        connection: unreachable,
+        getGenesisHash: unreachable,
         rpcUrl: "https://api.mainnet-beta.solana.com",
-        solanaCluster: "localnet",
+        cluster: "localnet",
       }),
     ).rejects.toThrow(ClusterError);
     // A loopback URL without SOLANA_CLUSTER=localnet is still checked by genesis hash.
     await expect(
       assertCluster({
-        connection: genesis("1".repeat(44)),
+        getGenesisHash: genesis("1".repeat(44)),
         rpcUrl: "http://127.0.0.1:8899",
       }),
     ).rejects.toThrow(/unknown cluster/);
@@ -94,11 +94,23 @@ describe("assertCluster (genesis hash, not hostname)", () => {
   it("rejects any other SOLANA_CLUSTER value without calling the RPC", async () => {
     await expect(
       assertCluster({
-        connection: genesis(DEVNET_GENESIS_HASH),
+        getGenesisHash: genesis(DEVNET_GENESIS_HASH),
         rpcUrl: "https://x.example",
-        solanaCluster: "mainnet-beta",
+        cluster: "mainnet-beta",
       }),
-    ).rejects.toThrow(/must be "devnet" or "localnet"/);
+    ).rejects.toThrow(/cluster must be "devnet" or "localnet"/);
+  });
+});
+
+describe("cluster.ts stays free of environment access (it is bundled into the app)", () => {
+  const source = readFileSync(new URL("./cluster.ts", import.meta.url), "utf8");
+
+  it("does not read process.env", () => {
+    expect(source).not.toMatch(/process\.env/);
+  });
+
+  it("names no server environment variable", () => {
+    expect(source).not.toMatch(/SOLANA_(CLUSTER|RPC_URL)|KEYPAIR|_PUBKEY/);
   });
 });
 

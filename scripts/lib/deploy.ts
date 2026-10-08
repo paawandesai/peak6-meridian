@@ -275,9 +275,9 @@ export async function runDeploy(
 ): Promise<DeployResult> {
   const connection = new Connection(options.rpcUrl, "confirmed");
   const cluster = await assertCluster({
-    connection,
+    cluster: options.solanaCluster,
     rpcUrl: options.rpcUrl,
-    solanaCluster: options.solanaCluster,
+    getGenesisHash: () => connection.getGenesisHash(),
   });
   log(`cluster: ${cluster}`);
 

@@ -23,8 +23,8 @@ export class ClusterError extends Error {
   }
 }
 
-/** The part of a web3.js `Connection` the guard needs. */
-export type GenesisSource = { getGenesisHash(): Promise<string> };
+/** Reads the cluster's genesis hash (for example `() => connection.getGenesisHash()`). */
+export type GetGenesisHash = () => Promise<string>;
 
 /** True when `url` points at this machine (127.0.0.0/8, `localhost` or `::1`). */
 export function isLoopbackUrl(url: string): boolean {
@@ -53,30 +53,35 @@ function describeGenesis(genesis: string): string {
 /**
  * Returns the cluster the RPC serves or throws `ClusterError`.
  *
- * - `solanaCluster === "localnet"` is allowed only with a loopback `rpcUrl`.
- * - Otherwise the RPC's `getGenesisHash()` must equal [`DEVNET_GENESIS_HASH`]. An unreachable RPC
- *   is refused (fail closed), and so is every other genesis hash, whatever the hostname.
+ * Takes everything as parameters and reads no environment, and names no environment variable in
+ * its text (the app's bundle test fails on any server variable name in client code): callers
+ * (`scripts/`, the faucet route, `settle-now`) read the cluster and RPC URL server-side and
+ * pass them in.
+ *
+ * - `cluster === "localnet"` is allowed only with a loopback `rpcUrl`.
+ * - Otherwise `getGenesisHash()` must return [`DEVNET_GENESIS_HASH`]. An unreachable RPC is
+ *   refused (fail closed), and so is every other genesis hash, whatever the hostname.
  */
 export async function assertCluster(params: {
-  readonly connection: GenesisSource;
+  readonly cluster?: string | undefined;
   readonly rpcUrl: string;
-  readonly solanaCluster?: string | undefined;
+  readonly getGenesisHash: GetGenesisHash;
 }): Promise<ClusterName> {
-  const { connection, rpcUrl, solanaCluster } = params;
+  const { cluster: solanaCluster, rpcUrl, getGenesisHash } = params;
   if (solanaCluster === "localnet") {
     if (!isLoopbackUrl(rpcUrl)) {
       throw new ClusterError(
-        "SOLANA_CLUSTER=localnet requires a loopback RPC URL (127.0.0.1, localhost or ::1)",
+        "the localnet cluster requires a loopback RPC URL (127.0.0.1, localhost or ::1)",
       );
     }
     return "localnet";
   }
   if (solanaCluster !== undefined && solanaCluster !== "devnet") {
-    throw new ClusterError(`SOLANA_CLUSTER must be "devnet" or "localnet", got "${solanaCluster}"`);
+    throw new ClusterError(`the cluster must be "devnet" or "localnet", got "${solanaCluster}"`);
   }
   let genesis: string;
   try {
-    genesis = await connection.getGenesisHash();
+    genesis = await getGenesisHash();
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new ClusterError(`cannot reach the RPC to verify the cluster (refusing): ${reason}`);

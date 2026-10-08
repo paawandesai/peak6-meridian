@@ -161,7 +161,7 @@ describe("AC3 the devnet build has no local_oracle_set (AB-22)", () => {
       ).instructions.map((i) => i.name);
       expect(names).toContain("settle_market");
       expect(names).not.toContain("local_oracle_set");
-      execFileSync(
+      const output = execFileSync(
         "cargo",
         [
           "test",
@@ -170,11 +170,19 @@ describe("AC3 the devnet build has no local_oracle_set (AB-22)", () => {
           "--locked",
           "--test",
           "ab_22_devnet_build",
+          "devnet_idl_has_no_local_oracle_set",
           "--",
           "--include-ignored",
         ],
-        { cwd: REPO_ROOT, env: { ...process.env, MERIDIAN_DEVNET_IDL: idlPath }, stdio: "pipe" },
+        {
+          cwd: REPO_ROOT,
+          env: { ...process.env, MERIDIAN_DEVNET_IDL: idlPath },
+          encoding: "utf8",
+          stdio: "pipe",
+        },
       );
+      // Run for real: exactly one test passed and none was reported as ignored.
+      expect(output).toMatch(/test result: ok\. 1 passed; 0 failed; 0 ignored/);
     },
     25 * MINUTE,
   );
@@ -481,6 +489,29 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
       const rebuilt = readRecord(record);
       expect(rebuilt?.usdcMint).toBe(config?.usdcMint.toBase58());
       expect(rebuilt?.feeds?.AAPL?.[0].placeholder).toBe(false);
+    },
+    5 * MINUTE,
+  );
+
+  it(
+    "AC1 a stale record never causes a second mint: the Config's mint wins",
+    async () => {
+      const config = await readOnChainConfig(program);
+      writeFileSync(
+        record,
+        `${JSON.stringify({ version: 1, cluster: "localnet", programId: programId.toBase58(), usdcMint: PublicKey.unique().toBase58() })}\n`,
+      );
+      const before = await adminSigs();
+      const result = await run();
+      expect(result.actions).toEqual([]);
+      expect(await adminSigs()).toBe(before);
+      expect(readRecord(record)?.usdcMint).toBe(config?.usdcMint.toBase58());
+      // A USDC_MINT that disagrees with the Config is refused too.
+      await expectRejects(
+        run({ usdcMintEnv: PublicKey.unique() }),
+        /USDC_MINT is .* but the on-chain Config uses/,
+      );
+      expect(await adminSigs()).toBe(before);
     },
     5 * MINUTE,
   );
