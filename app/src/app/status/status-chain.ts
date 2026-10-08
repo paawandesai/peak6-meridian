@@ -41,31 +41,26 @@ export async function loadVaultBalances(
   );
 }
 
-/**
- * Creation and settle facts for one market: its oldest transaction is the creation, its newest
- * (when settled) is the settlement. A full page of signatures means the oldest one is not known,
- * so creation is then left unknown rather than guessed.
- */
-export async function loadMarketFacts(
+/** Transactions fetched per request while looking for the settle transaction. */
+const SETTLE_SCAN_BATCH = 8;
+/** Newest-first transactions inspected at most; settlement is near the start of a market's tail. */
+export const MAX_SETTLE_SCAN = 64;
+
+type Signature = Awaited<ReturnType<StatusRpc["getSignaturesForAddress"]>>[number];
+
+/** Fetches `entries` and folds their decoded events into facts (first value found wins). */
+async function factsOf(
   rpc: StatusRpc,
-  market: MarketRow,
+  entries: readonly Signature[],
   programId: PublicKey,
 ): Promise<MarketFacts> {
-  const address = new PublicKey(market.address);
-  const all = (await rpc.getSignaturesForAddress(address, { limit: SIGNATURE_PAGE })).filter(
-    (entry) => entry.err === null,
-  );
-  const oldest = all.length < SIGNATURE_PAGE ? all.at(-1) : undefined;
-  const newest = market.settled ? all[0] : undefined;
-  const wanted = [oldest, newest].filter((entry) => entry !== undefined);
-  if (wanted.length === 0) return NO_FACTS;
   const txs = await rpc.getTransactions(
-    wanted.map((entry) => entry.signature),
+    entries.map((entry) => entry.signature),
     { maxSupportedTransactionVersion: 0, commitment: "confirmed" },
   );
   let facts = NO_FACTS;
   txs.forEach((tx, index) => {
-    const entry = wanted[index];
+    const entry = entries[index];
     const logs = tx?.meta?.logMessages;
     if (tx === null || entry === undefined || logs === null || logs === undefined) return;
     const events = decodeEvents(
@@ -81,6 +76,38 @@ export async function loadMarketFacts(
       oracleSlot: facts.oracleSlot ?? found.oracleSlot,
     };
   });
+  return facts;
+}
+
+/**
+ * Creation and settle facts for one market. The oldest transaction is the creation (a full page
+ * of signatures means it is not known, so it is left unknown rather than guessed). The settle
+ * transaction is NOT the newest one: redeems, withdrawals and orders after settlement also list
+ * the market account, so the newest transactions are scanned in batches until one emits
+ * `MarketSettled` (at most `MAX_SETTLE_SCAN`; beyond that the metrics stay unavailable).
+ */
+export async function loadMarketFacts(
+  rpc: StatusRpc,
+  market: MarketRow,
+  programId: PublicKey,
+): Promise<MarketFacts> {
+  const address = new PublicKey(market.address);
+  const all = (await rpc.getSignaturesForAddress(address, { limit: SIGNATURE_PAGE })).filter(
+    (entry) => entry.err === null,
+  );
+  const oldest = all.length < SIGNATURE_PAGE ? all.at(-1) : undefined;
+  let facts = oldest === undefined ? NO_FACTS : await factsOf(rpc, [oldest], programId);
+  if (!market.settled) return facts;
+  const candidates = all.slice(0, MAX_SETTLE_SCAN);
+  for (let at = 0; at < candidates.length && facts.settledAt === null; at += SETTLE_SCAN_BATCH) {
+    const found = await factsOf(rpc, candidates.slice(at, at + SETTLE_SCAN_BATCH), programId);
+    facts = {
+      createdAt: facts.createdAt ?? found.createdAt,
+      settledAt: found.settledAt,
+      settleSlot: found.settleSlot,
+      oracleSlot: found.oracleSlot,
+    };
+  }
   return facts;
 }
 

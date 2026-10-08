@@ -3,7 +3,13 @@
 import { PublicKey } from "@solana/web3.js";
 import { describe, expect, it, vi } from "vitest";
 
-import { loadMarketFacts, loadStatusData, loadVaultBalances, type StatusRpc } from "./status-chain";
+import {
+  loadMarketFacts,
+  MAX_SETTLE_SCAN,
+  loadStatusData,
+  loadVaultBalances,
+  type StatusRpc,
+} from "./status-chain";
 import fixture from "@/lib/fixtures/events.json";
 import { NO_FACTS } from "@/lib/status";
 import { market } from "@/test-utils";
@@ -43,17 +49,57 @@ describe("status-chain", () => {
     expect([...out.values()]).toEqual([5_000_000n, null]);
   });
 
-  it("derives creation from the oldest and settle from the newest transaction", async () => {
+  const none = { blockTime: fixture.blockTime, slot: 1, meta: { logMessages: [] as string[] } };
+  const byHash =
+    (map: Record<string, unknown>) =>
+    (sigs: string[]): Promise<unknown[]> =>
+      Promise.resolve(sigs.map((s) => map[s] ?? null));
+
+  it("derives creation from the oldest transaction and settlement from the one that emits it", async () => {
     const key = MKT.toBase58();
     const rpc = rpcWith({
       getSignaturesForAddress: vi
         .fn()
-        .mockResolvedValue([sig("new"), sig("failed", { e: 1 }), sig("old")]),
-      getTransactions: vi.fn().mockResolvedValue([tx, tx]),
+        .mockResolvedValue([
+          sig("redeem2"),
+          sig("redeem1"),
+          sig("failed", { e: 1 }),
+          sig("settle"),
+          sig("old"),
+        ]),
+      getTransactions: vi
+        .fn()
+        .mockImplementation(byHash({ redeem2: none, redeem1: none, settle: tx, old: tx })),
     });
     const out = await loadMarketFacts(rpc, { ...good, address: key }, programId);
     expect(out).toMatchObject({ createdAt: fixture.blockTime, settleSlot: 777, oracleSlot: 321n });
-    expect(rpc.getTransactions).toHaveBeenCalledWith(["old", "new"], expect.anything());
+    expect(out.settledAt).toBe(fixture.blockTime);
+  });
+
+  it("stops scanning once the settle transaction is found", async () => {
+    const key = MKT.toBase58();
+    const sigs = [sig("settle"), ...Array.from({ length: 30 }, (_, i) => sig(`later${i}`))];
+    const rpc = rpcWith({
+      getSignaturesForAddress: vi.fn().mockResolvedValue(sigs),
+      getTransactions: vi.fn().mockImplementation(byHash({ settle: tx })),
+    });
+    await loadMarketFacts(rpc, { ...good, address: key }, programId);
+    const fetched = (rpc.getTransactions as unknown as { mock: { calls: string[][][] } }).mock
+      .calls;
+    expect(fetched.flatMap((call) => call[0] ?? []).length).toBeLessThanOrEqual(1 + 8);
+  });
+
+  it("gives up after MAX_SETTLE_SCAN transactions and leaves settlement unavailable", async () => {
+    const key = MKT.toBase58();
+    const sigs = Array.from({ length: 200 }, (_, i) => sig(`s${i}`));
+    const rpc = rpcWith({
+      getSignaturesForAddress: vi.fn().mockResolvedValue(sigs),
+      getTransactions: vi.fn().mockImplementation(byHash({})),
+    });
+    const out = await loadMarketFacts(rpc, { ...good, address: key }, programId);
+    expect(out.settledAt).toBeNull();
+    const calls = (rpc.getTransactions as unknown as { mock: { calls: string[][][] } }).mock.calls;
+    expect(calls.flatMap((call) => call[0] ?? []).length).toBeLessThanOrEqual(1 + MAX_SETTLE_SCAN);
   });
 
   it("leaves creation unknown on a full signature page, and skips unsettled newest", async () => {
