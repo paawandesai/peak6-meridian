@@ -112,10 +112,13 @@ describe("runMorning: failures, retries and the single alert (AC3)", () => {
     expect(result.status).toBe("failed");
     expect(result.created).toBe(0);
     expect(result.failedTickers).toHaveLength(7);
-    expect(result.attempts).toBeGreaterThan(5);
+    // Backoff 15, 30, 60, 120, 240 × 5 s, then the last delay is clamped so the final attempt is
+    // made exactly at 08:30 ET (not up to four minutes early): 12 attempts in all.
+    expect(result.attempts).toBe(12);
+    expect(t.clock.sleeps.at(-1)).toBeLessThan(240_000);
+    expect(t.clock.ms).toBe(morningDeadline("2026-10-06"));
     expect(t.chain.createCalls).toEqual([]);
     expect(t.clock.sleeps.slice(0, 4)).toEqual([15_000, 30_000, 60_000, 120_000]);
-    expect(t.clock.ms).toBeLessThanOrEqual(morningDeadline("2026-10-06"));
     expect(t.alerter.alerts).toHaveLength(1);
     expect(t.alerter.alerts[0]).toMatchObject({ kind: "morning_failed" });
     expect(t.alerter.alerts[0]?.summary).toContain("2026-10-06");
@@ -144,6 +147,24 @@ describe("runMorning: failures, retries and the single alert (AC3)", () => {
     };
     const result = await runMorning({ ...t.deps, prevClose: flaky });
     expect(result).toMatchObject({ status: "ok", attempts: 3 });
+    expect(t.alerter.alerts).toEqual([]);
+    expect(t.chain.markets.size).toBe(38);
+  });
+
+  it("makes a final attempt at 08:30 ET, so a source that recovers just in time means no alert", async () => {
+    const t = setup(TUESDAY_0800);
+    const real = t.deps.prevClose;
+    const deadline = morningDeadline("2026-10-06");
+    const prevClose = (ticker: string, date: string): Promise<PrevCloseResult> =>
+      t.clock.ms < deadline
+        ? Promise.resolve({
+            ok: false,
+            error: { kind: "source_unavailable", ticker, date, message: "HTTP 503" },
+          })
+        : real(ticker, date);
+    const result = await runMorning({ ...t.deps, prevClose });
+    expect(result).toMatchObject({ status: "ok", attempts: 12 });
+    expect(t.clock.ms).toBe(deadline);
     expect(t.alerter.alerts).toEqual([]);
     expect(t.chain.markets.size).toBe(38);
   });

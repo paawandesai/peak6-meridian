@@ -166,16 +166,19 @@ export async function runMorning(deps: MorningDeps): Promise<MorningResult> {
       record("ok", { created, existed, attempts }, []);
       return { status: "ok", tradingDate, created, existed, attempts, failedTickers: [] };
     }
-    const delay = backoffMs(attempts);
+    // The last delay is clamped to the deadline, so there is a final attempt at 08:30 ET and an
+    // alert means "still failing at 08:30", not "the next backoff would have crossed it".
+    const remaining = deadline - deps.now().getTime();
+    if (remaining <= 0) {
+      break;
+    }
+    const delay = Math.min(backoffMs(attempts), remaining);
     deps.log("warn", "morning_retry", {
       tradingDate,
       attempt: attempts,
       pending: [...pending],
       nextDelayMs: delay,
     });
-    if (deps.now().getTime() + delay > deadline) {
-      break;
-    }
     await deps.sleep(delay);
   }
 

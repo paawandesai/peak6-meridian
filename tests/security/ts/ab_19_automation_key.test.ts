@@ -165,11 +165,16 @@ describe("AB-19 a missing or invalid key", () => {
   });
 });
 
+/** Comments removed, so prose mentioning an API cannot trip (or hide) a code scan. */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
 describe("AB-19 what the automation service can ever send", () => {
-  /** Program methods called by production sources of the service (tests and doubles excluded). */
-  function methodsCalled(): Map<string, string[]> {
+  /** Production sources of the service as repo-relative path → code without comments. */
+  function productionSources(): Map<string, string> {
     const root = join(REPO_ROOT, "services/automation/src");
-    const found = new Map<string, string[]>();
+    const files = new Map<string, string>();
     const walk = (dir: string): void => {
       for (const entry of readdirSync(dir)) {
         const path = join(dir, entry);
@@ -178,16 +183,23 @@ describe("AB-19 what the automation service can ever send", () => {
             walk(path);
           }
         } else if (path.endsWith(".ts") && !path.endsWith(".test.ts")) {
-          for (const match of readFileSync(path, "utf8").matchAll(
-            /\bmethods\s*\.\s*([A-Za-z0-9_]+)\s*\(/g,
-          )) {
-            const name = match[1] ?? "";
-            found.set(name, [...(found.get(name) ?? []), relative(REPO_ROOT, path)]);
-          }
+          files.set(relative(REPO_ROOT, path), stripComments(readFileSync(path, "utf8")));
         }
       }
     };
     walk(root);
+    return files;
+  }
+
+  /** Program methods called by production sources of the service (tests and doubles excluded). */
+  function methodsCalled(): Map<string, string[]> {
+    const found = new Map<string, string[]>();
+    for (const [path, code] of productionSources()) {
+      for (const match of code.matchAll(/\bmethods\s*\.\s*([A-Za-z0-9_]+)\s*\(/g)) {
+        const name = match[1] ?? "";
+        found.set(name, [...(found.get(name) ?? []), path]);
+      }
+    }
     return found;
   }
 
@@ -211,6 +223,51 @@ describe("AB-19 what the automation service can ever send", () => {
     const called = methodsCalled();
     for (const name of forbidden) {
       expect(called.has(name), name).toBe(false);
+    }
+  });
+
+  /**
+   * Every way the service's code could sign or send something: sending helpers, `.rpc()`,
+   * `.signers()`, building instructions or transactions, computed `methods[...]` access, and any
+   * `SystemProgram` call other than reading its address.
+   */
+  const SIGNING_SURFACE =
+    /\b(?:sendTransaction|sendRawTransaction|sendAndConfirm|signTransaction|signAllTransactions|VersionedTransaction|new\s+Transaction)\b|\.\s*(?:rpc|signers|instruction|transaction|simulate)\s*\(|\bprogram\s*\.\s*instruction\b|\bmethods\s*\[|SystemProgram\s*\.\s*(?!programId\b)/;
+
+  /** The only production file allowed to sign: it builds `create_strike_market` and nothing else. */
+  const MAY_SIGN = ["services/automation/src/cli/createMarkets.ts"];
+
+  it("fails closed: only the market-creation file contains any signing or sending code", () => {
+    const offenders = [...productionSources()]
+      .filter(([, code]) => SIGNING_SURFACE.test(code))
+      .map(([path]) => path)
+      .sort();
+    // M2-04 adds a settlement signing path: it must be added here deliberately, with its own
+    // permissionless-only test, not slip in unnoticed.
+    expect(offenders).toEqual(MAY_SIGN);
+  });
+
+  it("the scan itself catches the patterns it is meant to (guard against a vacuous regex)", () => {
+    for (const code of [
+      "await connection.sendTransaction(tx)",
+      "await provider.sendAndConfirm(tx, [key])",
+      "program.methods.pause().rpc()",
+      "program.methods.x().signers([k])",
+      "const ix = await program.methods.x().instruction()",
+      "program.methods[name]()",
+      "new Transaction().add(SystemProgram.transfer({}))",
+      "program.instruction.foo()",
+    ]) {
+      expect(SIGNING_SURFACE.test(code), code).toBe(true);
+    }
+    for (const code of ["SystemProgram.programId", "// await program.methods.pause().rpc()"]) {
+      expect(SIGNING_SURFACE.test(stripComments(code)), code).toBe(false);
+    }
+  });
+
+  it("never uses computed method names, which would hide the instruction being called", () => {
+    for (const [path, code] of productionSources()) {
+      expect(/\bmethods\s*\[/.test(code), path).toBe(false);
     }
   });
 });
