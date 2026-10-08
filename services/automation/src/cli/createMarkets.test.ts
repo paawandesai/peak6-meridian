@@ -102,6 +102,21 @@ describe("createMarkets idempotency (NFR-05)", () => {
     expect(report.created).toHaveLength(plan.length - 2);
   });
 
+  it("reports each creation as it happens, so a later failure keeps the earlier signatures", async () => {
+    const chain = fakeChain();
+    const seen: string[] = [];
+    let n = 0;
+    const flaky: MarketOps = {
+      exists: chain.ops.exists,
+      create: (p) => (++n === 4 ? Promise.reject(new Error("rpc down")) : chain.ops.create(p)),
+    };
+    await expect(
+      createMarkets(plan, flaky, (p, signature) => seen.push(`${p.key.symbol}:${signature}`)),
+    ).rejects.toThrow("rpc down");
+    expect(seen).toHaveLength(3);
+    expect(seen[0]).toMatch(/^AAPL:sig-1$/);
+  });
+
   it("stops at the first failure and keeps what was created", async () => {
     const chain = fakeChain();
     let n = 0;

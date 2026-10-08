@@ -66,10 +66,9 @@ async function main(): Promise<void> {
     ...(closeTs === undefined ? {} : { closeTs }),
   });
   const ops = await chainMarketOps(program, TOKEN_PROGRAM_ID, SystemProgram.programId);
-  const report = await createMarkets(plan, ops);
-  for (const { planned, signature } of report.created) {
+  const report = await createMarkets(plan, ops, (planned, signature) => {
     console.log(`created ${planned.key.symbol} ${planned.key.strikeCents} ${signature}`);
-  }
+  });
   console.log(
     `create-markets ${tradingDate}: ${report.created.length} created, ${report.skipped.length} already existed`,
   );

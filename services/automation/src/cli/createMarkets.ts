@@ -74,10 +74,15 @@ export interface CreateReport {
   readonly skipped: readonly PlannedMarket[];
 }
 
-/** Creates every planned market that does not exist yet; stops at the first failure. */
+/**
+ * Creates every planned market that does not exist yet; stops at the first failure.
+ * `onCreated` runs right after each creation, so a failure later in the run still leaves the
+ * signatures of the markets already created in the caller's log.
+ */
 export async function createMarkets(
   plan: readonly PlannedMarket[],
   ops: MarketOps,
+  onCreated?: (planned: PlannedMarket, signature: string) => void,
 ): Promise<CreateReport> {
   const created: { planned: PlannedMarket; signature: string }[] = [];
   const skipped: PlannedMarket[] = [];
@@ -86,7 +91,9 @@ export async function createMarkets(
       skipped.push(planned);
       continue;
     }
-    created.push({ planned, signature: await ops.create(planned) });
+    const signature = await ops.create(planned);
+    created.push({ planned, signature });
+    onCreated?.(planned, signature);
   }
   return { created, skipped };
 }
