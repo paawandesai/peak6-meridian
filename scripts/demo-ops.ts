@@ -21,6 +21,7 @@ import { AnchorProvider, BN, type Program, Wallet } from "@coral-xyz/anchor";
 import { DateTime } from "luxon";
 import {
   type Meridian,
+  configParamsArg,
   createMeridianProgram,
   findConfigPda,
   marketAddresses,
@@ -195,12 +196,16 @@ async function main(): Promise<void> {
     console.log(`  Draft received: ${draft.proposedPriceCents}¢`);
     console.log(`  Note: ${draft.note.slice(0, 100)}...`);
 
-    // Stage 8: Wait for override delay
-    console.log("\nStage 8: Waiting for override delay");
+    // Stage 8: Set short override delay for the demo
+    console.log("\nStage 8: Setting short override delay");
+    await setShortOverrideDelay(ctx);
+
+    // Stage 9: Wait for override delay
+    console.log("\nStage 9: Waiting for override delay");
     await waitForOverrideDelay(ctx, marketKey);
 
-    // Stage 9: Settle with admin override
-    console.log("\nStage 9: Settling with admin override");
+    // Stage 10: Settle with admin override
+    console.log("\nStage 10: Settling with admin override");
     const settleTx = await settleWithOverride(ctx, marketKey, draft.proposedPriceCents);
     console.log(`  Market settled successfully!`);
     console.log(`  Settle tx: ${settleTx}\n`);
@@ -500,19 +505,43 @@ async function getDraft(
   }
 }
 
+async function setShortOverrideDelay(ctx: DemoContext): Promise<void> {
+  const configAccount = await ctx.program.account.config.fetch(ctx.config);
+  const shortDelaySecs = 60n;
+
+  await ctx.program.methods
+    .updateConfig(
+      configParamsArg({
+        automationAuthority: configAccount.automationAuthority,
+        maxStalenessSlots: BigInt(configAccount.maxStalenessSlots.toString()),
+        maxConfBps: configAccount.maxConfBps,
+        overrideDelaySecs: shortDelaySecs,
+        tickers: [], // Empty array preserves existing ticker slots
+      }),
+    )
+    .accountsStrict({
+      config: ctx.config,
+      admin: ctx.admin.publicKey,
+      usdcMint: configAccount.usdcMint,
+    })
+    .signers([ctx.admin])
+    .rpc();
+
+  console.log(`  Updated override_delay_secs to ${shortDelaySecs}s (demo value)`);
+}
+
 async function waitForOverrideDelay(ctx: DemoContext, marketKey: MarketKey): Promise<void> {
-  // Use a short local delay for the demo (60s) instead of the on-chain default (3600s)
-  const localDelaySecs = 60;
-  const enableAt = marketKey.closeTs + localDelaySecs;
+  const overrideDelaySecs = 60; // Matches the on-chain value set by setShortOverrideDelay
+  const enableAt = marketKey.closeTs + overrideDelaySecs;
   const blockTime = await ctx.connection.getBlockTime(await ctx.connection.getSlot("confirmed"));
   const now = blockTime ?? Math.floor(Date.now() / 1000);
   const waitSecs = Math.max(0, enableAt - now);
 
-  console.log(`  Override delay: ${localDelaySecs}s (local demo delay)`);
-  console.log(`  Available at: ${new Date(enableAt * 1000).toISOString()}`);
-  console.log(`  Waiting ${waitSecs}s (cluster time: ${now}, enable: ${enableAt})...`);
+  console.log(`  Override enabled at: ${new Date(enableAt * 1000).toISOString()}`);
+  console.log(`  Cluster time: ${now}, enableAt: ${enableAt}`);
+  console.log(`  Waiting ${waitSecs}s...`);
 
-  await new Promise((resolve) => setTimeout(resolve, waitSecs * 1000 + 1000)); // Wait until after delay
+  await new Promise((resolve) => setTimeout(resolve, waitSecs * 1000 + 1000));
 }
 
 async function settleWithOverride(
