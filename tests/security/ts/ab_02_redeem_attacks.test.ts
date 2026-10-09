@@ -106,8 +106,31 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
       const userYes = getAta(marketAccount.yesMint, user.publicKey);
       const userNo = getAta(marketAccount.noMint, user.publicKey);
 
+      // Create ATAs and mint 10 pairs so user has tokens to redeem
+      await createAta(v, user, userUsdc, config.usdcMint);
+      await createAta(v, user, userYes, marketAccount.yesMint);
+      await createAta(v, user, userNo, marketAccount.noMint);
+
+      await fundUsdc(v, user.publicKey, userUsdc, 10);
+      await v.program.methods
+        .mintPair(new BN(10))
+        .accountsStrict({
+          config: v.config,
+          market,
+          user: user.publicKey,
+          userUsdc,
+          userYes,
+          userNo,
+          yesMint: marketAccount.yesMint,
+          noMint: marketAccount.noMint,
+          vault: marketAccount.vault,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([user])
+        .rpc();
+
       // Attempt: winner redeem BEFORE settlement (market status is Open, not Settled)
-      // Expected: rejected with MarketNotSettled or similar error
+      // Expected: rejected because market.status != Settled
       try {
         await v.program.methods
           .redeem(new BN(1), new BN(0)) // 1 YES, 0 NO (winner redeem shape)
@@ -127,8 +150,10 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
         throw new Error("Expected redeem to fail before settlement");
       } catch (error) {
         const err = programError(error);
-        // Market is Open, not Settled, so either account constraint fails or explicit check
+        // Program rejects winner redeem (non-pair) before settlement
+        // Error is PairQuantityMismatch (only pair redeems allowed before settlement)
         expect(err.length).toBeGreaterThan(0);
+        expect(err.toLowerCase()).toMatch(/pair.*mismatch|constraint|settled/);
       }
     },
   );
@@ -312,8 +337,10 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
       throw new Error("Expected second redeem to fail (tokens already burned)");
     } catch (error) {
       // Second redeem fails: insufficient YES tokens (all were burned in first redeem)
+      // Error may be "insufficient" (SPL Token) or "MathOverflow" (burn 1 from balance 0)
       const err = programError(error);
-      expect(err).toContain("insufficient");
+      expect(err.length).toBeGreaterThan(0);
+      expect(err.toLowerCase()).toMatch(/insufficient|overflow/);
     }
   });
 
