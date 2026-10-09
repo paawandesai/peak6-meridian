@@ -151,7 +151,14 @@ class OnChainOrderClient:
         raise NotImplementedError("Production: build mint_pair instruction + send tx")
 
     async def settle_funds(self, market: str, owner: str) -> None:
-        """Settle funds via solders transaction (~100 lines)."""
+        """Settle funds to withdraw fill proceeds via solders transaction (~100 lines).
+
+        Production implementation outline:
+        1. Parse market key from market string
+        2. Derive PDAs: market, open_orders, escrow_usdc, user_usdc
+        3. Build settle_funds instruction (discriminator + accounts)
+        4. Sign with self.payer and send via self.rpc
+        """
         raise NotImplementedError("Production: build settle_funds instruction + send tx")
 
 

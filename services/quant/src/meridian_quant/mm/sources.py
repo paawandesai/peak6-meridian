@@ -39,3 +39,7 @@ class OrderClient(Protocol):
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
         """Mint a YES+NO pair for inventory."""
         ...
+
+    async def settle_funds(self, market: str, owner: str) -> None:
+        """Settle funds to withdraw fill proceeds."""
+        ...

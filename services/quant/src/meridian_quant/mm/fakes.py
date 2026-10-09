@@ -38,13 +38,17 @@ class FakeOrderClient:
         order_id = self._next_order_id
         self._next_order_id += 1
 
+        # Type narrowing: side must be "Bid" or "Ask" per RestingOrder
+        if side not in ("Bid", "Ask"):
+            raise ValueError(f"Invalid side: {side}")
+
         order = RestingOrder(
             order_id=order_id,
             market=market,
-            side=side,
+            side=side,  # type: ignore[arg-type]
             price=price,
             qty=qty,
-            owner=owner,  # type: ignore[arg-type]
+            owner=owner,
         )
         self._orders[market].append(order)
         return order_id
@@ -61,6 +65,10 @@ class FakeOrderClient:
 
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
         """Mint a YES+NO pair (no-op in fake)."""
+        pass
+
+    async def settle_funds(self, market: str, owner: str) -> None:
+        """Settle funds to withdraw fill proceeds (no-op in fake)."""
         pass
 
     def count_orders_by_owner(self, market: str, owner: str) -> int:

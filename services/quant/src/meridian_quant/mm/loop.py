@@ -180,15 +180,34 @@ class MarketMakerLoop:
             return []
 
     async def _sync_inventory(self, markets: list[MarketState]) -> None:
-        """Sync inventory from on-chain positions."""
-        # Placeholder: would read YES token accounts for MM keypair
-        # and update inventory tracker
+        """Sync inventory from on-chain positions.
+
+        Production: read YES token account balances for each market and update
+        inventory tracker. For now, inventory is tracked via order placement
+        assumptions (not actual fills).
+        """
+        # TODO: Read actual YES token balances when on-chain client is ready
+        # For each market: getTokenAccountBalance(yes_mint, mm_keypair.pubkey())
+        # Then: self.inventory.set(market_key, balance)
         pass
 
     async def _settle_funds(self) -> None:
-        """Settle funds to recycle proceeds from fills."""
-        # Placeholder: would call settle_funds for each market with free balance
-        pass
+        """Settle funds to recycle proceeds from fills.
+
+        Calls settle_funds for each market to withdraw fill proceeds and cancel
+        refunds from open orders balance back to wallet.
+        """
+        try:
+            markets = await self._fetch_open_markets()
+            for market in markets:
+                try:
+                    await self._order_client.settle_funds(
+                        market=market.market, owner=self._mm_owner
+                    )
+                except Exception:
+                    logger.exception(f"Failed to settle funds for {market.market}")
+        except Exception:
+            logger.exception("Failed to settle funds")
 
     async def _quote_all_strikes(
         self,
@@ -271,9 +290,21 @@ class MarketMakerLoop:
             orders_per_market[fv_market.market] = orders_per_market.get(fv_market.market, 0) + 2
 
     async def _place_quote(self, market: MarketState, quote: Quote) -> None:
-        """Place a two-sided quote (AC1: actually places orders)."""
+        """Place a two-sided quote, canceling existing quotes first.
+
+        Prevents stacking orders on repeated _run_once() calls by canceling
+        existing MM quotes for this market before placing new ones.
+        """
         try:
-            # Place bid
+            # Cancel existing MM quotes for this market to avoid stacking
+            existing_orders = await self._order_client.fetch_resting_orders(market.market)
+            mm_orders = [o for o in existing_orders if o.owner == self._mm_owner]
+            for order in mm_orders:
+                await self._order_client.cancel_order(
+                    market=market.market, order_id=order.order_id, owner=self._mm_owner
+                )
+
+            # Place new bid
             await self._order_client.place_order(
                 market=market.market,
                 side="Bid",
@@ -281,7 +312,7 @@ class MarketMakerLoop:
                 qty=quote.size,
                 owner=self._mm_owner,
             )
-            # Place ask
+            # Place new ask
             await self._order_client.place_order(
                 market=market.market,
                 side="Ask",
