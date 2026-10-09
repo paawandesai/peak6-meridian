@@ -61,6 +61,11 @@ pub fn handle_set_oracle_config(
         MeridianError::OracleThresholdTooHigh
     );
 
-    // TODO(M2-15): Full implementation - update OracleConfig account
-    Err(MeridianError::NotImplemented.into())
+    // Update OracleConfig account
+    let oracle_config = &mut ctx.accounts.oracle_config;
+    oracle_config.signers = params.signers;
+    oracle_config.signer_threshold = params.signer_threshold;
+    oracle_config.max_package_delay_secs = params.max_package_delay_secs;
+
+    Ok(())
 }
