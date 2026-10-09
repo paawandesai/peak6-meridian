@@ -35,8 +35,13 @@ WORKDIR /workspace/meridian
 # Install toolchain
 FROM ubuntu:24.04 as toolchain
 RUN apt-get update && apt-get install -y git curl build-essential pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+WORKDIR /workspace
+# Clone the actual repo at current branch/commit (pass via --build-arg GIT_REPO=... GIT_BRANCH=...)
+ARG GIT_REPO=https://labs.gauntletai.com/paawandesai/peak6-meridian.git
+ARG GIT_BRANCH=main
+RUN git clone --depth 1 --branch ${GIT_BRANCH} ${GIT_REPO} meridian
 WORKDIR /workspace/meridian
-COPY . .
+RUN cp .env.example .env
 RUN timeout 1200 make toolchain || (echo "FAIL: toolchain timeout" && exit 1)
 
 # AC1 test: install, build-local, e2e
