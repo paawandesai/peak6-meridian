@@ -1,5 +1,6 @@
 """Integration tests for MM loop (AC1/AC2: fake sources, actual quote placing)."""
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -20,10 +21,14 @@ def test_keypair() -> Keypair:
 @pytest.fixture
 def mm_config(test_keypair: Keypair) -> MMConfig:
     """Test MM configuration."""
-    return MMConfig(
-        market_maker_keypair=str(test_keypair),
-        program_id="11111111111111111111111111111112",
-        service_token="test_token",
+    # Convert to JSON array format per environment.md
+    keypair_json = json.dumps(list(bytes(test_keypair)))
+    return MMConfig.model_validate(
+        {
+            "market_maker_keypair": keypair_json,
+            "program_id": "11111111111111111111111111111112",
+            "service_token": "test_token",
+        }
     )
 
 

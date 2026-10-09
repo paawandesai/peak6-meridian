@@ -1,3 +1,5 @@
+import json
+
 from solders.keypair import Keypair
 
 from meridian_quant import health
@@ -14,10 +16,14 @@ def test_health_includes_book_coverage_when_mm_running() -> None:
     """Health endpoint includes book_coverage when MM loop is provided."""
     # Create a test MM loop
     keypair = Keypair()
-    config = MMConfig(
-        market_maker_keypair=str(keypair),
-        program_id="11111111111111111111111111111112",
-        service_token="test_token",
+    # Convert to JSON array format per environment.md
+    keypair_json = json.dumps(list(bytes(keypair)))
+    config = MMConfig.model_validate(
+        {
+            "market_maker_keypair": keypair_json,
+            "program_id": "11111111111111111111111111111112",
+            "service_token": "test_token",
+        }
     )
     mm_loop = MarketMakerLoop(
         config,

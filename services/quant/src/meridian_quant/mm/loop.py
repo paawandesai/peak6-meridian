@@ -1,6 +1,7 @@
 """Main market maker loop."""
 
 import asyncio
+import json
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -44,7 +45,15 @@ class MarketMakerLoop:
         clock: Clock | None = None,
     ) -> None:
         self.config = config
-        self.keypair = Keypair.from_base58_string(config.market_maker_keypair)
+        # Parse MARKET_MAKER_KEYPAIR as JSON array (environment.md format)
+        keypair_len = 64  # Ed25519 secret key length
+        try:
+            keypair_bytes = json.loads(config.market_maker_keypair)
+            if not isinstance(keypair_bytes, list) or len(keypair_bytes) != keypair_len:
+                raise ValueError("MARKET_MAKER_KEYPAIR must be JSON array of 64 bytes")
+            self.keypair = Keypair.from_bytes(bytes(keypair_bytes))
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            raise ValueError(f"MARKET_MAKER_KEYPAIR must be a JSON array of 64 bytes: {e}") from e
         self.program_id = Pubkey.from_string(config.program_id)
         self.inventory = InventoryTracker()
         self.rpc_client: AsyncClient | None = None
@@ -217,7 +226,7 @@ class MarketMakerLoop:
             # This prevents quoting when at the limit (e.g., position=200)
             if not self.inventory.within_limits(market_key, self.config.max_inventory):
                 logger.warning(
-                    f"Inventory limit exceeded for {fv.ticker} ${fv.strike_cents/100:.0f}, "
+                    f"Inventory limit exceeded for {fv.ticker} ${fv.strike_cents / 100:.0f}, "
                     f"position={inv.position}"
                 )
                 continue
@@ -231,7 +240,7 @@ class MarketMakerLoop:
                 and self.inventory.can_add(market_key, -quote_size, max_inv)
             ):
                 logger.warning(
-                    f"Cannot quote {fv.ticker} ${fv.strike_cents/100:.0f}: "
+                    f"Cannot quote {fv.ticker} ${fv.strike_cents / 100:.0f}: "
                     f"position={inv.position}, size={quote_size} would exceed limits"
                 )
                 continue
@@ -241,7 +250,7 @@ class MarketMakerLoop:
             current_market_orders = orders_per_market.get(fv_market.market, 0)
             if current_market_orders + 2 > self.config.max_orders_per_owner:
                 logger.warning(
-                    f"Skipping {fv.ticker} ${fv.strike_cents/100:.0f}: would exceed "
+                    f"Skipping {fv.ticker} ${fv.strike_cents / 100:.0f}: would exceed "
                     f"max_orders_per_owner per market ({self.config.max_orders_per_owner}), "
                     f"current in {fv_market.market}={current_market_orders}"
                 )

@@ -25,7 +25,7 @@ def derive_market_pda(
     program_id: Pubkey, ticker: bytes, trading_date: int, strike_cents: int
 ) -> Pubkey:
     """Derive market PDA."""
-    ticker_padded = ticker[:8].ljust(8, b' ')
+    ticker_padded = ticker[:8].ljust(8, b" ")
     seeds = [
         b"market",
         ticker_padded,
@@ -82,12 +82,8 @@ class OnChainMarketSource:
             # - Deserialize Market struct from each account.data
             # - Parse ticker, strike_cents, trading_date, close_ts, is_open, pairs_outstanding
             # - Filter where is_open and close_ts > current timestamp
-            logger.warning(
-                "OnChainMarketSource.fetch_open_markets: not implemented, returning []"
-            )
-            logger.warning(
-                "For production: implement getProgramAccounts + Borsh deserialization"
-            )
+            logger.warning("OnChainMarketSource.fetch_open_markets: not implemented, returning []")
+            logger.warning("For production: implement getProgramAccounts + Borsh deserialization")
             return []
         except Exception:
             logger.exception("Failed to fetch markets")
@@ -113,9 +109,7 @@ class OnChainOrderClient:
         self.payer = payer_keypair  # MARKET_MAKER_KEYPAIR - never logged
         self.usdc_mint = usdc_mint
 
-    async def place_order(
-        self, market: str, side: str, price: int, qty: int, owner: str
-    ) -> int:
+    async def place_order(self, market: str, side: str, price: int, qty: int, owner: str) -> int:
         """Place order on-chain via place_order instruction.
 
         Production implementation outline (reference: packages/client/src/intents.ts):
@@ -142,9 +136,7 @@ class OnChainOrderClient:
         Test uses FakeOrderClient (operator directive: "fake is fine in tests").
         """
         logger.warning("OnChainOrderClient.place_order: use FakeOrderClient in tests")
-        raise NotImplementedError(
-            "Production: implement transaction building per outline above"
-        )
+        raise NotImplementedError("Production: implement transaction building per outline above")
 
     async def cancel_order(self, market: str, order_id: int, owner: str) -> None:
         """Cancel order via solders transaction (~80 lines)."""

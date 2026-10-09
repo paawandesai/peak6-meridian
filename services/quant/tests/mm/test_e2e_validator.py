@@ -8,6 +8,7 @@ Production deployment uses OnChainMarketSource and OnChainOrderClient for real o
 operations. Test uses fakes per operator directive.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -77,10 +78,14 @@ async def test_mm_quotes_all_open_strikes_local_validator() -> None:
 
     # Create MM loop with dependency injection (operator: "fake is fine")
     keypair = Keypair()
-    config = MMConfig(
-        market_maker_keypair=str(keypair),
-        program_id="11111111111111111111111111111112",
-        service_token="test_token",
+    # Convert to JSON array format per environment.md
+    keypair_json = json.dumps(list(bytes(keypair)))
+    config = MMConfig.model_validate(
+        {
+            "market_maker_keypair": keypair_json,
+            "program_id": "11111111111111111111111111111112",
+            "service_token": "test_token",
+        }
     )
 
     market_source = FakeMarketSource(markets)
@@ -109,10 +114,10 @@ async def test_mm_quotes_all_open_strikes_local_validator() -> None:
         asks = [o for o in mm_orders if o.side == "Ask"]
 
         assert len(bids) == 1, (
-            f"{market.ticker} ${market.strike_cents/100:.0f}: expected 1 bid, got {len(bids)}"
+            f"{market.ticker} ${market.strike_cents / 100:.0f}: expected 1 bid, got {len(bids)}"
         )
         assert len(asks) == 1, (
-            f"{market.ticker} ${market.strike_cents/100:.0f}: expected 1 ask, got {len(asks)}"
+            f"{market.ticker} ${market.strike_cents / 100:.0f}: expected 1 ask, got {len(asks)}"
         )
 
         # Verify bid < ask

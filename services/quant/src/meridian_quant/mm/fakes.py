@@ -33,15 +33,18 @@ class FakeOrderClient:
         self._orders: dict[str, list[RestingOrder]] = defaultdict(list)
         self._next_order_id = 1
 
-    async def place_order(
-        self, market: str, side: str, price: int, qty: int, owner: str
-    ) -> int:
+    async def place_order(self, market: str, side: str, price: int, qty: int, owner: str) -> int:
         """Place an order and return its ID."""
         order_id = self._next_order_id
         self._next_order_id += 1
 
         order = RestingOrder(
-            order_id=order_id, market=market, side=side, price=price, qty=qty, owner=owner  # type: ignore[arg-type]
+            order_id=order_id,
+            market=market,
+            side=side,
+            price=price,
+            qty=qty,
+            owner=owner,  # type: ignore[arg-type]
         )
         self._orders[market].append(order)
         return order_id

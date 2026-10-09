@@ -27,23 +27,25 @@ def test_coverage_property(num_markets: int, num_covered: int) -> None:
     markets = [f"market_{i}" for i in range(num_markets)]
     orders = []
     for i in range(num_covered):
-        orders.extend([
-            RestingOrder(
-                order_id=i * 2,
-                market=markets[i],
-                side="Bid",
-                price=48,
-                qty=10,
-                owner="MM",
-            ),
-            RestingOrder(
-                order_id=i * 2 + 1,
-                market=markets[i],
-                side="Ask",
-                price=52,
-                qty=10,
-                owner="MM",
-            ),
-        ])
+        orders.extend(
+            [
+                RestingOrder(
+                    order_id=i * 2,
+                    market=markets[i],
+                    side="Bid",
+                    price=48,
+                    qty=10,
+                    owner="MM",
+                ),
+                RestingOrder(
+                    order_id=i * 2 + 1,
+                    market=markets[i],
+                    side="Ask",
+                    price=52,
+                    qty=10,
+                    owner="MM",
+                ),
+            ]
+        )
     cov = book_coverage(open_markets=markets, resting_orders=orders, mm_owner="MM")
     assert cov == num_covered / num_markets

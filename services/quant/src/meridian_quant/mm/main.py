@@ -12,6 +12,7 @@ Environment variables (see docs/environment.md):
 """
 
 import asyncio
+import json
 import logging
 
 from solana.rpc.async_api import AsyncClient
@@ -37,7 +38,9 @@ async def main() -> None:
     # Initialize Solana connection
     rpc_client = AsyncClient(config.rpc_url)
     program_id = Pubkey.from_string(config.program_id)
-    keypair = Keypair.from_base58_string(config.market_maker_keypair)
+    # Parse MARKET_MAKER_KEYPAIR as JSON array (environment.md format)
+    keypair_bytes = json.loads(config.market_maker_keypair)
+    keypair = Keypair.from_bytes(bytes(keypair_bytes))
 
     # Initialize on-chain clients
     market_source = OnChainMarketSource(rpc_client, program_id)

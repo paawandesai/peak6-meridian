@@ -4,6 +4,7 @@ Abuse case: MM never exceeds per-owner resting-order cap (8) or inventory cap (2
 Prices always in 1-99.
 """
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -109,9 +110,11 @@ async def test_ab10_order_cap_per_owner() -> None:
 
     # Create MM loop with fakes
     keypair = Keypair()
+    # Convert to JSON array format per environment.md
+    keypair_json = json.dumps(list(bytes(keypair)))
     config = MMConfig.model_validate(
         {
-            "market_maker_keypair": str(keypair),
+            "market_maker_keypair": keypair_json,
             "program_id": "11111111111111111111111111111112",
             "service_token": "test_token",
         }
@@ -141,9 +144,7 @@ async def test_ab10_order_cap_per_owner() -> None:
         )
 
     # With 5 markets, MM should place 2 orders (bid+ask) in each market = 10 total
-    total_orders = sum(
-        order_client.count_orders_by_owner(m.market, mm_owner) for m in markets
-    )
+    total_orders = sum(order_client.count_orders_by_owner(m.market, mm_owner) for m in markets)
     assert total_orders == 10, f"Expected 10 orders (5 markets x 2), got {total_orders}"
 
 

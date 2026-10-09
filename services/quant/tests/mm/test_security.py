@@ -1,5 +1,6 @@
 """Security tests for MM (AC5: no key material in logs)."""
 
+import json
 import logging
 from io import StringIO
 
@@ -24,12 +25,15 @@ def test_no_keypair_in_logs() -> None:
     try:
         # Create MM with a test keypair
         test_kp = Keypair()
-        keypair_str = str(test_kp)
+        # Convert to JSON array format per environment.md
+        keypair_str = json.dumps(list(bytes(test_kp)))
 
-        config = MMConfig(
-            market_maker_keypair=keypair_str,
-            program_id="11111111111111111111111111111112",
-            service_token="secret_token",
+        config = MMConfig.model_validate(
+            {
+                "market_maker_keypair": keypair_str,
+                "program_id": "11111111111111111111111111111112",
+                "service_token": "secret_token",
+            }
         )
 
         _mm = MarketMakerLoop(
@@ -63,12 +67,15 @@ def test_no_keypair_in_logs() -> None:
 def test_config_repr_does_not_leak_secrets() -> None:
     """Config repr/str doesn't leak sensitive fields (AC5)."""
     test_kp = Keypair()
-    keypair_str = str(test_kp)
+    # Convert to JSON array format per environment.md
+    keypair_str = json.dumps(list(bytes(test_kp)))
 
-    config = MMConfig(
-        market_maker_keypair=keypair_str,
-        program_id="11111111111111111111111111111112",
-        service_token="secret_token",
+    config = MMConfig.model_validate(
+        {
+            "market_maker_keypair": keypair_str,
+            "program_id": "11111111111111111111111111111112",
+            "service_token": "secret_token",
+        }
     )
 
     # model_dump should include the fields (for internal use)
@@ -81,6 +88,6 @@ def test_config_repr_does_not_leak_secrets() -> None:
 
     # In production, we'd use model_dump(exclude={'market_maker_keypair', 'service_token'})
     # when logging
-    safe_dump = config.model_dump(exclude={'market_maker_keypair', 'service_token'})
+    safe_dump = config.model_dump(exclude={"market_maker_keypair", "service_token"})
     assert "market_maker_keypair" not in str(safe_dump)
     assert "service_token" not in str(safe_dump)

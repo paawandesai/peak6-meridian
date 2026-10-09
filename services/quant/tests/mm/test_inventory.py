@@ -1,6 +1,5 @@
 """Tests for inventory tracking (updated for Finding #5: MarketKey)."""
 
-
 from meridian_quant.mm.inventory import InventoryTracker
 from meridian_quant.mm.types import MarketKey
 

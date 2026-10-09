@@ -24,9 +24,7 @@ class FairValueSource(Protocol):
 class OrderClient(Protocol):
     """Client for placing/canceling orders (injectable for tests)."""
 
-    async def place_order(
-        self, market: str, side: str, price: int, qty: int, owner: str
-    ) -> int:
+    async def place_order(self, market: str, side: str, price: int, qty: int, owner: str) -> int:
         """Place an order. Returns order_id."""
         ...
 
