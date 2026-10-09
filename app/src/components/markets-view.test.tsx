@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { MarketsView } from "./markets-view";
 import { market, reader, withReader } from "@/test-utils";
@@ -7,6 +7,18 @@ import { market, reader, withReader } from "@/test-utils";
 const NOW = 1_800_000_000;
 /** The ET trading date of `NOW` (2027-01-15 ET): UI-03 AC1 scopes the page to the active date. */
 const TODAY = 20270115;
+
+beforeAll(() => {
+  // TickerInsight renders DistributionChart (Recharts); jsdom needs ResizeObserver.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  );
+});
 
 describe("MarketsView", () => {
   it("shows a loading state while markets are fetched", () => {
@@ -68,7 +80,9 @@ describe("MarketsView", () => {
     );
 
     const aapl = await screen.findByRole("region", { name: "AAPL" });
-    const rows = within(aapl).getAllByRole("row").slice(1);
+    // Query the market table specifically (has "Strike" header); TickerInsight adds a distribution table.
+    const tables = within(aapl).getAllByRole("table");
+    const rows = within(tables[0]!).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(3);
     expect(rows[0]).toHaveTextContent("$220");
     expect(rows[0]).toHaveTextContent("Open");
@@ -78,10 +92,11 @@ describe("MarketsView", () => {
 
     const nvda = screen.getByRole("region", { name: "NVDA" });
     expect(within(nvda).getByText("1,200")).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
-      "AAPL",
-      "NVDA",
-    ]);
+    // Each ticker group now has two h2s: the ticker name and "Fair value" from TickerInsight.
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(headings).toContain("AAPL");
+    expect(headings).toContain("NVDA");
+    expect(headings.filter((h) => h === "Fair value")).toHaveLength(2);
   });
 
   it("links each strike to its Trade page (UI-04 AC8)", async () => {

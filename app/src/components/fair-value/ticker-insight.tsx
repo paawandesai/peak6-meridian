@@ -29,9 +29,10 @@ export function TickerInsightView({ market, ladder, books, fair, nowSecs }: View
   );
   const points = distributionPoints(ladder, quotes, fairByMarket);
   const own = quotes[market.address];
+  const headingId = `fair-heading-${market.ticker}`;
   return (
-    <section aria-labelledby="fair-heading" className="grid gap-mer-4">
-      <h2 id="fair-heading" className="text-mer-lg font-semibold">
+    <section aria-labelledby={headingId} className="grid gap-mer-4">
+      <h2 id={headingId} className="text-mer-lg font-semibold">
         Fair value
       </h2>
       <FairEdge
