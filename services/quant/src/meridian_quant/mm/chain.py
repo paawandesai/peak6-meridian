@@ -451,7 +451,9 @@ class ChainOrderClient:
 
         except Exception:
             logger.exception(f"Failed to fetch resting orders for {market}")
-            return []
+            # Re-raise to fail closed: prevents placing orders when we can't see
+            # existing ones (AB-10: would violate 8-order cap)
+            raise
 
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
         """Mint YES+NO pair via mint_pair instruction.
