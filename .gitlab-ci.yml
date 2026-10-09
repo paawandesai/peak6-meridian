@@ -475,7 +475,9 @@ e2e:ui:
       optional: true
     - job: test:rust
       optional: true
+    # Optional: Rust-only MRs run e2e:ui without test:js-py (main always has both).
     - job: test:js-py
+      optional: true
   resource_group: meridian-heavy
   timeout: 2 hours
   tags:
