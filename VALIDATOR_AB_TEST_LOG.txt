@@ -1,0 +1,138 @@
+scripts/e2e.sh
+Wrote new keypair to /tmp/tmp.mUOtBSZinX/payer.json
+[e2e] created throwaway payer 2HrxYfa9pRGFcfhGDN1tMJ2hCbvLmJhosn6BdCZMzs7M
+[e2e] starting solana-test-validator on http://127.0.0.1:8899
+[e2e] airdropped 100 SOL to the payer
+[e2e] prebuilt program 3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq loaded at genesis from target/deploy/meridian.so
+
+> e2e@0.1.0 lifecycle /home/box/.ao/data/worktrees/peak6-meridian/peak6-meridian-36/tests/e2e
+> tsx src/lifecycle.ts
+
+[step 1] program responds (version)
+          tx 5tWnxtTzYFxnxdxWqE9JitYdCrppuHbZ7oSeBjXkXAmCiPBUYawB2S357o6wateozzpSKwvJxjY5Mc7ufHh4kRbG
+[step 2] create test-USDC mint (6 decimals)
+[step 3] initialize_config (+ update_config for the 7th ticker), local feeds
+          tx h9bDWeRRED6L3KFSsE9VrTXSErjbSYXXDK8mqRycyQ3Lin2Ns3rPorep5jDydy52fPkF6HErz8qbjkT858kRvw8
+          tx Fs2XPiRWE4Rqo8hFRLtYKkTY1RRFDRCRpe9dUEkffLnAr4sCUqoXhE4nNKjxGueYfCyUjjXBuCMZTBc8V4qmQee
+[step 4] create-markets CLI (first run)
+          tx 35qvDa84v1pC9PMZW4uARaw7NuRo2gpD2BqjktzRfbCHT82ZWUqbc3j1FHfjiA2DLWaPDLoBsrmqwm338cq3p63m  (AAPL $210)
+          tx 3SiBXzb8fCP4yA86WM1ScsZ1hcthhZzuCuK9ggU9J2kQTekG34atfn62r8zpnNvrm4p8yGXsGkBxydme1GzeKitt  (AAPL $220)
+          tx 3dGYWZQ97HVyi7Yc1bPANrEMXZdtdAo932YJ32ZeqVh4QoWr6inW4geqkUqbEQkEkwzhTyXwkaMsKSKQ4n1V58Do  (AAPL $230)
+          tx 3d2L3WW4hZX4uUCUGv4XTG2q1owvUnnCaQrXQYahHQoj1T3htGa7zdjev6QNU5xs6rkfMn8MmDasEXwpG7sCEC3A  (AAPL $240)
+          tx 3DXYSWyUz1B4mTPzTQy95AARUuX9dictZZPdvDrurPjm3YUVNw7WFYRKgiCMDaS2vZmMfhuLjG6k465Yvmo7kqqM  (AAPL $250)
+          tx 4v1A7GyVRGVrQ6Dtfawsdi4KW4fHYAgFxRR5aH2WH7B8fhwpmrRLrrQf9MTVvVKoJKqRua25RywpVCWRzd5GHUpc  (MSFT $380)
+          tx 5GiCsQTc69bXL1UKxkEbgSJmyqDSHeoLZ1kvKc9PHQGYXJyWVrXXXCGvzimiKgL8EQZ1imvgCGuAh4nrYFb9BMkg  (MSFT $390)
+          tx 4e7PaZGV6jWgmNgF6gDNLsKeThQ2Exun13wrqkgnTfax3YAK4PYe8SEb3zKRsJcwFC6iRjX3C5de7XrFbGfn87u5  (MSFT $400)
+          tx 3u9uR35U3xHqdKCohCUSPFupc7UKjABMiJn58xpvyZSzr7DnNiJuw495D7qwWQVb6ZTEeYgQ57EYWfeB57kaMfKC  (MSFT $420)
+          tx 26DXEB7FVpPARGxT6m7gTSThsmzZUuRrprNEXXoAq2CdaNQdb11TGx9oEBCit4mjxacJevYyN1vwgdUBSVEPUDEk  (MSFT $430)
+          tx 2DqqERzKGbdaKL9yZzQck6hXuoaYvA5iMe1WGo6yXhfYTDmAycpzi99ScqBL6yJuD9Ajq3gTkBoaBZhZbHRHjCq8  (MSFT $440)
+          tx 5afgctVhHxmLNV8BwaCDZnifB3s7hpyXBJFNApnHoTyJ2WGf18kkQ46Mtj6SeN6k6BJS5cXjBWWy3ViQi2XCJMLQ  (MSFT $450)
+          tx VmsTrUEFWZQkvn8qiXqav34EERQrsepoxdVLQ6zbZMzdppkBv87eUDGRf9zNPYHZsLa2Z7LnsJr3TNBMynKDXfK  (GOOGL $160)
+          tx 3zfJAvA6ZnD4nJWwXcEcroYPiQry9rpBXmWrrS85Lq6Jr2adTthi3mLH3zpc6kS6raHB9T2j9xD3ygHW87GPTtvA  (GOOGL $170)
+          tx 3utBbsZjpkKq9eNH5dQkTdvu7f2AMtVXgcpAHX1UhJvFzkdw3odPxNRxgJXnHhE2XQoF3PX8udcgj6sgfPwn7xFR  (GOOGL $180)
+          tx 5qR6d4sX4uY7KAC93xiFS6vjTCJ3H1hauHAFnuPTxwmRoHDozY9ZkSQYJmun53kKFeP17LRrrcHYWLj3zrz2uE8F  (GOOGL $190)
+          tx 2wmVyAdyhoBaWe1jACepvLZCB4oPqPL6siPjADWmNjcRtFKPGrgAT6mwCLxWccVqwVsD5y1NZuUZFu4uB3wxcwUb  (AMZN $200)
+          tx 5LcK4EP2sEUgdbJovYXDL9pyRmvco3dvpBC39yGdfmhFHAH8viW8UBXyoxcphNXP3P3PKmeW3N7S5wyfYrqYzjRQ  (AMZN $210)
+          tx 678oz1neRUBdXRdCaUBSqUi2J8QbS7nwLbv5m1Tz3wRoHu751FGsWAQTinroeLvWG157pHwQ1PdBaCdaSEZjqRkC  (AMZN $220)
+          tx 4VLVHyUoGNCUUDawxtaRmzdMsEBdcePhDxLK23Wk9RhaSd69bnPYtdKHLmxTm5p9zWB23DcsohQbVymbK8Yj32Sj  (AMZN $230)
+          tx y5wQkK6Qn4JbiYCSvUtkmBQf84F6jJRAUtajNEKgR7wXGQfb1hWGGt2ryRQP2N2D9hA8ovWjTYNzNBXTNq8TxjD  (AMZN $240)
+          tx 3jXhkdR68UeBHgW6uWnfsFnwK8ujPfmddfdZrHNoCup64ugEVuL7mewhJXzSoRXwZ3UeG6GJd9bwx1iea42hQtbi  (NVDA $160)
+          tx uyi8of1KtE77UGCXjoJboxHByzKTAL4CNKJBCmQte39deDeQJLsMMUgHnKwTDaJgzEX6vxoVZ8S3jccKmkUC2CX  (NVDA $170)
+          tx 2Gwd8QV5CKaJETPM2fEM68hgmaL1n8gc4jDqB6z9ZHV9Dm6rbpAmNMiw5ZFekSEAEQmftJ1vnTcRNCYngurGY5Vq  (NVDA $180)
+          tx 4hKK9b95RZCqBH7VSQujGgWsFe3x4MVTG7LJkVsVGr9AUJvg3HSt3BKHub1HXkf7MMZZsoTcrf28f2db6kjyU2Cu  (NVDA $190)
+          tx 521NwoTmkVk5maXaprYX5VwswDYmUC8qzQ1fuwFkNfAB1VSgYN55hqoih4F4h1RDTCG1BZppt5jSHBPw82cwNQsp  (NVDA $200)
+          tx hab87je8tvxKSAAbE3Lit1F3BuKas9GQVjHSoPQsfDqXFYQDrimJkSFvLLKhZst8cuFzsekZQUpVbU1g39Jf38o  (META $620)
+          tx 35oJ4H6vULWrjw88AFD9yAQTAj8bFmHbHn2N55xVCQEVgutYw6his2gBjeGWug5Yni2iNAkZD5dmPm5ByyrFJsJ2  (META $640)
+          tx ieGa4cwohoy7nCfavEzCK7MyTtPEzqEuafgMitUDoFwLSR8e7AtQ3iGeyVPJxjUcvBNPAPVpAJNWpNkHpgujpaA  (META $660)
+          tx s4jVkkKowYgnYSYpbQU3K7ieG4o47STYcHCUGFx9ogiAwnSM19NPdrYDGYxeVnwzZnFbV5RVWQbpYqfyyVn3EMD  (META $680)
+          tx 5s8aBkF2wtPgAoKB3xz3uY6pXt8Ykf6XAVFBnsbwfu8o88ifkcEcu291maQrufHUE1e898Pqz1J3cyBwrx2LcjCR  (META $700)
+          tx pEvbYWLtgWfsiB5nBNHgNDstDAQXVc3bkpuTaCwjCRMhnBzk5YuXcyFGakEB2wWc58JScq1SkAqnVxUo9vwNnJB  (META $720)
+          tx 44NtKacwTcbygSGgdUkQqj51AErPyMpmkW8zPob1ioRFfBpJcFUhEpbmRHbysvc5w447E4fWu6hV1dVdgdtvuYpu  (META $740)
+          tx 2YkzSMu3zLdpi5XrETQB1utbHLcUM2inNLxr8vYKB9vtQbR6AefyGAPJ3TB1X4Nzh49NLZxgCvEFrcyFMSq43qxB  (TSLA $230)
+          tx 25FPpbehvYPn9RJ3UCmEoFRrDkQozpnyKJkQN9tEZPaKenZsb8KrPYVGtzZzaN2CUJM8nYh43KiK6RyjSqHDykTJ  (TSLA $240)
+          tx 4YLNv2TmUy6DGwge1qeRGUupCbja1HgvACaWJct41nPQYDQn95aTjkckLCsiwh9KZDiBxNzecWYZME7GZnmNyshf  (TSLA $250)
+          tx 64jbNtjt6rgp5Azx1X985e18fhUk45smMbEiSwU9X9ut8MDBKJYSQ6AF2Yq1koBbHf8d11rGt2mvqJgBXnS2qSze  (TSLA $260)
+          tx 4GacaVub4rTDfMcwVYM6R6g4HF51wVxbJycrapaQACw6sQ3w3WVbqkBL9K6tZ7qKyiHA1ByRS56mjU5Vp4LVTekj  (TSLA $270)
+          38 created, 0 already existed
+[step 5] create-markets CLI (second run creates nothing)
+          0 created, 38 already existed
+          0 created, 38 already existed
+[step 6] morning job re-run on the same day creates nothing (NFR-05)
+[step 7] fund trader-a and trader-b (SOL, 1,000 USDC, token accounts)
+          tx 4NY443a5ck3ZHtJmQvwSQf4VbATBpHrNFyYcZUPmZVzkbiTTZjCr8GsJeBE5CXmvDggR68sj3bbNikA1hHu1YFy5
+          tx 3A51vyA9fibKeabWvHSXmmQdkRMyxrc7USYWEQoQjnZdb8hXdBPi9KPiQHZMBYXdz91DzA23VKb1LVdppNWwKNXr
+          tx 66Urgk8935vFUnuZ5UQ55uCUESRo6Sd5wT5uox3yytG5JgzqPE6Vrd8ePoZHXmfGZdE4wh6mgyHRHiFyHREBv1EA
+          tx 2eBwXqkdPJ61GCEmah61jbJ4FAQNzHkJtZeXABGyiHKn3mqxeutvUfR4HTzqqBLh9vrJ9dx1DJigkFEcVoJhTSDa
+[step 8] trader-b mints 20 pairs
+          tx 39ebApcvRNSudGfCdm9gd4uN9a8YMqQ4t7WpKuWbYw5Lxs4i7w7y9uwDFZEvpzap9vWdhEfSoBobXDBoEZKzP5Wk
+[step 9] SELL YES: trader-b rests 10 @ 60¢
+          tx 5DXNPCfcVaLKyfFv4DJesBXeSXQP2ZvR75vx4EB5Gkmhz6CT1dybNLKpdoyEfyW66JkQAoGJS9Xc8cfDhX4WRVhR
+          book quotes saw the confirmed ask after 3 ms (budget: 2000 ms + 1000 ms poll)
+[step 10] NFR-01: the resting 60¢ ask shows in the book quotes within 3 s
+[step 11] BUY YES: trader-a buys 10 @ 60¢ (IOC)
+          tx 34tqEUVXvNie553yjQWo65yTWnvsWw54JTfrAoF8MetNaSBtTkYAnsgnKL7LHMM4QWePxTcKx3zt3Ei7Jm4JH5C7
+[step 12] NFR-01: the filled ask is gone from the book quotes
+[step 13] SELL YES: trader-b bids 4 @ 55¢, trader-a sells 4 into it (IOC)
+          tx u5BKeW3zNGDBwFpwHHNXdY5kLmR5xvqCMEwXm3xG92fSvz4fKVfDDWUFtER2oi8UkPPNURZGfGerp6WtphzYyRM
+          tx 67jDjb3runu4MMTyhFi3mUiNg8r7jaanPxsFd72hA1zkxLZ4oR3gEGyPtJeYNr1fYSVJyCKwhAHbcPxp4kGwcdsi
+[step 14] BUY NO: trader-b bids 3 @ 45¢, trader-a buys 3 NO at 55¢ (IOC)
+          tx 5niq1WmvefuRRoy9Eis4tdBar5vhWiZtgHVetgraMnGHcHqjjL2YMymQRrnaPbdPEMWDgPaizQND4ywdNektHXoD
+          tx Ar1e86Gn6SaW2Y2P471aCdGgiH9ovG9LZZJgnCLtW3FFc7D9CVMYniuTkbgcJh2Yatp82ixKH6GVzM2dU3qRTWL
+[step 15] SELL NO: trader-b asks 1 @ 70¢, trader-a sells 1 NO (IOC, worst NO price 1¢)
+          tx weu9WeXHfnmNZSYGv86MPYb91a3VViMgAFNvYqAQPQscb6fvXVVpvbPEdeMCKr43mnmsY1cu6obKmWNGn2yG8uD
+          tx 2pE6fJPvPDVQemUjCxWs1KPgkNwi6J7C8sJwt4SXZ9h4tHsPFR4bnXYxQTwcp4WjfNFbiUafwawX7Z4ki7jzYcsa
+[step 16] cancel: trader-b rests a bid @ 30¢ and cancels it
+          tx 2nrJbiiLHHwHvyCWirWvzVV3FB5rYKctKRBbnhzVwZ1KVaXAxapaNrqN3masPdHJiq4suTZDmGB4Accfe9DdEwYW
+          tx XA5mn9nX1veufFJYDugUnzKasb9CJftWedW8oc7kC3yJcMidt2uEmmutGyGifg5GELfM93iy7BuyhdoytvMXshW
+[step 17] wait for close_ts (118s)
+[step 18] AB-11: a new order after close is rejected
+[step 19] local oracle: both sources report $700.00; settle_market
+          tx 4yjxxuv9TrXJcfr7KJXFwzYfNgRQeKbmHMMNWa419nJb59dsbjBvix2zafWDeaiRyrJtTNamwifH4UTFp7mnjywC
+          tx 5bUDFgbJrmVprPJ7SHGVs2vtrN7BN6pbGGKT36rkoPaMC3D2cgk5qzfWRxF7BoswVxNM79SoS6wvFi78zR3j3uP8
+          tx 3Arx2N5pe6ms6cRZSEZyytkNHRPjBss6cHTJBdDYYoUkYnmYHxZyc4qHjC654mFWKCEia7YcVSDgVnMDNnL2KSzV
+[step 20] settle_funds for both traders
+          tx 5y4y5UcvXZY2E91A2vjKnsNXKQpBEtUUcYPBUU2v7t2iBc4ep2zrJRffP5iywEq4rjz64mB3uXjmok3oHfN25BwP
+          tx 2zp2wCqi2j4fkYAnnkj4zgLttB6oTg6RmsuFCkMPrG9AM3yLzDrQLBqSwKjUVnJH4AkKcYBCiLT6QDvbF2LH1mb4
+[step 21] winner redeem for both traders (YES wins)
+          tx aPcuRL2ZTBPQhVd1y1xQDbP4s6Y7kPqKgdZqhYgCNdMG7ZnUAy6FJ6jbjinCUHXTWziUaom5LuFGRf5EK4Vem2s
+          tx 5NRaw2od7XovggYuopXusvQibCDYkJq9b5YuFkLCNSVwkdFNWq1N6ez52WH3NRJzFKDtqs39dAZQGxsT4HSUrvYH
+{"ts":"2026-10-09T10:51:34.823Z","level":"info","event":"settled","group":"GOOGL:2026-10-06","markets":4,"shape":"single","transactions":1,"reUpdates":0,"signatures":["2pP844JUEWaMzxorjUaFuLZMsTR6EVBuBZYYJ95WtQRfJKhYzoTLfLEvyrdeQ32S5mV8Lya8taDzgaJQYqFSDu1A"]}
+{"ts":"2026-10-09T10:51:35.227Z","level":"info","event":"settled","group":"META:2026-10-06","markets":6,"shape":"single","transactions":1,"reUpdates":0,"signatures":["2oLigaZaTttrae3KDY8c1Jjb112AcvBwaEWq1HXJgTGx2uzRdB8vTQWiJcgDLLXLQicKwU49wSUbwAnP8hcR6Y9u"]}
+{"ts":"2026-10-09T10:51:35.632Z","level":"info","event":"settled","group":"MSFT:2026-10-06","markets":7,"shape":"single","transactions":1,"reUpdates":0,"signatures":["4ZrHaSx79LaFMbt1rF6XDY2yo8oJcRHJmENcpBm9cfme9Cj2c98vNnztY1GBxEoYKxSgqYTHdMPo4WozwgH3oF9t"]}
+{"ts":"2026-10-09T10:51:36.038Z","level":"info","event":"settled","group":"NVDA:2026-10-06","markets":5,"shape":"single","transactions":1,"reUpdates":0,"signatures":["3Wfvpcr1diXVgK15bxc4pQpWoovVEsBPgzSw1YUsA42xTQPZTH1PxmCfUhwETTEAVq1NeWTfq6DvRn3Z7xB3dnug"]}
+{"ts":"2026-10-09T10:51:36.443Z","level":"info","event":"settled","group":"TSLA:2026-10-06","markets":5,"shape":"single","transactions":1,"reUpdates":0,"signatures":["6gjgaAwwxdXkG5GK1v5eXYQY5dACPbjhpn8qqMZt2bxD1Nit9SkTNW4NkdRPHqdN4ESaugVXdKDVDAqwt1diJrU"]}
+{"ts":"2026-10-09T10:51:36.849Z","level":"info","event":"settled","group":"AMZN:2026-10-06","markets":5,"shape":"single","transactions":1,"reUpdates":0,"signatures":["3AE6Nz8sBPtA4D7VrNm6B22VEY3snWcLxxykfjbCBW8YeYSSRgqhSX8oKrmMfAgjEHG8y8Qn5WGB4kmHkS2m3GR8"]}
+{"ts":"2026-10-09T10:51:37.253Z","level":"info","event":"settled","group":"AAPL:2026-10-06","markets":5,"shape":"single","transactions":1,"reUpdates":0,"signatures":["4JZ3hPZt5VenrFXxYpRU8orZWqTgYxhHr7kZo2WiyqCErubin1p64j4b7DgdMK4yMcBJRGejtHbmeCNTc4vZsujC"]}
+          settled 37 market(s) on localnet
+          tx 2pP844JUEWaMzxorjUaFuLZMsTR6EVBuBZYYJ95WtQRfJKhYzoTLfLEvyrdeQ32S5mV8Lya8taDzgaJQYqFSDu1A
+          tx 2oLigaZaTttrae3KDY8c1Jjb112AcvBwaEWq1HXJgTGx2uzRdB8vTQWiJcgDLLXLQicKwU49wSUbwAnP8hcR6Y9u
+          tx 4ZrHaSx79LaFMbt1rF6XDY2yo8oJcRHJmENcpBm9cfme9Cj2c98vNnztY1GBxEoYKxSgqYTHdMPo4WozwgH3oF9t
+          tx 3Wfvpcr1diXVgK15bxc4pQpWoovVEsBPgzSw1YUsA42xTQPZTH1PxmCfUhwETTEAVq1NeWTfq6DvRn3Z7xB3dnug
+          tx 6gjgaAwwxdXkG5GK1v5eXYQY5dACPbjhpn8qqMZt2bxD1Nit9SkTNW4NkdRPHqdN4ESaugVXdKDVDAqwt1diJrU
+          tx 3AE6Nz8sBPtA4D7VrNm6B22VEY3snWcLxxykfjbCBW8YeYSSRgqhSX8oKrmMfAgjEHG8y8Qn5WGB4kmHkS2m3GR8
+          tx 4JZ3hPZt5VenrFXxYpRU8orZWqTgYxhHr7kZo2WiyqCErubin1p64j4b7DgdMK4yMcBJRGejtHbmeCNTc4vZsujC
+          nothing to settle: no open market is past its close time
+[step 22] settle-now settles all remaining open markets with a non-automation payer
+trader-a: USDC change 850000 base units, expected 850000
+trader-b: USDC change -850000 base units, expected -850000
+[step 23] faucet: fund the faucet key and create a test mint it controls
+          tx 4oRsn2wCmPLpUneEQ1e7RzyPBAtBQcFNUKnHGpDzkgLv2WaXVMjrz4ixWu86ksGAvJnDPYZoU91ZjPbvWBs9cL1h
+[step 24] faucet: first claim mints the fixed amount; a second claim is a 429 (system 'account already in use')
+          tx 2Gifigtyzpv8damzbhJtt4uKewgPikXBMHqp6AS23jdUiKLT4MDPRNB9DnRdToJeRCKTz5ywkFbhJv55mjYS1t2o
+[step 25] faucet: three truly concurrent claims for one wallet mint exactly once
+          tx 5tLcWUpLb63Hc4BD7S3PDdo91kjbnGHwGWSA6GLJEn358Lx6SkUPu3aBW1sYVb5YY2Fw859TwQeeQBkKtg4mmW6K
+[step 26] faucet: a pre-funded marker address does not block a claim
+          tx 3b3yabg2vP3mHyzGHyCYShLYvNpkoKb6VdZn9uLorCYAARinm3Uy7gDHtwndmVVqMU8CEBnSPGtdCcMEyNumVLx5
+[step 27] faucet: bucket N+1 is refused, bucket N+2 is allowed again (cluster clock moved)
+          tx twm3k2539owYH9KphZr1gPbfjtDNSpAEfVBkyw4YNLaV8G62UcbWnw7643giBRcrw2st12kJ6czphytxzBcDjY5
+lifecycle ok in 162s
+
+ RUN  v5.0.3 /home/box/.ao/data/worktrees/peak6-meridian/peak6-meridian-36/tests/security/ts
+
+
+ Test Files  5 passed (5)
+      Tests  19 passed | 5 skipped (24)
+   Start at  05:51:41
+   Duration  80.48s (tests 98%, import 2%)
+
+[e2e] PASS
