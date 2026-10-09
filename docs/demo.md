@@ -15,10 +15,10 @@ make dev  # validator :8899 + app :3000
 The home page shows all available binary outcome markets for today's trading session.
 
 **Mobile (390px):**
-![Markets Mobile](/uploads/5442898fb6c8d1ad2da9b62bb0b4e12d/01-markets-mobile.png)
+![Markets Mobile](demo/01-markets-mobile.png)
 
 **Desktop (1280x720):**
-![Markets Desktop](/uploads/cab19f67af7d339a369d5ea7d4d8f5bf/01-markets-desktop.png)
+![Markets Desktop](demo/01-markets-desktop.png)
 
 Each market displays:
 - Ticker symbol (e.g., AAPL, MSFT)
@@ -31,10 +31,10 @@ Each market displays:
 Clicking a market opens the trade interface where you can buy or sell YES/NO contracts.
 
 **Mobile:**
-![Trade Mobile](/uploads/2791cd38842667a10b31133863951907/02-trade-mobile.png)
+![Trade Mobile](demo/02-trade-mobile.png)
 
 **Desktop:**
-![Trade Desktop](/uploads/967a5f84d1cc5a3a677405cc40a160fb/02-trade-desktop.png)
+![Trade Desktop](demo/02-trade-desktop.png)
 
 ### Trade Intent 1: Buy YES
 1. Select YES side
@@ -75,10 +75,10 @@ Clicking a market opens the trade interface where you can buy or sell YES/NO con
 Shows your current holdings across all markets.
 
 **Mobile:**
-![Portfolio Mobile](/uploads/0106da6b7efd473fee4e3654b18a5cc9/03-portfolio-mobile.png)
+![Portfolio Mobile](demo/03-portfolio-mobile.png)
 
 **Desktop:**
-![Portfolio Desktop](/uploads/acf816fad1daa88877103ccd016eca54/03-portfolio-desktop.png)
+![Portfolio Desktop](demo/03-portfolio-desktop.png)
 
 Displays:
 - YES/NO token balances per market
@@ -91,10 +91,10 @@ Displays:
 Transaction history showing all your trades, mints, and redemptions.
 
 **Mobile:**
-![History Mobile](/uploads/b7ad2036c5ce8d3c822a3b8c3e9dff9c/04-history-mobile.png)
+![History Mobile](demo/04-history-mobile.png)
 
 **Desktop:**
-![History Desktop](/uploads/18724059989e703da07272bb281d3698/04-history-desktop.png)
+![History Desktop](demo/04-history-desktop.png)
 
 Each entry shows:
 - Transaction type (Buy, Sell, Mint, Redeem)
@@ -108,10 +108,10 @@ Each entry shows:
 Test-USDC faucet for funding wallets on devnet.
 
 **Mobile:**
-![Faucet Mobile](/uploads/7448187fd2b13b307b83e8349495ba2e/05-faucet-mobile.png)
+![Faucet Mobile](demo/05-faucet-mobile.png)
 
 **Desktop:**
-![Faucet Desktop](/uploads/1820bc2cdd4d0a75dd42faefab65281a/05-faucet-desktop.png)
+![Faucet Desktop](demo/05-faucet-desktop.png)
 
 - Connect wallet
 - Click "Request Test USDC"
@@ -123,10 +123,10 @@ Test-USDC faucet for funding wallets on devnet.
 System health and market statistics.
 
 **Mobile:**
-![Status Mobile](/uploads/da7dad1b2880aacef601c60b2342806d/06-status-mobile.png)
+![Status Mobile](demo/06-status-mobile.png)
 
 **Desktop:**
-![Status Desktop](/uploads/c24454b1e9e9f35801e45d2ce2e0141c/06-status-desktop.png)
+![Status Desktop](demo/06-status-desktop.png)
 
 Shows:
 - Validator connection status
