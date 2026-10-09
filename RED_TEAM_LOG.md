@@ -45,19 +45,19 @@ Red-team verification via three test layers:
 | AB-03 | Stale or wrong trading date oracle | `ab_03_ab_05_timing.rs`<br/>`ab_03_stale_or_wrong_date.test.ts` | Vitest on validator: 8 passed | LiteSVM: 5 passed | SAFE |
 | AB-04 | Spoofed oracle accounts | `ab_04_oracle_spoof.rs`<br/>`ab_04_spoofed_feed.test.ts` | Vitest on validator: 10 passed | LiteSVM: 8 passed | SAFE |
 | AB-05 | Settle before close_ts | `ab_03_ab_05_timing.rs`<br/>`ab_05_settle_before_close.test.ts` | Vitest on validator: 6 passed | LiteSVM: included in AB-03 | SAFE |
-| AB-06 | Non-admin calls admin instructions | `ab_06_admin_only.rs` | Program rejects non-admin signers | LiteSVM: 3 passed | SAFE |
-| AB-07 | Admin override without delay | `ab_07_ab_08_override.rs` | Program enforces delay constraint | LiteSVM: 8 passed | SAFE |
-| AB-08 | Admin override with wrong price | `ab_07_ab_08_override.rs` | Program validates price bounds | LiteSVM: included in AB-07 | SAFE |
-| AB-09 | Forged open orders / Credit theft | `ab_09_ab_10_book.rs`<br/>`ab_09_orders.rs` | Program checks OpenOrders ownership | LiteSVM: 4 passed | SAFE |
-| AB-10 | Price manipulation via book state | `ab_09_ab_10_book.rs` | Program validates book PDA derivation | LiteSVM: included in AB-09 | SAFE |
-| AB-11 | Orders/minting during pause or after close | `ab_11_close_pause.rs` | Program checks state transitions | LiteSVM: 7 passed | SAFE |
-| AB-12 | Integer overflow in mint/redeem | `ab_12_overflow.rs` | — | LiteSVM: 4 passed | SAFE |
-| AB-13 | Oracle feed spread > max_conf_bps | `ab_13_oracle_spread.rs`<br/>`ab_13_feed_spread.test.ts` | — | LiteSVM: 5 passed (NEW)<br/>Vitest: 8 passed | SAFE |
-| AB-14 | Command injection in ops-agent | `ab_14_injection.py` | — | Pytest: 75 passed | SAFE |
-| AB-15 | Draft price outside valid range | `ab_15_draft_range.py` | — | Pytest: 7 passed | SAFE |
-| AB-16 | Unlocked/mutable dependencies | `ab_16_locked_dependencies.test.ts` | — | Vitest: 11 passed | SAFE |
-| AB-17 | Committed secrets or deploy key exposure | `ab_17_deploy_secrets.test.ts`<br/>`ab_17_no_committed_secrets.test.ts` | — | Vitest: 4 passed | SAFE |
-| AB-18 | Intent instruction validation bypass | `ab_18_intents.test.ts` | E2E steps 9-15 (four intents) | Vitest: 17 passed | SAFE |
+| AB-06 | Non-admin calls admin instructions | `ab_06_admin_only.rs` | LiteSVM only (requires crafted non-admin signer) | LiteSVM: 3 passed | SAFE |
+| AB-07 | Admin override without delay | `ab_07_ab_08_override.rs` | LiteSVM only (requires time manipulation) | LiteSVM: 8 passed | SAFE |
+| AB-08 | Admin override with wrong price | `ab_07_ab_08_override.rs` | LiteSVM only (requires invalid price bounds) | LiteSVM: included in AB-07 | SAFE |
+| AB-09 | Forged open orders / Credit theft | `ab_09_ab_10_book.rs`<br/>`ab_09_orders.rs` | LiteSVM only (requires forged PDA) | LiteSVM: 4 passed | SAFE |
+| AB-10 | Price manipulation via book state | `ab_09_ab_10_book.rs` | LiteSVM only (requires invalid book state) | LiteSVM: included in AB-09 | SAFE |
+| AB-11 | Orders/minting during pause or after close | `ab_11_close_pause.rs` | LiteSVM only (requires state bypass) | LiteSVM: 7 passed | SAFE |
+| AB-12 | Integer overflow in mint/redeem | `ab_12_overflow.rs` | LiteSVM only (requires u64::MAX amounts) | LiteSVM: 4 passed | SAFE |
+| AB-13 | Oracle feed spread > max_conf_bps | `ab_13_oracle_spread.rs`<br/>`ab_13_feed_spread.test.ts` | LiteSVM only (requires malformed feed) | LiteSVM: 5 passed (NEW)<br/>Vitest: 8 passed | SAFE |
+| AB-14 | Command injection in ops-agent | `ab_14_injection.py` | Off-chain service only | Pytest: 75 passed | SAFE |
+| AB-15 | Draft price outside valid range | `ab_15_draft_range.py` | Off-chain service only | Pytest: 7 passed | SAFE |
+| AB-16 | Unlocked/mutable dependencies | `ab_16_locked_dependencies.test.ts` | Off-chain static analysis | Vitest: 11 passed | SAFE |
+| AB-17 | Committed secrets or deploy key exposure | `ab_17_deploy_secrets.test.ts`<br/>`ab_17_no_committed_secrets.test.ts` | Off-chain static analysis | Vitest: 4 passed | SAFE |
+| AB-18 | Intent instruction validation bypass | `ab_18_intents.test.ts` | LiteSVM only (requires wrong intent discriminators) | Vitest: 17 passed | SAFE |
 | AB-19 | Automation wallet key exposure | `ab_19_automation_key.test.ts` | — | Vitest: 8 passed | SAFE |
 | AB-20 | LLM jailbreak / prompt injection | `ab_20_jailbreak.py` | — | Pytest: 60 passed | SAFE |
 | AB-21 | Faucet abuse (rate limits, amount) | `ab_21_faucet.test.ts` | E2E steps 23-27 (faucet flow) | Vitest: 10 passed | SAFE |
