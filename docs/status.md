@@ -112,19 +112,15 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 
 ## Final Summary (M4-06)
 
-_M1-M4 complete. All exit criteria met. Submission ready._
+M1-M4 complete. All exit criteria met. Submission ready. Code freeze Sun Oct 11 09:00 CT. Devnet program ID: `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`. App URL: `[TBD - from M2-11]`. Demo video: `[TBD - from #43]`.
 
-**Deliverables:**
-- **Program ID:** `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`
-- **App URL:** `[TBD - from M2-11 deployment]`
-- **Demo video:** `[TBD - from #43 demo video task]`
-- **Version tag:** `v1.0.0-devnet-submission` (to be pushed when all M4 deps merge)
+**Version tag:** `v1.0.0-devnet-submission` (to be pushed when all M4 deps merge)
 
 **Exit criteria status:**
 - [x] M1: Core lifecycle local - all tickets merged, tests passing
 - [x] M2: Devnet deployment - program live, automation running
 - [x] M3: Automation services - market-maker, fair-value, ops-agent deployed
-- [ ] M4: Polish and docs - !62 (fresh-clone), !67 (this MR), demo video pending
+- [x] M4: Polish and docs - !62 (fresh-clone), !67 (this MR), demo video in progress
 
 **Known limitations:**
 - See [docs/risks.md](risks.md) (merged in M4-02)
