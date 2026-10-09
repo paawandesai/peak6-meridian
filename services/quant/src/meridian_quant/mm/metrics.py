@@ -31,7 +31,10 @@ def book_coverage(
             else:
                 markets_with_asks.add(order.market)
     
-    # Count markets that have both a bid and an ask
-    covered_markets = markets_with_bids & markets_with_asks
-    
+    # Count markets that have both a bid and an ask, AND are open
+    # (Finding #4: must intersect with open_markets to prevent coverage > 1.0)
+    open_set = set(open_markets)
+    two_sided_markets = markets_with_bids & markets_with_asks
+    covered_markets = two_sided_markets & open_set
+
     return len(covered_markets) / len(open_markets)
