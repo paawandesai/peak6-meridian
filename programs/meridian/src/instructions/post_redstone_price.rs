@@ -3,7 +3,7 @@
 use anchor_lang::prelude::*;
 
 use crate::errors::MeridianError;
-use crate::state::{OracleConfig, RedstonePrice, SYMBOL_LEN};
+use crate::state::{Market, OracleConfig, RedstonePrice, MARKET_SEED, SYMBOL_LEN};
 
 #[derive(Accounts)]
 #[instruction(symbol: [u8; SYMBOL_LEN])]
@@ -18,6 +18,11 @@ pub struct PostRedstonePrice<'info> {
         bump,
     )]
     pub oracle_config: Account<'info, OracleConfig>,
+
+    /// Optional Market PDA (for close_ts window validation; AB-03 liveness).
+    /// If provided, validates package is within [close_ts, close_ts + max_package_delay_secs].
+    /// Seeds constrained to ensure it's a valid Market; ticker match checked in handler.
+    pub market: Option<Account<'info, Market>>,
 
     /// RedstonePrice PDA for this ticker (created if it doesn't exist, updated if it does).
     #[account(
@@ -90,14 +95,71 @@ pub fn handle_post_redstone_price(
     // Compute median value
     let median_value = compute_median(valid_values);
 
-    // Check package timestamp not older than stored (if exists)
-    // Allow equal timestamp to refresh posted_slot (AB-03 liveness)
+    // AB-03 liveness: if Market provided, validate package against settlement window
     let redstone_price = &mut ctx.accounts.redstone_price;
-    if redstone_price.package_timestamp_ms > 0 {
+    if let Some(market) = &ctx.accounts.market {
+        // Verify market ticker matches symbol
+        require!(market.ticker == symbol, MeridianError::UnknownTicker);
+
+        // Verify Market PDA seeds (AB-04: seeds constraint cannot be applied to Option<Account>)
+        let expected_market_seeds = &[
+            MARKET_SEED,
+            market.ticker.as_ref(),
+            &market.trading_date.to_le_bytes()[..],
+            &market.strike_cents.to_le_bytes()[..],
+        ];
+        let (expected_market_pda, _) =
+            Pubkey::find_program_address(expected_market_seeds, ctx.program_id);
         require!(
-            expected_timestamp >= redstone_price.package_timestamp_ms,
-            MeridianError::RedStonePackageOlderThanStored
+            market.key() == expected_market_pda,
+            MeridianError::UnknownTicker // Reuse error for PDA mismatch
         );
+
+        // Calculate settlement window: [close_ts, close_ts + max_package_delay_secs]
+        let close_ts_ms = market
+            .close_ts
+            .checked_mul(1_000)
+            .ok_or(MeridianError::MathOverflow)?;
+        let delay_ms = oracle_config
+            .max_package_delay_secs
+            .checked_mul(1_000)
+            .ok_or(MeridianError::MathOverflow)?;
+        let window_end_ms = close_ts_ms
+            .checked_add(delay_ms)
+            .ok_or(MeridianError::MathOverflow)?;
+
+        // New package must be within settlement window
+        require!(
+            expected_timestamp >= close_ts_ms,
+            MeridianError::OracleBeforeClose
+        );
+        require!(
+            expected_timestamp <= window_end_ms,
+            MeridianError::RedStonePackageTooLate
+        );
+
+        // Check stored value: if in-window, only allow >= (refresh); if out-of-window, allow replacement
+        if redstone_price.package_timestamp_ms > 0 {
+            let stored_in_window = redstone_price.package_timestamp_ms >= close_ts_ms
+                && redstone_price.package_timestamp_ms <= window_end_ms;
+
+            if stored_in_window {
+                // Stored value is in-window: only allow >= to prevent bricking (AB-03)
+                require!(
+                    expected_timestamp >= redstone_price.package_timestamp_ms,
+                    MeridianError::RedStonePackageOlderThanStored
+                );
+            }
+            // If stored is out-of-window, allow in-window replacement even if older
+        }
+    } else {
+        // No market provided: only check not older than stored (basic anti-regression)
+        if redstone_price.package_timestamp_ms > 0 {
+            require!(
+                expected_timestamp >= redstone_price.package_timestamp_ms,
+                MeridianError::RedStonePackageOlderThanStored
+            );
+        }
     }
 
     // Update RedstonePrice account

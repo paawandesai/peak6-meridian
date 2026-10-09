@@ -925,6 +925,15 @@ export type Meridian = {
           };
         },
         {
+          name: "market";
+          docs: [
+            "Optional Market PDA (for close_ts window validation; AB-03 liveness).",
+            "If provided, validates package is within [close_ts, close_ts + max_package_delay_secs].",
+            "Seeds constrained to ensure it's a valid Market; ticker match checked in handler.",
+          ];
+          optional: true;
+        },
+        {
           name: "redstonePrice";
           docs: [
             "RedstonePrice PDA for this ticker (created if it doesn't exist, updated if it does).",

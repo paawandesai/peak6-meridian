@@ -85,6 +85,7 @@ fn post_redstone_price_stays_under_cu_limit() {
 
     let post_accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: None,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -189,6 +190,7 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
 
     let post_accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: Some(addresses_market.market),
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -267,6 +269,7 @@ fn redstone_payload_fits_in_transaction() {
 
     let post_accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: None,
         redstone_price: price_pda,
         payer: admin.pubkey(),
         system_program: system_program::ID,

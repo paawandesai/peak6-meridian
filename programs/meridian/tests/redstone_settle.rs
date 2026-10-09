@@ -116,6 +116,7 @@ fn settle_market_succeeds_after_redstone_post() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: Some(market_pda),
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -204,6 +205,7 @@ fn settle_market_fails_package_before_close() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: Some(market_pda),
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -287,6 +289,7 @@ fn settle_market_fails_package_too_late() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: Some(market_pda),
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -370,6 +373,7 @@ fn settle_market_fails_stale_oracle() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: Some(market_pda),
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -460,6 +464,7 @@ fn settle_market_fails_wrong_price_pda() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: None,
         redstone_price: wrong_price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -547,6 +552,7 @@ fn settle_market_fails_before_close() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: Some(market_pda),
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -629,6 +635,7 @@ fn settle_market_at_strike_boundary() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: Some(market_pda),
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,

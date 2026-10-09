@@ -104,6 +104,7 @@ fn post_redstone_price_success_3_of_5() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -165,6 +166,7 @@ fn post_redstone_price_fails_insufficient_signers() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -221,6 +223,7 @@ fn post_redstone_price_unknown_signer_ignored() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -276,6 +279,7 @@ fn post_redstone_price_malformed_payload() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -329,6 +333,7 @@ fn post_redstone_price_duplicate_signer_counts_once() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -396,6 +401,7 @@ fn post_redstone_price_tampered_signature_recovery_fails() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -451,6 +457,7 @@ fn post_redstone_price_tampered_value_fails() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -507,6 +514,7 @@ fn post_redstone_price_tampered_timestamp_fails() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -563,6 +571,7 @@ fn post_redstone_price_tampered_feed_id_fails() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -609,6 +618,7 @@ fn post_redstone_price_oversized_payload_fails() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -658,6 +668,7 @@ fn post_redstone_price_wrong_feed_id_fails() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {
@@ -711,6 +722,7 @@ fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
+        market: None,
     };
 
     let instruction = Instruction {

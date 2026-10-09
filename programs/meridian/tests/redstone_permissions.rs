@@ -231,6 +231,7 @@ fn post_redstone_price_is_permissionless() {
 
     let post_accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
+        market: None,
         redstone_price: price_pda,
         payer: random_payer.pubkey(),
         system_program: system_program::ID,
