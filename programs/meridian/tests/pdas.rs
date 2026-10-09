@@ -55,13 +55,13 @@ fn pda_fixtures_match_the_client() {
 
 /// Expected `name=address` pairs, duplicated verbatim in the TS test.
 const EXPECTED_FIXTURES: [&str; 9] = [
-    "config=BTFSRpCGp83nQKfa54dxy3Zu1jX2T94aC2xdtqbVGLtx",
-    "market=BGd5Y6qA5uT2zzgUzsZ3Mmw8m3Y8vJJLRWEybtDuU8im",
-    "yes_mint=5rsYKLySZ8TwEroxJrKZhLeG9qRLweMqjuMf7Z2Uyqcz",
-    "no_mint=Kpxnc7sKpyprQnjq3cBHkHVEFXgBJ8TcTQ671LK5Hf8",
-    "vault=74tCuYxrAte59R2bCdbcJNcNYvMYYwJ37N4awkuuDsYG",
-    "escrow_usdc=CTuFnW5wvESkenA3RMvZYvUmraF5bEhxm8cZeek2UycW",
-    "escrow_yes=5RaodcXqQVcGdfVMJHbN3i6FU4w7Lr5tf4ttcXVmMgv8",
-    "book=HRC4F4DZaMAVY7wqr28E2m1QMLDgCeErJDvqLkwnZvvM",
-    "open_orders=2huqHHnYVfv91styHC5oTgDQzez3vH6ebE5ggUpLE9pH",
+    "config=6Bf88kHFDDjdXG1BEdrj1edkLwWt9pEiKPFp6Ekhkoew",
+    "market=G9bLfxQk3Pvk9Zu2b8HB4zs7YQ6NS3R6Q1VG7TTi95Gr",
+    "yes_mint=C8MsZU2Wrm2FS4vGA1u484ZPFKyLcrLPCakaYEAEKNer",
+    "no_mint=EcuD66AVujTCoemZ15DeC5EpcoHLEvcPPHrt121Kg69c",
+    "vault=3v343hc9DQxd9ssbfqWoWXjyQMJoUoHC2J2e8WcraJPT",
+    "escrow_usdc=6bRyY9qeL4ZTjR1ozRoDJdtG7exZWwdjw4qCJSa7D6ic",
+    "escrow_yes=5YKtYZjoybHXRM4motot1tM7TrezTDQiMG4H1w9kkh8P",
+    "book=8ivHiPDVum1zBLFHite5d9iTwgdxMnQy8JHqSYduVTr9",
+    "open_orders=AkFEKoUmk3CxwGcx33wTquqj5L5gBovamkFgnAYvGxN1",
 ];

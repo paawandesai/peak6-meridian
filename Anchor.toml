@@ -8,10 +8,11 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-meridian = "3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq"
+meridian = "H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm"
 
-# The devnet program ID is set in M2 (keypair custody: OQ-5 in docs/status.md).
+# The devnet program ID (D-053): the same ID as localnet, so the one `declare_id!` matches both.
 [programs.devnet]
+meridian = "H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm"
 
 [provider]
 cluster = "localnet"
