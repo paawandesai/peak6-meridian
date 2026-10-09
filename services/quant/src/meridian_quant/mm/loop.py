@@ -419,21 +419,35 @@ class MarketMakerLoop:
             logger.exception("Failed to cancel quotes")
 
     async def _update_coverage(self, markets: list[MarketState]) -> None:
-        """Update the book coverage metric (AC4: actually fetches orders)."""
+        """Update the book coverage metric (AC4: actually fetches orders).
+
+        Counts only today's quotable markets (same filter as _quote_all_strikes).
+        Prior-day markets remain Open for settlement but don't get quotes, so they
+        shouldn't count toward coverage.
+        """
         try:
-            open_markets = [m.market for m in markets if m.is_open]
-            if not open_markets:
+            # Get today's trading date (YYYYMMDD in ET) - same filter as _quote_all_strikes
+            now = self._clock()
+            et_now = now.astimezone(ZoneInfo("America/New_York"))
+            today_trading_date = int(et_now.strftime("%Y%m%d"))
+
+            # Filter to today's quotable markets only
+            today_markets = [
+                m for m in markets if m.is_open and m.trading_date == today_trading_date
+            ]
+            today_market_ids = [m.market for m in today_markets]
+
+            if not today_market_ids:
                 self._coverage = 0.0
                 return
 
-            # Fetch all resting orders across all open markets
+            # Fetch all resting orders across today's quotable markets
             all_orders: list[RestingOrder] = []
-            for market in markets:
-                if market.is_open:
-                    orders = await self._order_client.fetch_resting_orders(market.market)
-                    all_orders.extend(orders)
+            for market in today_markets:
+                orders = await self._order_client.fetch_resting_orders(market.market)
+                all_orders.extend(orders)
 
-            self._coverage = book_coverage(open_markets, all_orders, self._mm_owner)
+            self._coverage = book_coverage(today_market_ids, all_orders, self._mm_owner)
         except Exception:
             logger.exception("Failed to update coverage")
             self._coverage = 0.0
