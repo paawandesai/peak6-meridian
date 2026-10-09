@@ -147,4 +147,4 @@ demo-ops:
 		echo "Error: FAULT_INJECT_SOURCE must be set (tiingo or twelvedata)" >&2; \
 		exit 1; \
 	fi
-	node --loader ts-node/esm scripts/demo-ops.ts
+	pnpm exec tsx scripts/demo-ops.ts

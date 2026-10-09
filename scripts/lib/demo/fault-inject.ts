@@ -12,19 +12,12 @@ export interface FaultConfig {
 }
 
 /**
- * Validates that fault injection is only used on localnet (AC2). Returns the fault configuration
- * or throws if FAULT_INJECT_SOURCE is set on a non-local cluster.
+ * Validates FAULT_INJECT_SOURCE env var. Returns the fault configuration or throws.
+ * Note: This only validates the env var itself. The cluster check (via assertCluster) must be
+ * done by the caller before calling this function.
  */
 export function validateFaultInjection(): FaultConfig {
   const faultSource = process.env.FAULT_INJECT_SOURCE;
-  const cluster = process.env.SOLANA_CLUSTER;
-
-  if (faultSource !== undefined && cluster !== "localnet") {
-    throw new Error(
-      `FAULT_INJECT_SOURCE='${faultSource}' is refused on cluster '${cluster}': ` +
-        "fault injection is only allowed on localnet (security: never against real services)",
-    );
-  }
 
   if (faultSource !== undefined && faultSource !== "tiingo" && faultSource !== "twelvedata") {
     throw new Error(
