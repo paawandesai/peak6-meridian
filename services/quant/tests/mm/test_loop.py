@@ -28,6 +28,7 @@ def mm_config(test_keypair: Keypair) -> MMConfig:
         {
             "market_maker_keypair": keypair_json,
             "program_id": "11111111111111111111111111111112",
+            "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
             "service_token": "test_token",
         }
     )

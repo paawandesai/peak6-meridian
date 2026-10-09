@@ -158,14 +158,15 @@ class MarketMakerLoop:
                 logger.warning(f"Stale spot data for {fv.ticker}: {age_secs:.1f}s old")
                 return True
 
-        # Check for time to close (< 2 min) - Finding #2
+        # Check for time to close (<= 2 min) - pull at or within window
         for market in markets:
             if market.is_open:
                 time_to_close_secs = market.close_ts - int(now.timestamp())
-                if 0 < time_to_close_secs < self.config.min_time_to_close_secs:
+                # Pull at close (0) or within window (< 120s)
+                if 0 <= time_to_close_secs < self.config.min_time_to_close_secs:
                     logger.info(
                         f"Pulling quotes: {time_to_close_secs}s to close "
-                        f"for {market.ticker} (< {self.config.min_time_to_close_secs}s threshold)"
+                        f"for {market.ticker} (<= {self.config.min_time_to_close_secs}s threshold)"
                     )
                     return True
 
@@ -180,16 +181,32 @@ class MarketMakerLoop:
             return []
 
     async def _sync_inventory(self, markets: list[MarketState]) -> None:
-        """Sync inventory from on-chain positions.
+        """Sync inventory from on-chain positions (AC1: mint inventory via mint_pair).
 
-        Production: read YES token account balances for each market and update
-        inventory tracker. For now, inventory is tracked via order placement
-        assumptions (not actual fills).
+        Mints YES+NO pairs to ensure MM has inventory to place asks.
+        Asks require YES tokens; bids require USDC (already in wallet).
         """
-        # TODO: Read actual YES token balances when on-chain client is ready
-        # For each market: getTokenAccountBalance(yes_mint, mm_keypair.pubkey())
-        # Then: self.inventory.set(market_key, balance)
-        pass
+        # Mint pairs for each market to ensure we have YES tokens for asks
+        # domain.md: size_per_side default is 10 contracts
+        # Mint enough to cover the quote size
+        mint_qty = self.config.size_per_side
+
+        for market in markets:
+            if not market.is_open:
+                continue
+
+            try:
+                # Mint YES+NO pairs (consumes USDC, gives YES+NO tokens)
+                # This ensures we have YES tokens to place ask orders
+                await self._order_client.mint_pair(
+                    market=market.market, qty=mint_qty, owner=self._mm_owner
+                )
+                logger.debug(f"Minted {mint_qty} pairs for {market.market}")
+            except Exception:
+                logger.exception(f"Failed to mint pairs for {market.market}")
+
+        # Note: Actual inventory tracking from YES token balances deferred
+        # Inventory is currently tracked via order placement assumptions
 
     async def _settle_funds(self) -> None:
         """Settle funds to recycle proceeds from fills.

@@ -7,6 +7,7 @@ mint_pair, place_order, cancel_order, settle_funds.
 SECURITY: MARKET_MAKER_KEYPAIR must never be logged (AC5).
 """
 
+import logging
 import struct
 
 from solana.rpc.async_api import AsyncClient
@@ -19,6 +20,8 @@ from solders.system_program import ID as SYSTEM_PROGRAM_ID
 from solders.transaction import Transaction
 
 from .types import MarketState, RestingOrder
+
+logger = logging.getLogger(__name__)
 
 # SPL Token program
 TOKEN_PROGRAM_ID = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
@@ -171,21 +174,18 @@ class ChainMarketSource:
                     # Skip pubkeys (yes_mint, no_mint, vault, escrow_usdc, escrow_yes, book)
                     offset += 32 * 6  # 6 pubkeys = 192 bytes
 
-                    # is_open: bool (1 byte)
-                    is_open = bool(data[offset])
+                    # pairs_outstanding: u64 (8 bytes) - IDL field 10
+                    pairs_outstanding = struct.unpack("<Q", data[offset : offset + 8])[0]
+                    offset += 8
+
+                    # status: MarketStatus enum (1 byte) - IDL field 11
+                    # 0 = Open, 1 = Settled
+                    status = data[offset]
                     offset += 1
 
-                    # Skip outcome (1 byte discriminator + optional data, assume ~10 bytes)
-                    offset += 10
-
-                    # pairs_outstanding at approximate offset
-                    if len(data) >= offset + 8:
-                        pairs_outstanding = struct.unpack("<Q", data[offset : offset + 8])[0]
-                    else:
-                        pairs_outstanding = 0
-
-                    # Only include open markets
-                    if not is_open:
+                    # Only include Open markets (status == 0)
+                    # Note: "Closed" is derived from now >= close_ts per IDL docs
+                    if status != 0:
                         continue
 
                     # Construct market string: ticker_date_strike
@@ -198,7 +198,7 @@ class ChainMarketSource:
                             strike_cents=strike_cents,
                             trading_date=trading_date,
                             close_ts=close_ts,
-                            is_open=is_open,
+                            is_open=True,  # Filtered to status==0 (Open) above
                             pairs_outstanding=pairs_outstanding,
                         )
                     )
@@ -306,14 +306,14 @@ class ChainOrderClient:
         """Cancel order via cancel_order instruction.
 
         Instruction args (Borsh):
-        - order_id: u128
+        - order_id: u64 (per IDL)
         """
         ticker, trading_date, strike_cents = self._parse_market_key(market)
         market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
         owner_pubkey = Pubkey.from_string(owner)
 
         # Build instruction data
-        data = DISCRIMINATOR_CANCEL_ORDER + struct.pack("<QQ", order_id, 0)  # u128 as two u64s
+        data = DISCRIMINATOR_CANCEL_ORDER + struct.pack("<Q", order_id)  # u64
 
         # Account metas
         book = derive_book_pda(self.program_id, market_pda)
@@ -339,10 +339,90 @@ class ChainOrderClient:
     async def fetch_resting_orders(self, market: str) -> list[RestingOrder]:
         """Fetch resting orders from book account.
 
-        In production: fetch book account, deserialize order list.
-        For minimal AC1: return empty (MM only needs to place/cancel).
+        Deserializes Book account to read bids and asks arrays.
         """
-        return []
+        try:
+            ticker, trading_date, strike_cents = self._parse_market_key(market)
+            market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+            book_pda = derive_book_pda(self.program_id, market_pda)
+
+            # Fetch book account
+            resp = await self.rpc.get_account_info(book_pda)
+            if not resp.value or not resp.value.data:
+                return []
+
+            data = bytes(resp.value.data)
+            # Anchor discriminator size
+            discriminator_size = 8
+            if len(data) < discriminator_size:
+                return []
+
+            # Skip discriminator
+            offset = discriminator_size
+
+            # BookOrder: 64 bytes each
+            # (order_id u64, owner pubkey, price u8, pad [u8;7], qty u64, seq u64)
+            order_size = 64
+            max_orders_per_side = 32
+
+            orders = []
+
+            # Parse bids array (32 orders)
+            for _ in range(max_orders_per_side):
+                if offset + order_size > len(data):
+                    break
+                order_data = data[offset : offset + order_size]
+                order_id = struct.unpack("<Q", order_data[0:8])[0]
+                owner_bytes = order_data[8:40]
+                price = order_data[40]
+                # skip padding [41:48]
+                qty = struct.unpack("<Q", order_data[48:56])[0]
+                # seq at [56:64], not needed
+
+                # order_id == 0 means empty slot
+                if order_id != 0 and qty > 0:
+                    owner = str(Pubkey(owner_bytes))
+                    orders.append(
+                        RestingOrder(
+                            order_id=order_id,
+                            market=market,
+                            side="Bid",
+                            price=price,
+                            qty=qty,
+                            owner=owner,
+                        )
+                    )
+                offset += order_size
+
+            # Parse asks array (32 orders)
+            for _ in range(max_orders_per_side):
+                if offset + order_size > len(data):
+                    break
+                order_data = data[offset : offset + order_size]
+                order_id = struct.unpack("<Q", order_data[0:8])[0]
+                owner_bytes = order_data[8:40]
+                price = order_data[40]
+                qty = struct.unpack("<Q", order_data[48:56])[0]
+
+                if order_id != 0 and qty > 0:
+                    owner = str(Pubkey(owner_bytes))
+                    orders.append(
+                        RestingOrder(
+                            order_id=order_id,
+                            market=market,
+                            side="Ask",
+                            price=price,
+                            qty=qty,
+                            owner=owner,
+                        )
+                    )
+                offset += order_size
+
+            return orders
+
+        except Exception:
+            logger.exception(f"Failed to fetch resting orders for {market}")
+            return []
 
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
         """Mint YES+NO pair via mint_pair instruction.

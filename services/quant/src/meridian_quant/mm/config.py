@@ -18,6 +18,7 @@ class MMConfig(BaseSettings):
 
     # Program and config
     program_id: str = Field(..., alias="MERIDIAN_PROGRAM_ID")
+    usdc_mint: str = Field(..., alias="USDC_MINT")
 
     # Trading parameters (domain.md § Market maker defaults)
     spread_cents: int = Field(default=2, description="Quote fair ± spread")
@@ -30,7 +31,8 @@ class MMConfig(BaseSettings):
     min_time_to_close_secs: int = Field(default=120, description="Pull if < 2 min to close")
 
     # Service endpoints (base URL, no path - onchain.py appends /fair-values)
-    fair_values_url: str = Field(default="http://localhost:8080", alias="FAIR_VALUES_URL")
+    # environment.md: QUANT_URL at http://127.0.0.1:4100
+    fair_values_url: str = Field(default="http://127.0.0.1:4100", alias="QUANT_URL")
     service_token: str = Field(..., alias="SERVICE_TOKEN")
 
     # Operation

@@ -19,9 +19,10 @@ from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 
+from .chain import ChainMarketSource, ChainOrderClient
 from .config import MMConfig
 from .loop import MarketMakerLoop
-from .onchain import HttpFairValueSource, OnChainMarketSource, OnChainOrderClient
+from .onchain import HttpFairValueSource
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -42,14 +43,14 @@ async def main() -> None:
     keypair_bytes = json.loads(config.market_maker_keypair)
     keypair = Keypair.from_bytes(bytes(keypair_bytes))
 
-    # Initialize on-chain clients
-    market_source = OnChainMarketSource(rpc_client, program_id)
+    # Initialize on-chain clients (use chain.py implementations, not onchain.py stubs)
+    market_source = ChainMarketSource(rpc_client, program_id)
     fair_value_source = HttpFairValueSource(
         base_url=config.fair_values_url, service_token=config.service_token
     )
-    # Note: USDC mint on devnet (hardcoded for now, could be in config)
-    usdc_mint = Pubkey.from_string("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
-    order_client = OnChainOrderClient(rpc_client, program_id, keypair, usdc_mint)
+    # USDC mint from environment (environment.md)
+    usdc_mint = Pubkey.from_string(config.usdc_mint)
+    order_client = ChainOrderClient(rpc_client, program_id, keypair, usdc_mint)
 
     # Create and start MM loop
     mm_loop = MarketMakerLoop(

@@ -32,6 +32,7 @@ def test_no_keypair_in_logs() -> None:
             {
                 "market_maker_keypair": keypair_str,
                 "program_id": "11111111111111111111111111111112",
+                "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
                 "service_token": "secret_token",
             }
         )
@@ -74,6 +75,7 @@ def test_config_repr_does_not_leak_secrets() -> None:
         {
             "market_maker_keypair": keypair_str,
             "program_id": "11111111111111111111111111111112",
+            "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
             "service_token": "secret_token",
         }
     )

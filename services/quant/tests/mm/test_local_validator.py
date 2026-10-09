@@ -71,6 +71,7 @@ async def test_mm_quotes_all_open_strikes_local_validator() -> None:
             {
                 "market_maker_keypair": keypair_json,
                 "program_id": str(program_id),
+                "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
                 "service_token": "test_token",
                 "rpc_url": "http://localhost:8899",
             }

@@ -84,6 +84,7 @@ async def test_mm_quotes_all_open_strikes_local_validator() -> None:
         {
             "market_maker_keypair": keypair_json,
             "program_id": "11111111111111111111111111111112",
+            "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
             "service_token": "test_token",
         }
     )
