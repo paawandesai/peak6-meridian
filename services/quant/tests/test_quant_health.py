@@ -22,6 +22,7 @@ def test_health_includes_book_coverage_when_mm_running() -> None:
         {
             "market_maker_keypair": keypair_json,
             "program_id": "11111111111111111111111111111112",
+            "usdc_mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
             "service_token": "test_token",
         }
     )
