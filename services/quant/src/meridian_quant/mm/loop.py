@@ -187,16 +187,17 @@ class MarketMakerLoop:
         markets: list[MarketState],
     ) -> None:
         """Generate and place quotes for all open strikes."""
-        # Count current resting orders across all markets (AB-10)
-        current_order_count = 0
+        # Count current resting orders PER MARKET (domain.md: 8 per owner per market)
+        orders_per_market: dict[str, int] = {}
         for market in markets:
             if market.is_open:
                 try:
                     orders = await self._order_client.fetch_resting_orders(market.market)
                     mm_orders = [o for o in orders if o.owner == self._mm_owner]
-                    current_order_count += len(mm_orders)
+                    orders_per_market[market.market] = len(mm_orders)
                 except Exception:
                     logger.exception(f"Failed to fetch orders for {market.ticker}")
+                    orders_per_market[market.market] = 0
 
         for fv in fair_values:
             fv_market: MarketState | None = next(
@@ -235,12 +236,14 @@ class MarketMakerLoop:
                 )
                 continue
 
-            # Check total order cap: placing a two-sided quote adds 2 orders (AB-10)
-            if current_order_count + 2 > self.config.max_orders_per_owner:
+            # Check order cap PER MARKET: placing a two-sided quote adds 2 orders (AB-10)
+            # domain.md: "max 8 resting orders per owner per market"
+            current_market_orders = orders_per_market.get(fv_market.market, 0)
+            if current_market_orders + 2 > self.config.max_orders_per_owner:
                 logger.warning(
-                    f"Skipping {fv.ticker} ${fv.strike_cents/100:.0f}: "
-                    f"would exceed max_orders_per_owner ({self.config.max_orders_per_owner}), "
-                    f"current={current_order_count}"
+                    f"Skipping {fv.ticker} ${fv.strike_cents/100:.0f}: would exceed "
+                    f"max_orders_per_owner per market ({self.config.max_orders_per_owner}), "
+                    f"current in {fv_market.market}={current_market_orders}"
                 )
                 continue
 
@@ -254,9 +257,9 @@ class MarketMakerLoop:
             )
 
             # Place orders (would check existing orders and update/replace as needed)
-            await self._place_quote(market, quote)
-            # Update count after placing (2 orders: bid + ask)
-            current_order_count += 2
+            await self._place_quote(fv_market, quote)
+            # Update count after placing (2 orders per market: bid + ask)
+            orders_per_market[fv_market.market] = orders_per_market.get(fv_market.market, 0) + 2
 
     async def _place_quote(self, market: MarketState, quote: Quote) -> None:
         """Place a two-sided quote (AC1: actually places orders)."""

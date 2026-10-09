@@ -109,10 +109,12 @@ async def test_ab10_order_cap_per_owner() -> None:
 
     # Create MM loop with fakes
     keypair = Keypair()
-    config = MMConfig(
-        market_maker_keypair=str(keypair),
-        program_id="11111111111111111111111111111112",
-        service_token="test_token",
+    config = MMConfig.model_validate(
+        {
+            "market_maker_keypair": str(keypair),
+            "program_id": "11111111111111111111111111111112",
+            "service_token": "test_token",
+        }
     )
 
     market_source = FakeMarketSource(markets)
@@ -130,19 +132,19 @@ async def test_ab10_order_cap_per_owner() -> None:
     # Run loop once
     await mm._run_once()
 
-    # Count total orders placed across all markets
+    # AB-10: Never exceed 8 orders per owner PER MARKET (domain.md § Limits)
     mm_owner = str(mm.keypair.pubkey())
-    total_orders = 0
     for market in markets:
-        count = order_client.count_orders_by_owner(market.market, mm_owner)
-        total_orders += count
+        market_orders = order_client.count_orders_by_owner(market.market, mm_owner)
+        assert market_orders <= 8, (
+            f"Market {market.market}: {market_orders} orders exceeds cap of 8 per market"
+        )
 
-    # AB-10: Never exceed 8 orders per owner per market
-    # (domain.md § Limits)
-    assert total_orders <= 8, f"MM placed {total_orders} orders, exceeding cap of 8"
-
-    # With 5 markets and 8 order cap, should quote exactly 4 markets (8 orders)
-    assert total_orders == 8, f"Expected 8 orders (4 markets), got {total_orders}"
+    # With 5 markets, MM should place 2 orders (bid+ask) in each market = 10 total
+    total_orders = sum(
+        order_client.count_orders_by_owner(m.market, mm_owner) for m in markets
+    )
+    assert total_orders == 10, f"Expected 10 orders (5 markets x 2), got {total_orders}"
 
 
 def test_ab10_prices_always_in_range() -> None:

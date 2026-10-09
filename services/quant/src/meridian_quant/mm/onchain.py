@@ -10,7 +10,6 @@ NotImplementedError with production notes. Test uses FakeOrderClient per operato
 """
 
 import logging
-from typing import Literal
 
 import httpx
 from solana.rpc.async_api import AsyncClient
@@ -111,7 +110,7 @@ class OnChainOrderClient:
         self.usdc_mint = usdc_mint
 
     async def place_order(
-        self, market: str, side: Literal["Bid", "Ask"], price: int, qty: int, owner: str
+        self, market: str, side: str, price: int, qty: int, owner: str
     ) -> int:
         """Place order via solders transaction (operator directive).
 
@@ -149,17 +148,19 @@ class OnChainOrderClient:
 class HttpFairValueSource:
     """HTTP client for M3-01 /fair-values with httpx timeout (operator directive: REAL)."""
 
-    def __init__(self, base_url: str, timeout_secs: float = 5.0) -> None:
+    def __init__(self, base_url: str, service_token: str, timeout_secs: float = 5.0) -> None:
         self.base_url = base_url.rstrip("/")
+        self.service_token = service_token
         self.timeout = timeout_secs
 
     async def fetch_fair_values(self) -> list[FairValue]:
-        """GET M3-01 /fair-values with httpx timeout.
+        """GET M3-01 /fair-values with bearer token and httpx timeout.
 
         REAL implementation complete per operator directive.
         """
+        headers = {"Authorization": f"Bearer {self.service_token}"}
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(f"{self.base_url}/fair-values")
+            resp = await client.get(f"{self.base_url}/fair-values", headers=headers)
             resp.raise_for_status()
             data = resp.json()
             return [

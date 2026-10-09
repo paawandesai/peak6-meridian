@@ -1,0 +1,64 @@
+"""Production entry point for market maker loop.
+
+Usage:
+    python -m meridian_quant.mm.main
+
+Environment variables (see docs/environment.md):
+    MARKET_MAKER_KEYPAIR: JSON array of 64 bytes (required)
+    PROGRAM_ID: Meridian program ID (required)
+    SERVICE_TOKEN: Bearer token for M3-01 /fair-values (required)
+    SOLANA_RPC_URL: RPC endpoint (default: http://localhost:8899)
+    FAIR_VALUES_URL: M3-01 service URL (default: http://localhost:8080/fair-values)
+"""
+
+import asyncio
+import logging
+
+from solana.rpc.async_api import AsyncClient
+from solders.keypair import Keypair
+from solders.pubkey import Pubkey
+
+from .config import MMConfig
+from .loop import MarketMakerLoop
+from .onchain import HttpFairValueSource, OnChainMarketSource, OnChainOrderClient
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
+async def main() -> None:
+    """Start the market maker loop."""
+    # Load config from environment (BaseSettings automatically reads env vars)
+    config = MMConfig()  # type: ignore[call-arg]
+    logger.info("Market maker starting with config: program_id=%s", config.program_id)
+
+    # Initialize Solana connection
+    rpc_client = AsyncClient(config.rpc_url)
+    program_id = Pubkey.from_string(config.program_id)
+    keypair = Keypair.from_base58_string(config.market_maker_keypair)
+
+    # Initialize on-chain clients
+    market_source = OnChainMarketSource(rpc_client, program_id)
+    fair_value_source = HttpFairValueSource(
+        base_url=config.fair_values_url, service_token=config.service_token
+    )
+    # Note: USDC mint on devnet (hardcoded for now, could be in config)
+    usdc_mint = Pubkey.from_string("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
+    order_client = OnChainOrderClient(rpc_client, program_id, keypair, usdc_mint)
+
+    # Create and start MM loop
+    mm_loop = MarketMakerLoop(
+        config=config,
+        market_source=market_source,
+        fair_value_source=fair_value_source,
+        order_client=order_client,
+    )
+
+    logger.info("Starting market maker loop (interval: %.1fs)", config.loop_interval_secs)
+    await mm_loop.start()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
