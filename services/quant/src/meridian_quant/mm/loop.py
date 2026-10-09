@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 from solana.rpc.async_api import AsyncClient
@@ -18,10 +18,19 @@ from .types import FairValue, MarketState
 logger = logging.getLogger(__name__)
 
 
+# Clock protocol for testing (Finding #2)
+Clock = Callable[[], datetime]
+
+
+def _utc_now() -> datetime:
+    """Default clock: current UTC time."""
+    return datetime.now(UTC)
+
+
 class MarketMakerLoop:
     """Main market maker loop (M3-02)."""
 
-    def __init__(self, config: MMConfig) -> None:
+    def __init__(self, config: MMConfig, clock: Clock | None = None) -> None:
         self.config = config
         self.keypair = Keypair.from_base58_string(config.market_maker_keypair)
         self.program_id = Pubkey.from_string(config.program_id)
@@ -29,6 +38,7 @@ class MarketMakerLoop:
         self.rpc_client: AsyncClient | None = None
         self._running = False
         self._coverage = 0.0
+        self._clock = clock or _utc_now  # Finding #2: injectable clock
 
     async def start(self) -> None:
         """Start the market maker loop."""
@@ -71,17 +81,17 @@ class MarketMakerLoop:
                 logger.warning("No fair values available, skipping iteration")
                 return
 
-            # Check pull conditions (stale spot data or near close)
-            if self._should_pull_all_quotes(fair_values):
-                logger.info("Pull condition met, canceling all quotes")
-                await self._cancel_all_quotes()
-                return
-
-            # Get open markets
+            # Get open markets first (needed for close_ts check)
             open_markets = await self._fetch_open_markets()
             if not open_markets:
                 logger.debug("No open markets")
                 self._coverage = 0.0
+                return
+
+            # Check pull conditions (stale spot data or near close)
+            if self._should_pull_all_quotes(fair_values, open_markets):
+                logger.info("Pull condition met, canceling all quotes")
+                await self._cancel_all_quotes()
                 return
 
             # Update inventory from on-chain state
@@ -114,9 +124,14 @@ class MarketMakerLoop:
             logger.exception("Failed to fetch fair values")
             return []
 
-    def _should_pull_all_quotes(self, fair_values: list[FairValue]) -> bool:
-        """Check if we should pull all quotes (stale spot or near close)."""
-        now = datetime.now(UTC)
+    def _should_pull_all_quotes(
+        self, fair_values: list[FairValue], markets: list[MarketState]
+    ) -> bool:
+        """Check if we should pull all quotes (stale spot or near close).
+
+        Finding #2: Now uses injected clock and checks close_ts.
+        """
+        now = self._clock()
 
         # Check for stale spot data (> 10s old)
         for fv in fair_values:
@@ -125,9 +140,16 @@ class MarketMakerLoop:
                 logger.warning(f"Stale spot data for {fv.ticker}: {age_secs:.1f}s old")
                 return True
 
-        # Check for time to close (< 2 min)
-        # Note: This requires market close_ts, implemented in _fetch_open_markets
-        # For now, placeholder
+        # Check for time to close (< 2 min) - Finding #2
+        for market in markets:
+            if market.is_open:
+                time_to_close_secs = market.close_ts - int(now.timestamp())
+                if 0 < time_to_close_secs < self.config.min_time_to_close_secs:
+                    logger.info(
+                        f"Pulling quotes: {time_to_close_secs}s to close "
+                        f"for {market.ticker} (< {self.config.min_time_to_close_secs}s threshold)"
+                    )
+                    return True
 
         return False
 
