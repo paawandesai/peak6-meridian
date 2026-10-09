@@ -2713,10 +2713,13 @@ dependencies = [
  "anchor-spl",
  "base64 0.22.1",
  "bytemuck",
+ "k256",
  "litesvm",
  "meridian",
  "meridian-book",
+ "rand 0.8.8",
  "serde_json",
+ "sha3",
  "solana-sdk",
 ]
 

@@ -1,7 +1,7 @@
 //! RedStone test payload builder (M2-15): locally generated secp256k1 signers + keccak256.
 //! Test-only; never use production keys.
 
-use k256::ecdsa::{SigningKey, Signature, signature::Signer as _};
+use k256::ecdsa::{RecoveryId, Signature, SigningKey};
 use sha3::{Digest, Keccak256};
 
 /// RedStone marker bytes (appended to the end of every payload).
@@ -18,15 +18,11 @@ impl TestSigner {
     /// Generates a new random test signer.
     pub fn generate() -> Self {
         let signing_key = SigningKey::random(&mut rand::thread_rng());
-        let verifying_key = signing_key.verifying_key();
 
-        // Ethereum address: last 20 bytes of keccak256(pubkey)
-        let pubkey_bytes = verifying_key.to_encoded_point(false);
-        let pubkey_uncompressed = pubkey_bytes.as_bytes();
-        // Skip the 0x04 prefix byte, hash the 64-byte pubkey
-        let hash = Keccak256::digest(&pubkey_uncompressed[1..]);
-        let mut ethereum_address = [0u8; 20];
-        ethereum_address.copy_from_slice(&hash[12..32]);
+        // Ethereum address: last 20 bytes of keccak256(uncompressed pubkey without 0x04 prefix)
+        let pk = signing_key.verifying_key().to_encoded_point(false);
+        let h: [u8; 32] = Keccak256::digest(&pk.as_bytes()[1..]).into();
+        let ethereum_address: [u8; 20] = h[12..].try_into().expect("address");
 
         Self {
             signing_key,
@@ -38,22 +34,19 @@ impl TestSigner {
     pub fn ethereum_address(&self) -> [u8; 20] {
         self.ethereum_address
     }
-
     /// Signs the given message bytes and returns the 65-byte signature (r||s||v).
+    /// Signs the given message bytes and returns the 65-byte signature (r||s||v).
+    /// RedStone format: v = recovery_id + 27 (Ethereum convention).
     fn sign(&self, message: &[u8]) -> [u8; 65] {
-        let hash = Keccak256::digest(message);
-        let signature: Signature = self.signing_key.sign(&hash);
-        let (r, s) = signature.split_bytes();
+        let digest: [u8; 32] = Keccak256::digest(message).into();
+        let (sig, recid): (Signature, RecoveryId) = self.signing_key
+            .sign_prehash_recoverable(&digest)
+            .expect("signing failed");
 
-        // Recovery ID: for simplicity, try both and pick the one that recovers correctly
-        // In production RedStone, this is calculated properly
-        let recovery_id = 0u8; // Simplified for tests
-
-        let mut sig_bytes = [0u8; 65];
-        sig_bytes[0..32].copy_from_slice(&r);
-        sig_bytes[32..64].copy_from_slice(&s);
-        sig_bytes[64] = recovery_id;
-        sig_bytes
+        let mut sig65 = [0u8; 65];
+        sig65[..64].copy_from_slice(&sig.to_bytes());
+        sig65[64] = recid.to_byte() + 27;
+        sig65
     }
 }
 

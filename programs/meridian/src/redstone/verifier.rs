@@ -20,8 +20,12 @@ pub fn verify_signature(package: &RedstonePackage) -> Result<[u8; 20]> {
     // Compute keccak256 hash of signable bytes
     let message_hash = keccak::hash(&package.signable_bytes);
 
-    // Extract recovery_id from signature byte 64
-    let recovery_id = package.signature[64];
+    // Extract v from signature byte 64 and convert to recovery_id
+    // RedStone uses Ethereum convention: v = 27 or 28
+    // Solana secp256k1_recover expects recovery_id = 0 or 1
+    let v = package.signature[64];
+    let recovery_id = v.checked_sub(27)
+        .ok_or(MeridianError::RedStoneInvalidSignature)?;
 
     // Prepare signature (r‖s, 64 bytes)
     let mut sig_bytes = [0u8; 64];
