@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import Field, ValidationError
 
+from meridian_ops_agent.budget import BudgetExhausted
 from meridian_ops_agent.llm import LLMClient, LLMRequest
 from meridian_ops_agent.models import (
     Evidence,
@@ -25,7 +26,14 @@ from meridian_ops_agent.prompt import build_prompt
 from meridian_ops_agent.tools import ReadOnlyTools, assert_read_only
 from meridian_ops_agent.validate import validate_draft
 
-__all__ = ["InvestigationResult", "investigate", "parse_llm_draft"]
+__all__ = [
+    "InvestigationResult",
+    "deterministic_note",
+    "investigate",
+    "investigate_with_fallback",
+    "median_cents",
+    "parse_llm_draft",
+]
 
 
 class InvestigationResult(StrictModel):
@@ -35,6 +43,10 @@ class InvestigationResult(StrictModel):
     violations: list[Violation] = Field(default_factory=list)
     evidence: Evidence
     llm_called: bool
+    # Live path only: one draft per incident market when the deterministic fallback ran.
+    drafts: list[OverrideDraft] = Field(default_factory=list)
+    fallback: bool = False
+    fallback_reason: str = ""
 
 
 def investigate(incident: Incident, tools: ReadOnlyTools, llm: LLMClient) -> InvestigationResult:
@@ -78,6 +90,104 @@ def investigate(incident: Incident, tools: ReadOnlyTools, llm: LLMClient) -> Inv
         violations=violations,
         evidence=evidence,
         llm_called=True,
+    )
+
+
+def median_cents(closes: list[int]) -> int:
+    """Median of integer closes; for an even count the floor of the two middle values' mean."""
+    ordered = sorted(closes)
+    mid = len(ordered) // 2
+    return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) // 2
+
+
+def _dollars(cents: int) -> str:
+    return f"{cents // 100}.{cents % 100:02d}"
+
+
+def deterministic_note(evidence: Evidence, calendar: str = "") -> str:
+    """Source table, median, spread and calendar line; no narrative, no untrusted text."""
+    rows = [
+        f"{c.name}: {_dollars(c.close_cents)} (as of {c.as_of.isoformat()})"
+        for c in evidence.closes
+    ]
+    parts = [
+        f"Deterministic note (no model): {evidence.ticker} {evidence.trading_date.isoformat()}.",
+        *rows,
+        f"Median {_dollars(median_cents([c.close_cents for c in evidence.closes]))}; "
+        f"spread {evidence.spread_bps} bps.",
+    ]
+    if calendar:
+        parts.append(f"Calendar: {calendar}")
+    return " ".join(parts)
+
+
+def investigate_with_fallback(
+    incident: Incident,
+    tools: ReadOnlyTools,
+    llm: LLMClient | None,
+    *,
+    calendar: str = "",
+) -> InvestigationResult:
+    """`investigate`, but a missing, failing or over-budget model yields the deterministic draft.
+
+    The fallback proposes the median of the fetched closes for every incident market, with a
+    note that is only the source table. It goes through the same `validate_draft` as a model
+    draft. A rejected model draft (a validation outcome) is *not* replaced by the fallback.
+    """
+    assert_read_only(tools)
+    if llm is not None:
+        try:
+            result = investigate(incident, tools, llm)
+        except Exception as exc:
+            reason = "budget_exhausted" if isinstance(exc, BudgetExhausted) else type(exc).__name__
+            return _fallback(incident, tools, calendar, reason)
+        return result.model_copy(update={"drafts": [result.draft] if result.draft else []})
+    return _fallback(incident, tools, calendar, "no_llm")
+
+
+def _fallback(
+    incident: Incident, tools: ReadOnlyTools, calendar: str, reason: str
+) -> InvestigationResult:
+    reports = tools.source_closes(incident.ticker, incident.trading_date)
+    evidence = Evidence(
+        ticker=incident.ticker,
+        trading_date=incident.trading_date,
+        closes=[r.close for r in reports if r.close is not None],
+    )
+    if not evidence.closes:
+        return InvestigationResult(
+            incident_id=incident.incident_id,
+            status="rejected",
+            violations=[Violation(code="missing_sources", detail="every source failed")],
+            evidence=evidence,
+            llm_called=False,
+            fallback=True,
+            fallback_reason=reason,
+        )
+    price = median_cents([c.close_cents for c in evidence.closes])
+    note = deterministic_note(evidence, calendar)
+    drafts: list[OverrideDraft] = []
+    violations: list[Violation] = []
+    for market in incident.markets:
+        draft = OverrideDraft(
+            market=market,
+            proposed_price_cents=price,
+            sources=evidence.closes,
+            spread_bps=evidence.spread_bps,
+            note=note,
+        )
+        drafts.append(draft)
+        violations.extend(validate_draft(draft, evidence).violations)
+    return InvestigationResult(
+        incident_id=incident.incident_id,
+        status="accepted" if not violations else "rejected",
+        draft=drafts[0],
+        drafts=drafts,
+        violations=violations,
+        evidence=evidence,
+        llm_called=False,
+        fallback=True,
+        fallback_reason=reason,
     )
 
 

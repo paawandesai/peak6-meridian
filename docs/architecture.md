@@ -32,12 +32,22 @@ Business rules and units live in [domain.md](domain.md); this file covers struct
 | `program` | `programs/meridian` | All on-chain state and rules: config, markets, mint/redeem, book, settlement, pause. Emits events for every change |
 | `book` | `crates/meridian-book` | Matching engine over a fixed-capacity book; no Solana types; deterministic |
 | `client` | `packages/client` | Generated Anchor client, PDA helpers, units, intent→instruction mapping for the 4 trade paths, event decoding |
-| `app` | `app/` | Next.js UI (Markets, Trade, Portfolio, History, `/status`, admin); API routes: `/api/faucet`, `/api/market-data` (server-side data-API proxy + fair values), `/api/ops/*` (proxy to ops-agent) |
+| `app` | `app/` | Next.js UI (Markets, Trade, Portfolio, History, `/status`, admin override); API routes: `/api/faucet`, `/api/market-data` (server-side data-API proxy + fair values), `/api/ops/drafts` (proxy to ops-agent drafts) |
 | `automation` | `services/automation` | Strike calculator, NYSE calendar, morning job, settlement job (builds the Switchboard update + `settle_market` tx), alerts, health endpoint |
 | `quant` | `services/quant` | Fair-value engine; market-maker loop; HTTP `GET /fair-values` |
 | `ops-agent` | `services/ops-agent` | On settlement failure: read-only investigation with Claude, incident note, validated override draft; HTTP API for the admin page |
 | Oracle feeds | `oracle/feeds/` | Switchboard feed definitions (two per ticker: Tiingo and Twelve Data official close) + scripts to register/update them |
 | Scripts | `scripts/` | Devnet deploy, lifecycle, e2e, Switchboard spike, CI guard and heartbeat |
+
+### App structure (M3-04, M3-06)
+**Status page** (`/status`): Reads Config and all Markets from the chain, checks vault USDC against `pairsOutstanding × 1_000_000` (base units per pair). Displays liveness (market creation time vs 09:00 ET, settlement delay vs close from on-chain events), on-chain pause state, and any invariant violations. Client-rendered (`"use client"`).
+
+**Admin override flow** (`app/src/components/admin-override/`): Fetches drafts from `/api/ops/drafts` (which proxies ops-agent's `GET /drafts`), validates each draft against the program's override rules (market must be Open/unsettled; `now >= close_ts + override_delay_secs`), and builds `admin_settle_override` transactions for the admin wallet to sign. The proposed price is checked against source range as a sanity cue (not a rejection gate). Drafts that fail the Open or delay check cannot be approved.
+
+**API routes**:
+- `/api/faucet`: Devnet USDC faucet (rate-limited per wallet)
+- `/api/market-data`: Server-side proxy to Tiingo/Twelve Data + quant's fair values
+- `/api/ops/drafts`: Server-side proxy to ops-agent's `GET /drafts`, validates response schema
 
 ## Data flow
 ```mermaid
@@ -110,6 +120,7 @@ flowchart LR
 | Escrow USDC / YES | `["escrow_usdc", market]`, `["escrow_yes", market]` | funds of resting orders |
 | Book (zero-copy) | `["book", market]` | bids[32], asks[32] of {order_id, owner, price, qty, seq}; next_seq |
 | OpenOrders | `["oo", market, owner]` | owner, free_usdc, free_yes, resting_count |
+| LocalFeed | `["local_feed", symbol, [source_slot]]` | Test-only (feature `local-oracle`): holds oracle value and slot for one source (0=Tiingo, 1=Twelve Data) per ticker. **Never in devnet builds** (AB-22) |
 
 Off-chain state: none required. `ops-agent` keeps incidents/drafts in a JSON file on its volume; `automation` keeps run logs.
 

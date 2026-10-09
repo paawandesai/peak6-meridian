@@ -11,7 +11,7 @@ import idl from "./idl/meridian.json";
 /** The program IDL as `anchor build` wrote it (snake_case names; `Program` camel-cases them). */
 export const MERIDIAN_IDL: Idl = idl as Idl;
 
-/** The program ID declared in the IDL (localnet; devnet is set in M2). */
+/** The program ID declared in the IDL (same ID serves localnet and devnet). */
 export const MERIDIAN_PROGRAM_ID = new PublicKey(MERIDIAN_IDL.address);
 
 /** Instruction names in the IDL (snake_case). */
