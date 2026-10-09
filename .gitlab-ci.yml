@@ -515,12 +515,14 @@ heartbeat:
 
 deploy:vercel:
   extends: .deploy
+  interruptible: false
   variables:
     TOOLCHAIN: apt node
     DEPLOY_TARGET: deploy-vercel
 
 deploy:railway:
   extends: .deploy
+  interruptible: false
   variables:
     TOOLCHAIN: apt node
     DEPLOY_TARGET: deploy-railway
