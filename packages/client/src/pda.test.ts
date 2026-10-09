@@ -26,15 +26,15 @@ import { MERIDIAN_IDL, MERIDIAN_PROGRAM_ID } from "./program";
 const FIXTURE = { symbol: "META", tradingDate: 20261006, strikeCents: 68_000n };
 const FIXTURE_OWNER = new PublicKey("11111111111111111111111111111112");
 const EXPECTED = {
-  config: "BTFSRpCGp83nQKfa54dxy3Zu1jX2T94aC2xdtqbVGLtx",
-  market: "BGd5Y6qA5uT2zzgUzsZ3Mmw8m3Y8vJJLRWEybtDuU8im",
-  yesMint: "5rsYKLySZ8TwEroxJrKZhLeG9qRLweMqjuMf7Z2Uyqcz",
-  noMint: "Kpxnc7sKpyprQnjq3cBHkHVEFXgBJ8TcTQ671LK5Hf8",
-  vault: "74tCuYxrAte59R2bCdbcJNcNYvMYYwJ37N4awkuuDsYG",
-  escrowUsdc: "CTuFnW5wvESkenA3RMvZYvUmraF5bEhxm8cZeek2UycW",
-  escrowYes: "5RaodcXqQVcGdfVMJHbN3i6FU4w7Lr5tf4ttcXVmMgv8",
-  book: "HRC4F4DZaMAVY7wqr28E2m1QMLDgCeErJDvqLkwnZvvM",
-  openOrders: "2huqHHnYVfv91styHC5oTgDQzez3vH6ebE5ggUpLE9pH",
+  config: "6Bf88kHFDDjdXG1BEdrj1edkLwWt9pEiKPFp6Ekhkoew",
+  market: "G9bLfxQk3Pvk9Zu2b8HB4zs7YQ6NS3R6Q1VG7TTi95Gr",
+  yesMint: "C8MsZU2Wrm2FS4vGA1u484ZPFKyLcrLPCakaYEAEKNer",
+  noMint: "EcuD66AVujTCoemZ15DeC5EpcoHLEvcPPHrt121Kg69c",
+  vault: "3v343hc9DQxd9ssbfqWoWXjyQMJoUoHC2J2e8WcraJPT",
+  escrowUsdc: "6bRyY9qeL4ZTjR1ozRoDJdtG7exZWwdjw4qCJSa7D6ic",
+  escrowYes: "5YKtYZjoybHXRM4motot1tM7TrezTDQiMG4H1w9kkh8P",
+  book: "8ivHiPDVum1zBLFHite5d9iTwgdxMnQy8JHqSYduVTr9",
+  openOrders: "AkFEKoUmk3CxwGcx33wTquqj5L5gBovamkFgnAYvGxN1",
 };
 
 const encoder = new TextEncoder();

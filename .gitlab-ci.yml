@@ -14,11 +14,24 @@
 #   - rustc / Rust test threads / vitest workers / pnpm -r concurrency are capped (variables).
 #   - Memory-heavy jobs (rustc, next build, coverage, the e2e validator ~1.4 GB RSS) share
 #     `resource_group: meridian-heavy`: one at a time across all Meridian pipelines and both runners.
+#     test:js-py (vitest/pytest, ~1–1.5 GB) has its own `resource_group: meridian-js`: at most one
+#     JS/Python test job at a time, which may run alongside one Rust heavy job.
 #   - MR pipelines skip the Rust jobs when no Rust/program input changed; MR coverage is manual.
 #   - e2e prefers the prebuilt program artifact when `build` ran; otherwise it builds locally
 #     (so app/services-only MRs still get e2e without forcing lint:rust / test:rust).
 #   - Cargo caches use a stable key (toolchain + CARGO_CACHE_VERSION), not Cargo.lock: a new
 #     dependency no longer means a cold 60–90 min rebuild. Bump CARGO_CACHE_VERSION to reset.
+#
+# Runners and path rules (Paawan 2026-10-08):
+#   - Light MR jobs (guard:human-files, lint:js-py, typecheck, test:js-py) carry the runner tag
+#     $LIGHT_RUNNER_TAG = `meridian-light` in MR pipelines only. That tag is on both Vultr runners
+#     (#291, #235) and on the box runner #296 (shell executor), so they run on whichever is free.
+#     On main the variable is empty and those jobs stay untagged (Vultr #291 only): main pipelines
+#     receive the protected CI variables (keypairs, deploy tokens), which must never reach the box.
+#     Nothing that needs a secret, Docker, Rust or the validator gets the tag.
+#   - MR pipelines run Rust jobs only for Rust/program inputs (.rust-paths), test:js-py only for
+#     app/package inputs (.app-paths), e2e and manual coverage only for code inputs (.e2e-paths).
+#     Main runs every job. Docs-only MRs run only the gate, guard, lint, typecheck, secrets, audit.
 
 stages:
   - .pre
@@ -32,7 +45,11 @@ stages:
 # branch pipelines.
 workflow:
   rules:
+    # MR pipelines route the light jobs to the `meridian-light` runners (see the header). Set at
+    # the workflow level because tag expansion does not see job-level rules:variables.
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      variables:
+        LIGHT_RUNNER_TAG: meridian-light
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -53,6 +70,9 @@ variables:
   PNPM_R_FLAGS: "--workspace-concurrency=1"
   # Part of the cargo cache key; bump (v2, v3, ...) to drop a target/ that has grown too big.
   CARGO_CACHE_VERSION: "v1"
+  # Runner tag for the light jobs; set to `meridian-light` by workflow:rules for MR pipelines,
+  # empty (= untagged, Vultr #291 only) everywhere else. See the header.
+  LIGHT_RUNNER_TAG: ""
 
 default:
   image: ubuntu:24.04
@@ -174,6 +194,43 @@ default:
         paths: *e2e-paths
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
+# Inputs of the JS/Python unit tests (app, packages, services, oracle, tests, scripts and their
+# manifests/configs). MR pipelines run test:js-py only when one of these changed; main always.
+.app-paths: &app-paths
+  - app/**/*
+  - packages/**/*
+  - services/**/*
+  - oracle/**/*
+  - tests/**/*
+  - scripts/**/*
+  - package.json
+  - pnpm-lock.yaml
+  - pnpm-workspace.yaml
+  - .npmrc
+  - .nvmrc
+  - tsconfig.base.json
+  - eslint.config.mjs
+  - pyproject.toml
+  - uv.lock
+  - .python-version
+  - Makefile
+  - .gitlab-ci.yml
+
+# Light jobs: MR pipelines route them to the `meridian-light` runners (Vultr #291/#235 or the box
+# runner #296) through $LIGHT_RUNNER_TAG (workflow:rules); main stays untagged on Vultr. Jobs list
+# `tags: [$LIGHT_RUNNER_TAG]`.
+.light-mr-and-main:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+.light-on-app-change:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        paths: *app-paths
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
 # ---- manual MR gate ------------------------------------------------------------------------
 # MR pipelines are created but blocked here (operator-rules §6). The operator plays this ONE job
 # on the ready head (after local tests + Cursor review); every later stage waits on it through
@@ -201,6 +258,7 @@ guard:human-files:
   stage: check
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  tags: [$LIGHT_RUNNER_TAG]
   variables:
     TOOLCHAIN: apt
     GIT_DEPTH: "0"
@@ -211,7 +269,6 @@ guard:human-files:
 lint:rust:
   stage: check
   extends: .on-rust-change
-  resource_group: meridian-heavy
   timeout: 45 minutes
   variables:
     TOOLCHAIN: apt rust
@@ -224,7 +281,8 @@ lint:rust:
 
 lint:js-py:
   stage: check
-  extends: .on-mr-and-main
+  extends: .light-mr-and-main
+  tags: [$LIGHT_RUNNER_TAG]
   variables:
     TOOLCHAIN: apt node uv
   cache:
@@ -236,7 +294,8 @@ lint:js-py:
 
 typecheck:
   stage: check
-  extends: .on-mr-and-main
+  extends: .light-mr-and-main
+  tags: [$LIGHT_RUNNER_TAG]
   variables:
     TOOLCHAIN: apt node uv
   cache:
@@ -326,8 +385,11 @@ test:rust:
 
 test:js-py:
   stage: test
-  extends: .on-mr-and-main
-  resource_group: meridian-heavy
+  extends: .light-on-app-change
+  tags: [$LIGHT_RUNNER_TAG]
+  # Own group (not meridian-heavy): one JS/Python test job at a time across all Meridian
+  # pipelines, so it no longer queues behind Rust builds but never stacks on the 8 GB Vultr box.
+  resource_group: meridian-js
   variables:
     TOOLCHAIN: apt node uv
   cache:
@@ -337,16 +399,19 @@ test:js-py:
     - make install-js install-py
     - make test-js-py-unit test-js-py-security
 
-# Coverage gate: automatic on main, manual (non-blocking) on MRs. meridian-book has no
-# dependencies, so its own small cargo cache stays separate from `sbf`.
+# Coverage gate: automatic on main, manual (non-blocking) on MRs that change code (.e2e-paths:
+# Rust, app, packages, services, tests). meridian-book has no dependencies, so its own small
+# cargo cache stays separate from `sbf`.
 coverage:
   stage: test
-  resource_group: meridian-heavy
+  resource_group: meridian-heavy-b
   # Cold toolchain cache compiles cargo-llvm-cov (like cargo-audit, ~25 min); warm ~5–10 min.
   timeout: 45 minutes
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        paths: *e2e-paths
       when: manual
       allow_failure: true
   variables:
@@ -362,8 +427,9 @@ coverage:
     - make coverage
 
 # ---- e2e ----------------------------------------------------------------------------------
-# Tagged `heavy` (unchanged): end-to-end jobs run one at a time on the shared runner; every other
-# job is untagged and runs on the dedicated Meridian runner. When `build` produced artifacts,
+# Tagged `heavy` (unchanged): end-to-end jobs run one at a time on the shared runner; the light
+# jobs carry $LIGHT_RUNNER_TAG (see the header); every other job is untagged and runs on the
+# dedicated Meridian runner. When `build` produced artifacts,
 # scripts/e2e.sh loads the prebuilt .so at genesis (E2E_PREBUILT=1). Otherwise it builds and
 # deploys as before (app/services-only MRs). Cargo cache kept for that fallback path.
 e2e:
@@ -374,8 +440,10 @@ e2e:
       optional: true
     - job: test:rust
       optional: true
+    # Optional: Rust-only MRs run e2e without test:js-py (main always has both).
     - job: test:js-py
-  resource_group: meridian-heavy
+      optional: true
+  resource_group: meridian-heavy-b
   timeout: 2 hours
   tags:
     - heavy
