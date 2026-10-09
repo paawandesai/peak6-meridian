@@ -21,6 +21,7 @@ Environment variables (see docs/environment.md):
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -40,6 +41,7 @@ from .chain import ChainMarketSource, ChainOrderClient
 from .config import MMConfig
 from .loop import MarketMakerLoop
 from .onchain import HttpFairValueSource
+from .types import MarketState
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -47,39 +49,56 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class MarketCache:
+    """Thread-safe cache of open markets updated by MM loop."""
+
+    def __init__(self) -> None:
+        self._markets: list[MarketState] = []
+        self._lock = threading.Lock()
+
+    def update(self, markets: list[MarketState]) -> None:
+        """Update cached markets (called from MM loop)."""
+        with self._lock:
+            self._markets = markets
+
+    def get(self) -> list[MarketState]:
+        """Get cached markets (called from HTTP handler thread)."""
+        with self._lock:
+            return self._markets.copy()
+
+
 class OnChainSources:
-    """Sources implementation using on-chain markets and live price providers."""
+    """Sources implementation using cached markets and live price providers.
+
+    Markets are cached from the MM loop to avoid async-in-sync event loop issues.
+    The HTTP handler thread reads from the cache; the MM loop updates it.
+    """
 
     def __init__(
         self,
-        chain_market_source: ChainMarketSource,
+        market_cache: MarketCache,
         http_client: httpx.Client,
         finnhub_key: str,
         tiingo_key: str,
     ) -> None:
-        self._chain_market_source = chain_market_source
+        self._market_cache = market_cache
         self._http_client = http_client
         self._finnhub_key = finnhub_key
         self._tiingo_key = tiingo_key
 
     def markets(self) -> list[MarketInfo]:
-        """Fetch open markets from on-chain via ChainMarketSource (synchronous wrapper)."""
-        # Run async fetch_open_markets in a new event loop (called from sync HTTP handler)
-        loop = asyncio.new_event_loop()
-        try:
-            markets = loop.run_until_complete(self._chain_market_source.fetch_open_markets())
-            return [
-                MarketInfo(
-                    market=m.market,
-                    ticker=m.ticker,
-                    strike_cents=m.strike_cents,
-                    close_ts=m.close_ts,
-                )
-                for m in markets
-                if m.is_open
-            ]
-        finally:
-            loop.close()
+        """Get open markets from cache (populated by MM loop)."""
+        cached_markets = self._market_cache.get()
+        return [
+            MarketInfo(
+                market=m.market,
+                ticker=m.ticker,
+                strike_cents=m.strike_cents,
+                close_ts=m.close_ts,
+            )
+            for m in cached_markets
+            if m.is_open
+        ]
 
     def spot(self, ticker: str) -> Spot:
         """Fetch live spot price from Finnhub."""
@@ -95,6 +114,20 @@ class OnChainSources:
             return fetch_daily_closes(self._http_client, ticker, self._tiingo_key, today)
         except Exception as e:
             raise PriceError(f"Failed to fetch closes for {ticker}: {e}") from e
+
+
+async def update_market_cache(
+    market_source: ChainMarketSource, cache: MarketCache, interval_secs: float
+) -> None:
+    """Background task: periodically fetch markets and update cache for HTTP handler."""
+    while True:
+        try:
+            markets = await market_source.fetch_open_markets()
+            cache.update(markets)
+            logger.debug(f"Updated market cache: {len(markets)} markets")
+        except Exception:
+            logger.exception("Failed to update market cache")
+        await asyncio.sleep(interval_secs)
 
 
 async def main() -> None:
@@ -127,6 +160,9 @@ async def main() -> None:
     usdc_mint = Pubkey.from_string(config.usdc_mint)
     order_client = ChainOrderClient(rpc_client, program_id, keypair, usdc_mint)
 
+    # Create market cache for HTTP handler (updated by background task)
+    market_cache = MarketCache()
+
     # Create MM loop (for quoting; also fetches fair values internally)
     # Note: MM loop will call this same service's /fair-values endpoint at QUANT_URL
     # Placeholder fair_value_source (will be set after HTTP server starts)
@@ -140,8 +176,8 @@ async def main() -> None:
     # Create HTTP client for price providers (synchronous, used by HTTP handler thread)
     http_client = httpx.Client(timeout=httpx.Timeout(3.0))
 
-    # Create Sources for /fair-values endpoint
-    sources = OnChainSources(market_source, http_client, finnhub_key, tiingo_key)
+    # Create Sources for /fair-values endpoint (uses market cache, not async calls)
+    sources = OnChainSources(market_cache, http_client, finnhub_key, tiingo_key)
 
     # Create Service with mm_loop injected (enables book_coverage in /health)
     service = Service(sources=sources, token=service_token, mm_loop=mm_loop)
@@ -158,11 +194,19 @@ async def main() -> None:
     )
     mm_loop._fair_value_source = fair_value_source
 
+    # Start background task to update market cache (for /fair-values endpoint)
+    cache_update_task = asyncio.create_task(
+        update_market_cache(market_source, market_cache, interval_secs=30.0)
+    )
+
     # Start MM loop (blocks until stopped)
     logger.info("Starting market maker loop (interval: %.1fs)", config.loop_interval_secs)
     try:
         await mm_loop.start()
     finally:
+        cache_update_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await cache_update_task
         server.shutdown()
         http_client.close()
         await rpc_client.close()
