@@ -41,7 +41,8 @@ commits = [
   "c01b06527ea6861f62c52837adb09b58b2d5780e", # M2-15b oracle-config.ts: public RedStone signer addresses
   "5773805adb071ef55f555d9a946584c3b354bbe2", # M2-15b oracle-config.test.ts: public RedStone test address
   "2f4fe2f5b1208de5b5d4065844657a6282bcb19a", # M2-15b oracle-config.test.ts: public RedStone test address (rebased)
-  "4ebfd5030df352a8a4f96a2b70021927c2bddff8", # M3-10 Pyth: fake test secret in client.test.ts
+  "4ebfd5030df352a8a4f96a2b70021927c2bddff8", # MR !86: 'sk-pyth-secret-12345' test fixture in client.test.ts (M3-10)
+  "b246ad89c9f2472a86479a4c5421ac53ef606350", # MR !86: same fixture still present in property tests commit (M3-10)
 ]
 
 [[allowlists]]
