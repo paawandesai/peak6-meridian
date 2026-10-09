@@ -106,6 +106,14 @@ pub fn handle_post_redstone_price(
     redstone_price.posted_slot = clock.slot;
     redstone_price.signer_count = seen_signers.len() as u8;
 
+    emit!(crate::events::RedstonePricePosted {
+        symbol,
+        value: median_value,
+        package_timestamp_ms: expected_timestamp,
+        posted_slot: clock.slot,
+        signer_count: seen_signers.len() as u8,
+    });
+
     Ok(())
 }
 

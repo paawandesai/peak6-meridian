@@ -102,3 +102,19 @@ pub struct Paused {
 pub struct Unpaused {
     pub admin: Pubkey,
 }
+
+#[event]
+pub struct OracleConfigSet {
+    pub signer_count: u8,
+    pub signer_threshold: u8,
+    pub max_package_delay_secs: i64,
+}
+
+#[event]
+pub struct RedstonePricePosted {
+    pub symbol: [u8; SYMBOL_LEN],
+    pub value: u128,
+    pub package_timestamp_ms: i64,
+    pub posted_slot: u64,
+    pub signer_count: u8,
+}

@@ -74,5 +74,11 @@ pub fn handle_set_oracle_config(
     oracle_config.signer_threshold = params.signer_threshold;
     oracle_config.max_package_delay_secs = params.max_package_delay_secs;
 
+    emit!(crate::events::OracleConfigSet {
+        signer_count: oracle_config.signers.len() as u8,
+        signer_threshold: oracle_config.signer_threshold,
+        max_package_delay_secs: oracle_config.max_package_delay_secs,
+    });
+
     Ok(())
 }
