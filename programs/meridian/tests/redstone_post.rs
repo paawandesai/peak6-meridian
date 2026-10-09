@@ -917,3 +917,87 @@ fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
         .send_with_budget(instruction3, &[&payer], 400_000);
     expect_success(&result3);
 }
+
+#[test]
+fn post_redstone_price_multi_datapoint_ticker_not_first() {
+    // AC6: parser finds matching feed even when not first in multi-datapoint package
+    let signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
+    let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
+
+    let mut harness = setup_with_signers(addresses);
+
+    // Market already created by setup_with_signers for NVDA
+    let ticker = symbol("NVDA");
+    let close_ts_ms = 1700000000i64 * 1000;
+
+    // Build multi-datapoint payload with 3 feeds (tests ≥2 datapoints per AC6)
+    // Parser must find and extract NVDA's value from the multi-feed package
+    let data_points = &[
+        ("NVDA", 2050_0000_0000u128), // Target ticker
+        ("BTC", 50000_0000_0000u128),
+        ("ETH", 3000_0000_0000u128),
+    ];
+    let signing_signers = &signers[0..3];
+    let payload = RedstonePayloadBuilder::build_multi_datapoint(
+        data_points,
+        close_ts_ms + 100_000, // In-window
+        signing_signers,
+    );
+
+    let payer = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &ticker,
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
+
+    let ix = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        payload,
+    };
+
+    let accounts = meridian::accounts::PostRedstonePrice {
+        oracle_config: oracle_config_pda,
+        redstone_price: price_pda,
+        payer: payer.pubkey(),
+        system_program: system_program::ID,
+        market: market_pda,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&payer], 400_000);
+    expect_success(&result);
+
+    // Verify NVDA's value was stored (not BTC or ETH)
+    let account = harness
+        .harness
+        .svm
+        .get_account(&price_pda)
+        .expect("RedstonePrice account should exist");
+    let mut data = account.data.as_slice();
+    let price = RedstonePrice::try_deserialize(&mut data).unwrap();
+    assert_eq!(
+        price.value,
+        2050_0000_0000u128,
+        "Should store NVDA value, not BTC or ETH"
+    );
+    assert_eq!(price.symbol, ticker);
+}

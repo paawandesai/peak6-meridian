@@ -129,7 +129,6 @@ fn parse_data_package(
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
     let dp_count = read_u24_be(payload, *cursor)?;
     require!(dp_count > 0, MeridianError::RedStoneMalformedPayload);
-    require!(dp_count <= 10, MeridianError::RedStoneMalformedPayload); // Safety: cap at 10 data points
 
     // Data point value byte size (4 bytes, official format)
     *cursor = cursor
@@ -202,7 +201,7 @@ fn parse_data_package(
             .ok_or(MeridianError::RedStoneMalformedPayload)?;
 
         // Check if this is the target feed_id
-        if fid == target_feed_id && !found {
+        if fid == &target_feed_id[..] && !found {
             // RedStone u256: validate high 16 bytes are zero (fail-closed per domain.md: stored as u128)
             if val[0..16].iter().any(|&b| b != 0) {
                 return Err(MeridianError::RedStoneMalformedPayload.into());

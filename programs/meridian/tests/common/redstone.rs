@@ -151,6 +151,62 @@ impl RedstonePayloadBuilder {
     pub fn signer_addresses(&self) -> Vec<[u8; 20]> {
         self.signers.iter().map(|s| s.ethereum_address()).collect()
     }
+
+    /// Builds a payload with multiple data points per package (for testing multi-feed packages).
+    /// Each signer signs all data points together.
+    pub fn build_multi_datapoint(data_points: &[(& str, u128)], timestamp_ms: i64, signers: &[TestSigner]) -> Vec<u8> {
+        let mut payload = Vec::new();
+
+        // Build each data package (one per signer, each signs all data points)
+        for signer in signers {
+            let mut package_signable = Vec::new();
+
+            // Add all data points (feed_id + value)
+            for (symbol, value) in data_points {
+                // Feed ID (32 bytes)
+                let mut feed_id = [0u8; 32];
+                let symbol_bytes = symbol.as_bytes();
+                let len = symbol_bytes.len().min(32);
+                feed_id[..len].copy_from_slice(&symbol_bytes[..len]);
+                package_signable.extend_from_slice(&feed_id);
+
+                // Value as 32-byte big-endian u256
+                let mut value_bytes = [0u8; 32];
+                value_bytes[16..32].copy_from_slice(&value.to_be_bytes());
+                package_signable.extend_from_slice(&value_bytes);
+            }
+
+            // Timestamp (6 bytes big-endian)
+            let timestamp_bytes = timestamp_ms.to_be_bytes();
+            package_signable.extend_from_slice(&timestamp_bytes[2..8]);
+
+            // Data point value byte size (4 bytes big-endian) = 32
+            package_signable.extend_from_slice(&32u32.to_be_bytes());
+
+            // Data points count (3 bytes big-endian)
+            let dp_count_bytes = (data_points.len() as u32).to_be_bytes();
+            package_signable.extend_from_slice(&dp_count_bytes[1..4]);
+
+            // Sign THIS package's signable bytes
+            let signature = signer.sign(&package_signable);
+
+            // Add to payload: signable bytes + signature
+            payload.extend_from_slice(&package_signable);
+            payload.extend_from_slice(&signature);
+        }
+
+        // Data packages count (2 bytes big-endian)
+        payload.extend_from_slice(&(signers.len() as u16).to_be_bytes());
+
+        // Unsigned metadata (empty for tests)
+        let metadata_size_bytes = 0u32.to_be_bytes();
+        payload.extend_from_slice(&metadata_size_bytes[1..4]);
+
+        // RedStone marker
+        payload.extend_from_slice(REDSTONE_MARKER);
+
+        payload
+    }
 }
 
 #[cfg(test)]
