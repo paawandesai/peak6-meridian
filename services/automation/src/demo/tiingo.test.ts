@@ -7,10 +7,10 @@ import { createTiingoClient } from "./tiingo";
 
 describe("Tiingo client", () => {
   it("fetches EOD close price", async () => {
-    const mockFetch = async (url: string) => {
-      expect(url).toContain("AAPL");
-      expect(url).toContain("2024-10-08");
-      expect(url).toContain("token=test-key");
+    const mockFetch: typeof fetch = async (url) => {
+      expect(String(url)).toContain("AAPL");
+      expect(String(url)).toContain("2024-10-08");
+      expect(String(url)).toContain("token=test-key");
       return {
         ok: true,
         json: async () => [{ date: "2024-10-08T00:00:00.000Z", close: 230.5 }],
@@ -29,7 +29,7 @@ describe("Tiingo client", () => {
   it("redacts API key from logs", async () => {
     const logs: Array<{ level: string; event: string; data: unknown }> = [];
 
-    const mockFetch = async () =>
+    const mockFetch: typeof fetch = async () =>
       ({
         ok: true,
         json: async () => [{ date: "2024-10-08", close: 680.0 }],
@@ -50,7 +50,7 @@ describe("Tiingo client", () => {
   });
 
   it("throws on HTTP error", async () => {
-    const mockFetch = async () =>
+    const mockFetch: typeof fetch = async () =>
       ({
         ok: false,
         status: 401,
@@ -66,7 +66,7 @@ describe("Tiingo client", () => {
   });
 
   it("throws when no data returned", async () => {
-    const mockFetch = async () =>
+    const mockFetch: typeof fetch = async () =>
       ({
         ok: true,
         json: async () => [],
@@ -83,7 +83,7 @@ describe("Tiingo client", () => {
   });
 
   it("throws on invalid response structure", async () => {
-    const mockFetch = async () =>
+    const mockFetch: typeof fetch = async () =>
       ({
         ok: true,
         json: async () => [{ date: "2024-10-08" }], // missing 'close'
