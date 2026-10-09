@@ -115,6 +115,14 @@ class OpsApp:
 def make_server(app: OpsApp, host: str, port: int) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         def _serve(self) -> None:
+            # Check authorization before reading the body (DoS mitigation)
+            if not app._authorized(self.headers.get("Authorization", "")):
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "missing or invalid bearer token"}')
+                return
+
             length_str = self.headers.get("Content-Length")
             try:
                 length = int(length_str) if length_str else 0
