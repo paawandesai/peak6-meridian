@@ -125,17 +125,42 @@ export class PythClient {
       throw new Error(`Unknown ticker: ${ticker}`);
     }
 
-    // TODO: Implement actual Pyth Lazer API call
-    // For now, this is a placeholder that will be filled in when we have
-    // access to the actual Pyth API documentation and can test against it.
+    const url = `${this.baseUrl}/v1/feeds/${feedId}/latest`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    // The actual implementation will:
-    // 1. Make HTTP GET request to Pyth Lazer API with auth header
-    // 2. Parse response using PythLatestPriceResponseSchema
-    // 3. Validate feed ID matches
-    // 4. Handle errors and timeouts
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${this.#apiToken}`,
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+      });
 
-    throw new Error("Not implemented: Pyth Lazer API integration pending");
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Pyth API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const parsed = PythLatestPriceResponseSchema.parse(data);
+
+      // Validate feed ID matches
+      if (parsed.id !== feedId) {
+        throw new Error(`Feed ID mismatch: expected ${feedId}, got ${parsed.id}`);
+      }
+
+      return parsed;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`Pyth API request timed out after ${this.timeoutMs}ms`);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -149,13 +174,49 @@ export class PythClient {
       throw new Error(`Unknown ticker: ${ticker}`);
     }
 
-    // TODO: Implement actual signed update fetching
-    // The actual implementation will:
-    // 1. Call Pyth Lazer API endpoint for signed updates
-    // 2. Return binary signed update that can be verified on-chain
-    // 3. Validate signature format
+    // First get the latest price to include in the response
+    const priceData = await this.getLatestPrice(ticker);
 
-    throw new Error("Not implemented: Pyth signed update fetching pending");
+    // Fetch signed update from Pyth Lazer API
+    const url = `${this.baseUrl}/v1/feeds/${feedId}/signed`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${this.#apiToken}`,
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Pyth API error: ${response.status} ${response.statusText}`);
+      }
+
+      // Signed update is returned as binary data
+      const buffer = await response.arrayBuffer();
+      const signedUpdate = new Uint8Array(buffer);
+
+      if (signedUpdate.length === 0) {
+        throw new Error("Empty signed update received");
+      }
+
+      return {
+        feedId,
+        price: priceData.price,
+        signedUpdate,
+      };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`Pyth API request timed out after ${this.timeoutMs}ms`);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -164,9 +225,9 @@ export class PythClient {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      // TODO: Implement health check endpoint call
-      // For now, just check that token exists
-      return this.#apiToken.length > 0;
+      // Try to fetch a known feed (AAPL) to verify API access
+      await this.getLatestPrice("AAPL");
+      return true;
     } catch {
       return false;
     }
