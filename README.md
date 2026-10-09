@@ -62,7 +62,7 @@ make deploy-devnet  # Deploys program, creates test-USDC mint, initializes confi
 
 ## Demo: Trading a Binary Contract
 
-> **Note:** AC3 screenshots require running `make dev` to capture UI. Text walkthrough provided below. (AC3 unmet - screenshots pending environment setup)
+> **Full walkthrough with screenshots:** [docs/demo.md](docs/demo.md)
 
 Here's how to trade "Will AAPL close ≥ $230.00 today?" on devnet:
 
@@ -86,6 +86,8 @@ Here's how to trade "Will AAPL close ≥ $230.00 today?" on devnet:
 4. Review: "You pay $X.XX. You win $10.00 if AAPL closes ≥ $230.00"
 5. Click "Place Order"
 6. Sign transaction in wallet
+
+![Trade Page](docs/demo/02-trade-desktop.png)
 
 Your position appears in the Portfolio page.
 
