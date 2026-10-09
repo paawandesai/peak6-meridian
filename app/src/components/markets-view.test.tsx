@@ -5,6 +5,8 @@ import { MarketsView } from "./markets-view";
 import { market, reader, withReader } from "@/test-utils";
 
 const NOW = 1_800_000_000;
+/** The ET trading date of `NOW` (2027-01-15 ET): UI-03 AC1 scopes the page to the active date. */
+const TODAY = 20270115;
 
 describe("MarketsView", () => {
   it("shows a loading state while markets are fetched", () => {
@@ -14,7 +16,7 @@ describe("MarketsView", () => {
 
   it("shows an empty state", async () => {
     render(withReader(reader(), <MarketsView />));
-    expect(await screen.findByText(/No markets yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No markets today/)).toBeInTheDocument();
   });
 
   it("shows the error message when the fetch fails", async () => {
@@ -29,10 +31,34 @@ describe("MarketsView", () => {
 
   it("lists markets grouped by ticker with strike, status and pairs outstanding", async () => {
     const markets = [
-      market({ address: "a", ticker: "NVDA", strikeCents: 15_000n, pairsOutstanding: 1_200n }),
-      market({ address: "b", ticker: "AAPL", strikeCents: 22_000n, pairsOutstanding: 3n }),
-      market({ address: "c", ticker: "AAPL", strikeCents: 23_000n, closeTs: BigInt(NOW - 1) }),
-      market({ address: "d", ticker: "AAPL", strikeCents: 24_000n, settled: true }),
+      market({
+        address: "a",
+        ticker: "NVDA",
+        tradingDate: TODAY,
+        strikeCents: 15_000n,
+        pairsOutstanding: 1_200n,
+      }),
+      market({
+        address: "b",
+        ticker: "AAPL",
+        tradingDate: TODAY,
+        strikeCents: 22_000n,
+        pairsOutstanding: 3n,
+      }),
+      market({
+        address: "c",
+        ticker: "AAPL",
+        tradingDate: TODAY,
+        strikeCents: 23_000n,
+        closeTs: BigInt(NOW - 1),
+      }),
+      market({
+        address: "d",
+        ticker: "AAPL",
+        tradingDate: TODAY,
+        strikeCents: 24_000n,
+        settled: true,
+      }),
     ];
     render(
       withReader(
