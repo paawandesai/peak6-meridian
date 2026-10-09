@@ -198,8 +198,14 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
         print(f"Found {len(open_markets)} open markets")
         assert len(open_markets) >= 2, f"Expected 2+ markets, got {len(open_markets)}"
 
-        # Create fake fair values for all strikes
-        now = datetime.now(UTC)
+        # Pin clock to seeded trading_date (e2e seed creates markets on fixture 2026-10-06)
+        # Set to 2026-10-06 14:00 ET (18:00 UTC) to match seeded markets' trading session
+        seeded_trading_date_et = datetime(2026, 10, 6, 18, 0, tzinfo=UTC)  # 14:00 ET
+
+        def pinned_clock() -> datetime:
+            return seeded_trading_date_et
+
+        # Create fake fair values for all strikes with as_of matching pinned clock
         fair_values = [
             FairValue(
                 market=m.market,
@@ -208,18 +214,19 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
                 fair_cents=50,
                 sigma=0.2,
                 spot=230.0,
-                as_of=now,
+                as_of=seeded_trading_date_et,  # Match pinned clock
             )
             for m in open_markets
         ]
         fv_source = FakeFairValueSource(fair_values)
 
-        # Create and run MM loop
+        # Create and run MM loop with pinned clock
         mm_loop = MarketMakerLoop(
             config=config,
             market_source=market_source,
             fair_value_source=fv_source,
             order_client=order_client,
+            clock=pinned_clock,  # Pin to seeded trading_date
         )
 
         # AC1: One _run_once must leave bid AND ask on every open strike
