@@ -168,8 +168,12 @@ async function main(): Promise<void> {
     // Stage 2: Ensure config exists
     await ensureDeployed(ctx);
 
-    // Stage 3: Create a market that will close in 3 minutes
-    console.log("\nStage 3: Creating test market");
+    // Stage 3: Pin META local feeds in config
+    console.log("\nStage 3: Pinning META local feeds in config");
+    await pinLocalFeeds(ctx, "META");
+
+    // Stage 4: Create a market that will close in 3 minutes
+    console.log("\nStage 4: Creating test market");
     const marketKey = await createTestMarket(ctx);
     console.log(
       `  Market key: ${marketKey.symbol} ${marketKey.tradingDate} $${Number(marketKey.strikeCents) / 100}`,
@@ -230,6 +234,47 @@ async function ensureDeployed(ctx: DemoContext): Promise<void> {
     console.log(`  Config not found - deploy with scripts/deploy first`);
     throw new Error("Config account does not exist. Run deployment first.");
   }
+}
+
+async function pinLocalFeeds(ctx: DemoContext, symbol: string): Promise<void> {
+  const configAccount = await ctx.program.account.config.fetch(ctx.config);
+
+  // Derive local feed PDAs for this symbol (AC1: settle_market requires config-pinned feeds)
+  const feeds: [PublicKey, PublicKey] = [
+    PublicKey.findProgramAddressSync(
+      [Buffer.from("local_feed"), symbolBytes(symbol), Buffer.from([0])],
+      ctx.program.programId,
+    )[0],
+    PublicKey.findProgramAddressSync(
+      [Buffer.from("local_feed"), symbolBytes(symbol), Buffer.from([1])],
+      ctx.program.programId,
+    )[0],
+  ];
+
+  // Local feed hash is the PDA address itself (oracle::local_reading)
+  const feedHashes: [Uint8Array, Uint8Array] = [feeds[0].toBytes(), feeds[1].toBytes()];
+
+  await ctx.program.methods
+    .updateConfig(
+      configParamsArg({
+        automationAuthority: configAccount.automationAuthority,
+        maxStalenessSlots: BigInt(configAccount.maxStalenessSlots.toString()),
+        maxConfBps: configAccount.maxConfBps,
+        overrideDelaySecs: BigInt(configAccount.overrideDelaySecs.toString()),
+        tickers: [{ index: 0, ticker: { symbol, feeds, feedHashes } }],
+      }),
+    )
+    .accountsStrict({
+      config: ctx.config,
+      admin: ctx.admin.publicKey,
+      usdcMint: configAccount.usdcMint,
+    })
+    .signers([ctx.admin])
+    .rpc();
+
+  console.log(`  Pinned ${symbol} local feeds in config slot 0`);
+  console.log(`    Feed 0: ${feeds[0].toString()}`);
+  console.log(`    Feed 1: ${feeds[1].toString()}`);
 }
 
 async function createTestMarket(ctx: DemoContext): Promise<MarketKey> {
