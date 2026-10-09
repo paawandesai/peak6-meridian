@@ -7,6 +7,10 @@
  * Usage: tsx scripts/deploy/src/deploy-quant-ops.ts <quant|ops-agent> [--dry-run]
  */
 
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { runCommand } from "./lib/process";
 import { deployRailway, planRailway, type RailwayRun } from "./platform/railway";
 import type { PlatformDeps } from "./platform/platform";
 import {
@@ -96,35 +100,24 @@ export async function runQuantOpsDeployCli(
   return 0;
 }
 
-// CLI entry point when run directly
-if (require.main === module) {
-  const { spawnSync } = require("child_process");
-  const path = require("path");
-  const repoRoot = path.resolve(__dirname, "../../..");
+// CLI entry point - runs directly like deploy-platform.ts
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
-  const deps: CliDeps = {
-    fetch: fetch,
-    log: (line: string) => console.log(line),
-    sleep: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
-    repoRoot,
-    run: async (command, args, options) => {
-      const result = spawnSync(command, args, {
-        ...options,
-        stdio: "inherit",
-        encoding: "utf-8",
-      });
-      if (result.error) throw result.error;
-      if (result.status !== 0) {
-        throw new Error(`${command} ${args.join(" ")} exited with ${result.status}`);
-      }
-      return { stdout: result.stdout ?? "" };
-    },
-  };
-
-  runQuantOpsDeployCli(process.argv.slice(2), process.env, deps)
-    .then((code) => process.exit(code))
-    .catch((error) => {
-      console.error("deploy-quant-ops error:", error.message);
-      process.exit(1);
-    });
-}
+runQuantOpsDeployCli(process.argv.slice(2), process.env, {
+  repoRoot,
+  fetch: (url, init) => fetch(url, init),
+  log: (line) => process.stdout.write(`${line}\n`),
+  sleep: (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
+  run: (command, args, options) =>
+    runCommand(command, args, { ...options, timeoutMs: 15 * 60 * 1000 }),
+}).then(
+  (code) => {
+    process.exitCode = code;
+  },
+  (error: unknown) => {
+    process.stderr.write(
+      `deploy-quant-ops: ${error instanceof Error ? error.message : "failed"}\n`,
+    );
+    process.exitCode = 1;
+  },
+);
