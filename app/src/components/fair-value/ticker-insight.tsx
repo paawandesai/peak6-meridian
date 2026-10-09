@@ -16,15 +16,6 @@ type ViewProps = {
   readonly nowSecs: number;
 };
 
-/**
- * Builds the market ID key from a MarketRow to match the format from the fair-value service:
- * `TICKER_YYYYMMDD_STRIKE` where STRIKE is strike cents padded to 5 digits (e.g., AAPL_20270115_23000).
- * This matches the `market` field in FairValue from the API.
- */
-function marketKey(m: MarketRow): string {
-  return `${m.ticker}_${m.tradingDate}_${m.strikeCents.toString().padStart(5, "0")}`;
-}
-
 /** Pure view: the fair value and edge for `market`, and the ticker's distribution chart. */
 export function TickerInsightView({ market, ladder, books, fair, nowSecs }: ViewProps) {
   const quotes = Object.fromEntries(
@@ -33,18 +24,13 @@ export function TickerInsightView({ market, ladder, books, fair, nowSecs }: View
       book.state === "ready" ? book.quotes : null,
     ]),
   );
-  // Rekey fair values by the same format the API uses (TICKER_YYYYMMDD_STRIKE),
-  // then map to a {[marketAddress]: fairCents} for distribution points.
-  const fairByKey = Object.fromEntries(
-    Object.entries(fair.byMarket).map(([key, value]) => [key, value.fair_cents]),
-  );
   const fairByAddress = Object.fromEntries(
-    ladder.map((m) => [m.address, fairByKey[marketKey(m)]]).filter(([, v]) => v !== undefined),
+    Object.entries(fair.byMarket).map(([addr, fv]) => [addr, fv.fair_cents]),
   );
   const points = distributionPoints(ladder, quotes, fairByAddress);
   const own = quotes[market.address];
   const headingId = `fair-heading-${market.ticker}`;
-  const marketFair = fair.byMarket[marketKey(market)];
+  const marketFair = fair.byMarket[market.address];
   return (
     <section aria-labelledby={headingId} className="grid gap-mer-4">
       <h2 id={headingId} className="text-mer-lg font-semibold">

@@ -3,12 +3,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { TickerInsight, TickerInsightView } from "./ticker-insight";
 import { fair, ladder, NOW, ready } from "./test-support";
-import type { MarketRow } from "@/lib/markets";
-
-/** Builds the market ID key to match the format from the fair-value service (TICKER_YYYYMMDD_STRIKE). */
-function marketKey(m: MarketRow): string {
-  return `${m.ticker}_${m.tradingDate}_${Number(m.strikeCents).toString().padStart(5, "0")}`;
-}
 
 beforeAll(() => {
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -31,7 +25,6 @@ const books = {
 
 describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
   it("shows the market's fair value and edge, and the ticker's distribution", () => {
-    const key = marketKey(a180 as never);
     render(
       <TickerInsightView
         market={a180 as never}
@@ -41,7 +34,7 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
           status: "ready",
           refreshFailed: false,
           byMarket: {
-            [key]: fair({ market: key, fair_cents: 52 }),
+            [a180?.address ?? ""]: fair({ market: a180?.address ?? "", fair_cents: 52 }),
           },
         }}
         nowSecs={NOW}
@@ -67,7 +60,6 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
   });
 
   it("treats an unreadable book as no price", () => {
-    const key = marketKey(a180 as never);
     render(
       <TickerInsightView
         market={a180 as never}
@@ -76,7 +68,7 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
         fair={{
           status: "ready",
           refreshFailed: false,
-          byMarket: { [key]: fair({ market: key }) },
+          byMarket: { [a180?.address ?? ""]: fair({ market: a180?.address ?? "" }) },
         }}
         nowSecs={NOW}
       />,
@@ -87,9 +79,8 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
 
 describe("TickerInsight (reads the proxy)", () => {
   it("fetches /api/fair-values and shows the result", async () => {
-    const key = marketKey(a180 as never);
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify([fair({ market: key, fair_cents: 52 })]), {
+      new Response(JSON.stringify([fair({ market: a180?.address ?? "", fair_cents: 52 })]), {
         status: 200,
       }),
     );
