@@ -17,23 +17,105 @@ from meridian_quant.mm.types import FairValue, Inventory, MarketKey, MarketState
 from solders.keypair import Keypair
 
 
-def test_ab10_inventory_cap_enforced() -> None:
-    """MM never exceeds inventory cap of 200 per market."""
-    tracker = InventoryTracker()
-    max_inv = 200
-    key = MarketKey(ticker="AAPL", trading_date=20261008, strike_cents=68000)
+@pytest.mark.asyncio
+async def test_ab10_inventory_cap_enforced() -> None:
+    """MM never exceeds inventory cap of 200 per market.
 
-    # Can add up to cap
-    tracker.set(key, 190)
-    assert tracker.can_add(key, 10, max_inv)
+    Drives _run_once with FakeOrderClient balances at ±200 (including
+    ask-fill YES=0, NO=200 path) and asserts no quotes are placed.
+    """
+    now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)  # 14:00 ET
+    close_ts = int((now + timedelta(hours=1)).timestamp())
 
-    # Cannot exceed cap
-    tracker.set(key, 200)
-    assert not tracker.can_add(key, 1, max_inv)
+    market = MarketState(
+        market="AAPL_20261008_23000",
+        ticker="AAPL",
+        strike_cents=23000,
+        trading_date=20261008,
+        close_ts=close_ts,
+        is_open=True,
+        pairs_outstanding=100,
+    )
 
-    # Negative direction
-    tracker.set(key, -200)
-    assert not tracker.can_add(key, -1, max_inv)
+    fair_value = FairValue(
+        market=market.market,
+        ticker=market.ticker,
+        strike_cents=market.strike_cents,
+        fair_cents=50,
+        sigma=0.2,
+        spot=230.0,
+        as_of=now,
+    )
+
+    keypair = Keypair()
+    keypair_json = json.dumps(list(bytes(keypair)))
+    config = MMConfig.model_validate(
+        {
+            "market_maker_keypair": keypair_json,
+            "program_id": "11111111111111111111111111111112",
+            "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+            "service_token": "test_token",
+        }
+    )
+
+    mm_owner = str(keypair.pubkey())
+
+    # Test +200 position (YES=200, NO=0): bid-fill path at cap
+    order_client_pos = FakeOrderClient()
+    order_client_pos.set_yes_balance(market.market, mm_owner, 200)
+    order_client_pos.set_no_balance(market.market, mm_owner, 0)
+
+    mm_pos = MarketMakerLoop(
+        config,
+        market_source=FakeMarketSource([market]),
+        fair_value_source=FakeFairValueSource([fair_value]),
+        order_client=order_client_pos,
+        clock=lambda: now,
+    )
+
+    await mm_pos._run_once()
+
+    # At +200, MM should NOT place any quotes (would exceed cap)
+    pos_orders = order_client_pos.count_orders_by_owner(market.market, mm_owner)
+    assert pos_orders == 0, f"At +200 position, MM should place 0 orders, got {pos_orders}"
+
+    # Test -200 position (YES=0, NO=200): ask-fill path at cap
+    order_client_neg = FakeOrderClient()
+    order_client_neg.set_yes_balance(market.market, mm_owner, 0)
+    order_client_neg.set_no_balance(market.market, mm_owner, 200)
+
+    mm_neg = MarketMakerLoop(
+        config,
+        market_source=FakeMarketSource([market]),
+        fair_value_source=FakeFairValueSource([fair_value]),
+        order_client=order_client_neg,
+        clock=lambda: now,
+    )
+
+    await mm_neg._run_once()
+
+    # At -200, MM should NOT place any quotes (would exceed cap)
+    neg_orders = order_client_neg.count_orders_by_owner(market.market, mm_owner)
+    assert neg_orders == 0, f"At -200 position, MM should place 0 orders, got {neg_orders}"
+
+    # Test within limits (position = 0): should place quotes
+    order_client_ok = FakeOrderClient()
+    order_client_ok.set_yes_balance(market.market, mm_owner, 0)
+    order_client_ok.set_no_balance(market.market, mm_owner, 0)
+
+    mm_ok = MarketMakerLoop(
+        config,
+        market_source=FakeMarketSource([market]),
+        fair_value_source=FakeFairValueSource([fair_value]),
+        order_client=order_client_ok,
+        clock=lambda: now,
+    )
+
+    await mm_ok._run_once()
+
+    # At position 0, MM should place 2 quotes (bid + ask)
+    ok_orders = order_client_ok.count_orders_by_owner(market.market, mm_owner)
+    assert ok_orders == 2, f"At position 0, MM should place 2 orders, got {ok_orders}"
 
 
 @pytest.mark.asyncio
