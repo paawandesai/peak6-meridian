@@ -29,6 +29,7 @@ import {
   assertCluster,
   STRIKE_CENTS_TO_SCALED,
 } from "@meridian/client";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { z } from "zod";
 
@@ -253,6 +254,8 @@ async function createTestMarket(ctx: DemoContext): Promise<MarketKey> {
     const now = blockTime ?? Math.floor(Date.now() / 1000);
     const closeTs = now + 180; // 3 minutes from now
 
+    const configAccount = await ctx.program.account.config.fetch(ctx.config);
+
     await ctx.program.methods
       .createStrikeMarket(
         Array.from(symbolBytes(symbol)),
@@ -270,7 +273,8 @@ async function createTestMarket(ctx: DemoContext): Promise<MarketKey> {
         escrowUsdc: addresses.escrowUsdc,
         escrowYes: addresses.escrowYes,
         book: addresses.book,
-        tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+        usdcMint: configAccount.usdcMint,
+        tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
       .signers([ctx.admin])

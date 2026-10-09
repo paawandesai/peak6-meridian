@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 # Narrow imports from ops-agent (M3-05 on !52, merges before M3-07)
-from meridian_ops_agent.models import SourceClose, SourceReport
+from meridian_ops_agent.models import SourceReport
 from meridian_ops_agent.server import OpsApp, make_server
 from meridian_ops_agent.store import IncidentStore
 from meridian_ops_agent.tools import FixtureTools
@@ -39,10 +39,7 @@ def main() -> None:
         fixture_data = json.load(f)
 
     # Parse reports: each has a name and an optional SourceClose
-    reports = [
-        SourceReport.model_validate(r)
-        for r in fixture_data.get("reports", [])
-    ]
+    reports = [SourceReport.model_validate(r) for r in fixture_data.get("reports", [])]
 
     # Tools factory returns FixtureTools with the recorded data
     def tools_factory() -> FixtureTools:
