@@ -13,7 +13,8 @@ use anchor_lang::prelude::Pubkey;
 use anchor_lang::{InstructionData, ToAccountMetas};
 use common::redstone::{RedstonePayloadBuilder, TestSigner};
 use common::{
-    assert_meridian_error, config_pda, expect_success, symbol, MarketHarness, FUNDING_LAMPORTS,
+    assert_meridian_error_with_budget, config_pda, expect_success, symbol, MarketHarness,
+    FUNDING_LAMPORTS,
 };
 use meridian::errors::MeridianError;
 use solana_sdk::instruction::Instruction;
@@ -59,7 +60,7 @@ fn set_oracle_config_rejects_non_admin() {
     let result = harness
         .harness
         .send_with_budget(instruction, &[&non_admin], 400_000);
-    assert_meridian_error(&result, MeridianError::AdminOnly);
+    assert_meridian_error_with_budget(&result, MeridianError::AdminOnly);
 }
 
 #[test]
@@ -94,7 +95,7 @@ fn set_oracle_config_rejects_threshold_zero() {
     let result = harness
         .harness
         .send_with_budget(instruction, &[&admin], 400_000);
-    assert_meridian_error(&result, MeridianError::OracleThresholdTooLow);
+    assert_meridian_error_with_budget(&result, MeridianError::OracleThresholdTooLow);
 }
 
 #[test]
@@ -129,7 +130,7 @@ fn set_oracle_config_rejects_threshold_too_high() {
     let result = harness
         .harness
         .send_with_budget(instruction, &[&admin], 400_000);
-    assert_meridian_error(&result, MeridianError::OracleThresholdTooHigh);
+    assert_meridian_error_with_budget(&result, MeridianError::OracleThresholdTooHigh);
 }
 
 #[test]

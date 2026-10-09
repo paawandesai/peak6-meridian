@@ -70,19 +70,20 @@ fn native_verify_three_of_five_signers() {
     }
     let payload = builder.build();
 
-    // Parse
+    // Parse - official RedStone format: each signer creates a separate package
     let packages = parse_payload(&payload).expect("parse failed");
-    assert_eq!(packages.len(), 1, "Expected 1 package");
+    assert_eq!(packages.len(), 3, "Expected 3 packages (one per signer)");
 
-    // Verify the first signature (verifier processes one at a time)
-    let recovered_addr = verify_signature(&packages[0]).expect("verify_signature failed");
-
-    // Check it matches one of the signing addresses
-    assert!(
-        signing_addrs.contains(&recovered_addr),
-        "Recovered address {:?} not in signer set",
-        recovered_addr
-    );
+    // Verify all 3 signatures
+    for (i, package) in packages.iter().enumerate() {
+        let recovered_addr = verify_signature(package).expect("verify_signature failed");
+        assert!(
+            signing_addrs.contains(&recovered_addr),
+            "Package {}: recovered address {:?} not in signer set",
+            i,
+            recovered_addr
+        );
+    }
 
     println!("✓ Native verification PASSED for 3-of-5 signers");
 }

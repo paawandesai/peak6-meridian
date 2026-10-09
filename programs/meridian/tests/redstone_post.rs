@@ -14,7 +14,8 @@ use anchor_lang::prelude::Pubkey;
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 use common::redstone::{RedstonePayloadBuilder, TestSigner};
 use common::{
-    assert_meridian_error, config_pda, expect_success, symbol, MarketHarness, FUNDING_LAMPORTS,
+    assert_meridian_error_with_budget, config_pda, expect_success, symbol, MarketHarness,
+    FUNDING_LAMPORTS,
 };
 use meridian::errors::MeridianError;
 use meridian::state::RedstonePrice;
@@ -172,7 +173,7 @@ fn post_redstone_price_fails_insufficient_signers() {
     let result = harness
         .harness
         .send_with_budget(instruction, &[&payer], 400_000);
-    assert_meridian_error(&result, MeridianError::RedStoneInsufficientSigners);
+    assert_meridian_error_with_budget(&result, MeridianError::RedStoneInsufficientSigners);
 }
 
 #[test]
@@ -283,5 +284,5 @@ fn post_redstone_price_malformed_payload() {
     let result = harness
         .harness
         .send_with_budget(instruction, &[&payer], 400_000);
-    assert_meridian_error(&result, MeridianError::RedStoneMalformedPayload);
+    assert_meridian_error_with_budget(&result, MeridianError::RedStoneMalformedPayload);
 }

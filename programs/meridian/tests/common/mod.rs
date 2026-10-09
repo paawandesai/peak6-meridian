@@ -313,7 +313,18 @@ pub fn error_code(error: MeridianError) -> u32 {
 /// Asserts that the transaction failed with the given `MeridianError`.
 pub fn assert_meridian_error(result: &TransactionResult, expected: MeridianError) {
     let failure = expect_failure(result);
-    // Note: Index 1 because ComputeBudget instruction is at index 0 (M2-15 400k CU)
+    assert_eq!(
+        failure.err,
+        TransactionError::InstructionError(0, InstructionError::Custom(error_code(expected))),
+        "expected {expected:?}; logs: {:#?}",
+        failure.meta.logs
+    );
+}
+
+/// Asserts that the transaction failed with the given `MeridianError` when using `send_with_budget`.
+/// The error is at index 1 because ComputeBudget instruction is at index 0.
+pub fn assert_meridian_error_with_budget(result: &TransactionResult, expected: MeridianError) {
+    let failure = expect_failure(result);
     assert_eq!(
         failure.err,
         TransactionError::InstructionError(1, InstructionError::Custom(error_code(expected))),

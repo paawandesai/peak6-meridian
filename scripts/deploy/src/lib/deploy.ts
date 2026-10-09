@@ -322,6 +322,7 @@ function buildRecord(
   mint: PublicKey,
   config: OnChainConfig,
   upgradeAuthority: PublicKey,
+  oracleConfig?: OracleConfigParams,
 ): DeploymentRecord {
   const feeds: NonNullable<DeploymentRecord["feeds"]> = {};
   for (const [index, symbol] of TICKER_ORDER.entries()) {
@@ -344,8 +345,8 @@ function buildRecord(
     }
     feeds[symbol] = [first, second];
   }
-  return {
-    version: 1,
+  const base = {
+    version: 1 as const,
     cluster,
     programId: ctx.programId.toBase58(),
     usdcMint: mint.toBase58(),
@@ -355,6 +356,20 @@ function buildRecord(
     faucet: ctx.options.faucet.toBase58(),
     upgradeAuthority: upgradeAuthority.toBase58(),
     feeds,
+  };
+  if (oracleConfig === undefined) {
+    return base;
+  }
+  const oracleConfigPda = PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle_config")],
+    ctx.programId,
+  )[0];
+  return {
+    ...base,
+    oracleConfigPda: oracleConfigPda.toBase58(),
+    oracleSigners: [...oracleConfig.signers],
+    oracleSignerThreshold: oracleConfig.signerThreshold,
+    oracleMaxPackageDelaySecs: oracleConfig.maxPackageDelaySecs,
   };
 }
 
@@ -501,7 +516,7 @@ async function deploy(
     log(`set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`);
   }
 
-  const finalRecord = buildRecord(cluster, ctx, mint, config, upgradeAuthority);
+  const finalRecord = buildRecord(cluster, ctx, mint, config, upgradeAuthority, oracleConfig);
   const written = writeRecord(options.outPath, finalRecord);
   log(`${written ? "wrote" : "unchanged:"} ${options.outPath}`);
   return { actions: ctx.actions, record: finalRecord };

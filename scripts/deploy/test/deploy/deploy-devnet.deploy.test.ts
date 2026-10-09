@@ -482,6 +482,16 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
 
     // Verify set-oracle-config was called
     expect(result.actions).toContain("set-oracle-config");
+
+    // Verify oracle config is recorded in the deployment record
+    expect(result.record.oracleConfigPda).toBeDefined();
+    expect(result.record.oracleSigners).toEqual([
+      "0x1234567890123456789012345678901234567890",
+      "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      "0x1111111111111111111111111111111111111111",
+    ]);
+    expect(result.record.oracleSignerThreshold).toBe(2);
+    expect(result.record.oracleMaxPackageDelaySecs).toBe(600);
   });
 
   it(
