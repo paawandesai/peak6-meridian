@@ -61,3 +61,6 @@ PRD/docs verification (local `.ao-ops/prd-docs-verification.md`):
 
 ## 2026-10-07 23:25 CT · orchestrator
 - **M2 tickets** M2-01..M2-13 drafted by the orchestrator (Tier 2, Paawan notified; By: orchestrator); UI-04/05/06/08 design ACs folded into M2-06/07/08/10. MR !24.
+
+## 2026-10-08 17:55 CT · orchestrator
+- M3 tickets M3-01..M3-09 drafted by the orchestrator (Tier 2, Paawan notified).
