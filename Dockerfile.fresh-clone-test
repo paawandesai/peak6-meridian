@@ -8,20 +8,21 @@
 # AC2: Validator :8899 and app :3000 both listening within 15 minutes (900s).
 #
 # Usage:
-#   docker build -f Dockerfile.fresh-clone-test .
+#   docker build -f Dockerfile.fresh-clone-test .                              # test main
+#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_BRANCH=m4-01-fresh-clone .  # test feature branch
 
 FROM ubuntu:24.04
 
 # Install git and build-essential (make) as prerequisites
 RUN apt-get update && apt-get install -y git build-essential && rm -rf /var/lib/apt/lists/*
 
-# Clone repo preserving .git (pass commit via --build-arg)
+# Clone repo preserving .git (pass branch via --build-arg to test a feature branch,
+# or omit to test main). No hardcoded commit: the tip of GIT_BRANCH is always tested.
 ARG GIT_REPO=https://labs.gauntletai.com/paawandesai/peak6-meridian.git
-ARG GIT_COMMIT=84149fe1bbc38b28c60d829826c407cf9fffddb1
+ARG GIT_BRANCH=main
 WORKDIR /workspace
-RUN git clone ${GIT_REPO} meridian
+RUN git clone --branch ${GIT_BRANCH} --single-branch ${GIT_REPO} meridian
 WORKDIR /workspace/meridian
-RUN git checkout ${GIT_COMMIT}
 
 # AC1: whole sequence in single 20-minute budget
 RUN timeout 1200 bash -c 'set -e && \
