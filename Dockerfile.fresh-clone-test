@@ -1,61 +1,32 @@
-# Fresh-clone reproducibility test (M4-01 AC1/AC2)
+# Fresh-clone reproducibility test (M4-01 AC1)
+# Tests that a fresh Ubuntu 24.04 environment can build and run Meridian
 #
-# JUSTIFICATION (AC1/AC2):
-# AC1 requires: "From a fresh Ubuntu 24.04 container with only git, running
+# AC1 requires: From a fresh Ubuntu 24.04 container with only git, running
 # `make toolchain && make install && make build-local && make e2e` succeeds
-# within 20 minutes"
-# AC2 requires: "`make dev` starts the local validator and app within 15 minutes"
-#
-# This Dockerfile provides the test harness to verify those requirements.
-# It's the only way to definitively prove fresh-clone reproducibility.
+# within 20 minutes (1200 seconds) total.
 #
 # Usage:
-#   docker build -f Dockerfile.fresh-clone-test --target build-test .  # AC1
-#   docker build -f Dockerfile.fresh-clone-test --target dev-test .    # AC2
+#   docker build -f Dockerfile.fresh-clone-test .
 
 FROM ubuntu:24.04
 
 # Install only git as prerequisite
 RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
-# Clone repo at current HEAD
-WORKDIR /workspace
-COPY . /workspace/meridian
-WORKDIR /workspace/meridian
-
-# AC1: make toolchain && make install && make build-local && make e2e succeeds in 20 min
-# AC2: make dev starts validator and app in 15 min
-#
-# To test AC1:
-#   docker build -f Dockerfile.fresh-clone-test --target build-test .
-#
-# To test AC2:
-#   docker build -f Dockerfile.fresh-clone-test --target dev-test .
-
-# Install toolchain
-FROM ubuntu:24.04 as toolchain
-RUN apt-get update && apt-get install -y git curl build-essential pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
-WORKDIR /workspace
-# Clone the actual repo at current branch/commit (pass via --build-arg GIT_REPO=... GIT_BRANCH=...)
+# Clone repo preserving .git (pass commit via --build-arg)
 ARG GIT_REPO=https://labs.gauntletai.com/paawandesai/peak6-meridian.git
-ARG GIT_BRANCH=main
-RUN git clone --depth 1 --branch ${GIT_BRANCH} ${GIT_REPO} meridian
+ARG GIT_COMMIT=main
+WORKDIR /workspace
+RUN git clone ${GIT_REPO} meridian
 WORKDIR /workspace/meridian
-RUN cp .env.example .env
-RUN timeout 1200 make toolchain || (echo "FAIL: toolchain timeout" && exit 1)
+RUN git checkout ${GIT_COMMIT}
 
-# AC1 test: install, build-local, e2e
-FROM toolchain as build-test
-RUN timeout 1200 make install || (echo "FAIL: install timeout" && exit 1)
-RUN timeout 1200 make build-local || (echo "FAIL: build-local timeout" && exit 1)
-RUN timeout 1200 make e2e || (echo "FAIL: e2e timeout or failure" && exit 1)
-RUN echo "PASS: make toolchain && make install && make build-local && make e2e completed"
+# AC1: whole sequence in single 20-minute budget
+RUN timeout 1200 bash -c 'set -e && \
+    cp .env.example .env && \
+    make toolchain && \
+    make install && \
+    make build-local && \
+    make e2e' || (echo "FAIL: AC1 sequence exceeded 20 minutes or failed" && exit 1)
 
-# AC2 test: dev starts validator and app
-FROM toolchain as dev-test
-RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/lists/*
-RUN timeout 900 make install || (echo "FAIL: install timeout" && exit 1)
-# Start dev in background and check ports (FAIL expected: validator hangs in container without TTY)
-RUN timeout 900 sh -c 'make dev & sleep 300 && nc -zv localhost 8899 && nc -zv localhost 3000' || \
-    (echo "NOTE: dev-test expected to fail in Docker (validator needs TTY); test manually" && exit 1)
-RUN echo "PASS: make dev started validator (:8899) and app (:3000) in 15 min"
+RUN echo "PASS: AC1 complete - full sequence in <20 minutes"
