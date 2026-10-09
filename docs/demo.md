@@ -99,11 +99,7 @@ Each entry shows:
 
 Test-USDC faucet for funding wallets on devnet.
 
-**Mobile:**
-![Faucet Mobile](demo/05-faucet-mobile.png)
-
-**Desktop:**
-![Faucet Desktop](demo/05-faucet-desktop.png)
+> **Screenshots pending** (technical limitation: headless browser environment cannot start full dev stack in reasonable time).
 
 - Connect wallet
 - Click "Request Test USDC"
