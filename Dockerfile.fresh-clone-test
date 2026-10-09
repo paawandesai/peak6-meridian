@@ -7,12 +7,16 @@
 #
 # AC2: Validator :8899 and app :3000 both listening within 15 minutes (900s).
 #
-# Usage:
-#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=$CI_COMMIT_SHA .  # MR verification (CI)
-#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=<sha> .           # test specific commit
-#   docker build -f Dockerfile.fresh-clone-test .                                         # test main (default)
+# Usage (MR verification - test this specific commit):
+#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=ed50019 .
 #
-# GIT_COMMIT takes precedence over GIT_BRANCH. In CI, set GIT_COMMIT=$CI_COMMIT_SHA to verify the MR HEAD.
+# Usage (CI - verify MR HEAD automatically):
+#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=$CI_COMMIT_SHA .
+#
+# Usage (test main branch):
+#   docker build -f Dockerfile.fresh-clone-test .
+#
+# GIT_COMMIT takes precedence over GIT_BRANCH. Without --build-arg GIT_COMMIT, defaults to main.
 
 FROM ubuntu:24.04
 
