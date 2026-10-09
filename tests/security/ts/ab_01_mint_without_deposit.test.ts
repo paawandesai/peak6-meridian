@@ -39,37 +39,35 @@ describe.runIf(v !== null)("AB-01 on-chain (local validator): mint attacks rejec
 
       expect(yesMintInfo).not.toBeNull();
       expect(noMintInfo).not.toBeNull();
+      if (!yesMintInfo || !noMintInfo) throw new Error("Mint accounts not found");
 
       // SPL Token Mint layout: https://spl.solana.com/token
-      // Offset 0: mint_authority (COption<Pubkey>) - 4 bytes (0=None, 1=Some) + 32 bytes pubkey
-      // If mint_authority exists (first byte = 1), next 32 bytes are the authority pubkey
-      if (yesMintInfo && yesMintInfo.data.length >= 36) {
-        const hasMintAuthority = yesMintInfo.data[0] === 1;
-        expect(hasMintAuthority).toBe(true);
+      // Offset 0-3: mint_authority (COption<Pubkey> tag, u32 little-endian: 0=None, 1=Some)
+      // Offset 4-35: mint_authority pubkey (32 bytes, if Some)
+      expect(yesMintInfo.data.length).toBeGreaterThanOrEqual(36);
+      expect(noMintInfo.data.length).toBeGreaterThanOrEqual(36);
 
-        if (hasMintAuthority) {
-          const authorityBytes = yesMintInfo.data.slice(1, 33);
-          const mintAuthority = new PublicKey(authorityBytes);
-          // Mint authority should be the market PDA
-          expect(mintAuthority.equals(market)).toBe(true);
+      // Read COption<Pubkey> tag (4 bytes, u32 little-endian)
+      const yesMintAuthorityTag = yesMintInfo.data.readUInt32LE(0);
+      expect(yesMintAuthorityTag).toBe(1); // 1 = Some
 
-          // An attacker cannot be the mint authority
-          const attacker = Keypair.generate();
-          expect(mintAuthority.equals(attacker.publicKey)).toBe(false);
-        }
-      }
+      // Read mint authority pubkey (offset 4..36)
+      const yesMintAuthorityBytes = yesMintInfo.data.slice(4, 36);
+      const yesMintAuthority = new PublicKey(yesMintAuthorityBytes);
+
+      // Mint authority should be the market PDA
+      expect(yesMintAuthority.equals(market)).toBe(true);
+
+      // An attacker cannot be the mint authority
+      const attacker = Keypair.generate();
+      expect(yesMintAuthority.equals(attacker.publicKey)).toBe(false);
 
       // Same check for NO mint
-      if (noMintInfo && noMintInfo.data.length >= 36) {
-        const hasMintAuthority = noMintInfo.data[0] === 1;
-        expect(hasMintAuthority).toBe(true);
-
-        if (hasMintAuthority) {
-          const authorityBytes = noMintInfo.data.slice(1, 33);
-          const mintAuthority = new PublicKey(authorityBytes);
-          expect(mintAuthority.equals(market)).toBe(true);
-        }
-      }
+      const noMintAuthorityTag = noMintInfo.data.readUInt32LE(0);
+      expect(noMintAuthorityTag).toBe(1);
+      const noMintAuthorityBytes = noMintInfo.data.slice(4, 36);
+      const noMintAuthority = new PublicKey(noMintAuthorityBytes);
+      expect(noMintAuthority.equals(market)).toBe(true);
     },
   );
 

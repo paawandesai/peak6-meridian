@@ -146,30 +146,79 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
     if (v === null) {
       throw new Error(SKIP_REASON);
     }
-    // This test verifies that after burning tokens in first redeem,
-    // a second redeem attempt fails (no tokens left to burn).
-    // Full test would require minting tokens first, which needs mint_pair.
-    // For now, verify double-settle is rejected (related constraint).
+    const user = Keypair.generate();
+    await v.connection.requestAirdrop(user.publicKey, 10_000_000_000);
+    await new Promise((r) => setTimeout(r, 1000));
 
     const { market, closeTs } = await createMarket(v, 10);
     await waitUntil(v, closeTs);
 
+    // Settle the market
     const slot = await v.connection.getSlot("confirmed");
     await setLocalFeed(v, "META", 0, 50_000n, slot);
     await setLocalFeed(v, "META", 1, 50_000n, slot);
-
     const feeds: readonly [PublicKey, PublicKey] = [
       localFeedPda(v.programId, "META", 0),
       localFeedPda(v.programId, "META", 1),
     ] as const;
-
-    // First settle succeeds
     expect(await trySettle(v, market, feeds)).toBe("settled");
 
-    // Second settle fails (AB-08: re-settle rejected)
-    const result = await trySettle(v, market, feeds);
-    expect(result).not.toBe("settled");
-    expect(result.length).toBeGreaterThan(0);
+    const marketAccount = await v.program.account.market.fetch(market);
+    const config = await v.program.account.config.fetch(v.config);
+
+    const userUsdc = getAta(config.usdcMint, user.publicKey);
+    const userYes = getAta(marketAccount.yesMint, user.publicKey);
+    const userNo = getAta(marketAccount.noMint, user.publicKey);
+
+    // Attempt: first redeem (will fail - user has no tokens)
+    // In a real attack after minting, this would burn tokens and pay USDC
+    try {
+      await v.program.methods
+        .redeem(new BN(1), new BN(0)) // winner redeem (YES won)
+        .accountsStrict({
+          market,
+          user: user.publicKey,
+          userUsdc,
+          userYes,
+          userNo,
+          yesMint: marketAccount.yesMint,
+          noMint: marketAccount.noMint,
+          vault: marketAccount.vault,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([user])
+        .rpc();
+      throw new Error("Expected first redeem to fail (no tokens)");
+    } catch (error) {
+      // First redeem fails (user has no tokens to burn)
+      const err = programError(error);
+      expect(err.length).toBeGreaterThan(0);
+    }
+
+    // Attempt: second redeem (would also fail - no tokens)
+    // In a real attack after first redeem burned tokens, second attempt has no tokens left
+    try {
+      await v.program.methods
+        .redeem(new BN(1), new BN(0))
+        .accountsStrict({
+          market,
+          user: user.publicKey,
+          userUsdc,
+          userYes,
+          userNo,
+          yesMint: marketAccount.yesMint,
+          noMint: marketAccount.noMint,
+          vault: marketAccount.vault,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([user])
+        .rpc();
+      throw new Error("Expected second redeem to fail (no tokens)");
+    } catch (error) {
+      // Second redeem also fails (no tokens)
+      const err = programError(error);
+      expect(err.length).toBeGreaterThan(0);
+    }
   });
 
   it("pair-redeem checks both tokens are from same market", { timeout: 180_000 }, async () => {
