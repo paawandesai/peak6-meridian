@@ -29,10 +29,6 @@ from meridian_quant.mm.types import FairValue
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not Path("target/deploy/meridian.so").exists() or not Path("scripts/e2e.sh").exists(),
-    reason="Requires prebuilt target/deploy/meridian.so and scripts/e2e.sh",
-)
 async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
     """AC1: One _run_once leaves two-sided MM quotes on every open strike.
 
@@ -40,7 +36,8 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
     (Config + test-USDC + markets). Verifies MM loop places bid AND ask on every
     open strike.
 
-    Run with: flock /tmp/box-heavy.lock pytest -k test_mm_quotes_all_open_strikes
+    Requires target/deploy/meridian.so (from `make build-local` or CI build artifact).
+    Run with: flock /tmp/box-heavy.lock pytest -k test_mm_quotes_local_validator
     """
     # Operator Tier 1 decision: implement now using existing e2e bootstrap
     validator_process = None
