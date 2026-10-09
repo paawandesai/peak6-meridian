@@ -435,17 +435,27 @@ async def test_prior_day_markets_dont_block_today_quoting(mm_config: MMConfig) -
     markets = [yesterday_market, today_market]
     market_source = FakeMarketSource(markets)
 
-    # Fair value only for today's market (M3-01 doesn't quote prior days)
+    # Fair values for BOTH markets (yesterday intrinsic, today normal)
+    # Yesterday's FV should NOT match today's market despite same ticker+strike (0DTE reuses)
     fair_values = [
         FairValue(
-            market=today_market.market,
+            market=yesterday_market.market,  # AAPL_20261007_23000
             ticker="AAPL",
             strike_cents=23000,
+            fair_cents=1,  # Intrinsic at TTE=0
+            sigma=0.2,
+            spot=230.0,
+            as_of=now,
+        ),
+        FairValue(
+            market=today_market.market,  # AAPL_20261008_23000
+            ticker="AAPL",
+            strike_cents=23000,  # Same strike, different day
             fair_cents=50,
             sigma=0.2,
             spot=230.0,
             as_of=now,
-        )
+        ),
     ]
     fv_source = FakeFairValueSource(fair_values)
     order_client = FakeOrderClient()
@@ -466,7 +476,7 @@ async def test_prior_day_markets_dont_block_today_quoting(mm_config: MMConfig) -
 
     await mm._run_once()
 
-    # Verify: today's market gets quotes, yesterday's doesn't
+    # Verify: today's market gets quotes from today's FV (50c), yesterday's market gets none
     mm_owner = str(mm.keypair.pubkey())
     today_orders = await order_client.fetch_resting_orders(today_market.market)
     today_mm_orders = [o for o in today_orders if o.owner == mm_owner]
@@ -474,9 +484,18 @@ async def test_prior_day_markets_dont_block_today_quoting(mm_config: MMConfig) -
         f"Expected 2 quotes on today's market, got {len(today_mm_orders)}"
     )
 
+    # Verify today's quotes are based on today's FV (50c), not yesterday's (1c)
+    # With 50c fair value and 2c spread, expect bid ~48-49c and ask ~51-52c
+    bids = [o for o in today_mm_orders if o.side == "Bid"]
+    asks = [o for o in today_mm_orders if o.side == "Ask"]
+    assert len(bids) == 1 and len(asks) == 1
+    # If yesterday's FV (1c) was used, bid would be 0c and ask would be 3c
+    assert bids[0].price >= 40, f"Bid {bids[0].price}c too low (expected ~48c from 50c FV)"
+    assert asks[0].price <= 60, f"Ask {asks[0].price}c too high (expected ~52c from 50c FV)"
+
     yesterday_orders = await order_client.fetch_resting_orders(yesterday_market.market)
     yesterday_mm_orders = [o for o in yesterday_orders if o.owner == mm_owner]
-    # Yesterday's market has no new quotes (no fair value provided anyway)
+    # Yesterday's market has no new quotes (prior-day FV must not match today's strike)
     assert len(yesterday_mm_orders) == 0, (
         f"Expected 0 quotes on yesterday's market, got {len(yesterday_mm_orders)}"
     )
