@@ -191,7 +191,10 @@ export function tradesFromEvents(
         const outcome = outcomes[event.market] ?? "None";
         const settled = settledAt[event.market] ?? 0;
         const isWinnerMode =
-          settled > 0 && event.blockTime !== null && event.blockTime >= settled && q.bid.length === 0;
+          settled > 0 &&
+          event.blockTime !== null &&
+          event.blockTime >= settled &&
+          q.bid.length === 0;
 
         if (event.yesQty === event.noQty) {
           // Equal-qty redeem: consume bid queue first (Sell NO or live pair-redeem).
