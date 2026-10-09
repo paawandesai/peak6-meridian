@@ -110,15 +110,12 @@ impl RedstonePayloadBuilder {
         value_bytes[24..32].copy_from_slice(&self.value.to_be_bytes());
         payload.extend_from_slice(&value_bytes);
 
+        // Data points count (2 bytes big-endian) = 1
+        payload.extend_from_slice(&1u16.to_be_bytes());
+
         // Timestamp (6 bytes big-endian from i64 milliseconds)
         let timestamp_bytes = self.timestamp_ms.to_be_bytes();
         payload.extend_from_slice(&timestamp_bytes[2..8]); // Take last 6 bytes
-
-        // Data point value byte size (2 bytes big-endian) = 32
-        payload.extend_from_slice(&32u16.to_be_bytes());
-
-        // Data points count (2 bytes big-endian) = 1
-        payload.extend_from_slice(&1u16.to_be_bytes());
 
         // Build signable bytes for all signers
         let signable_bytes = payload.clone();
