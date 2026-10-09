@@ -234,11 +234,7 @@ describe("AC2: cluster rejection when fault injection is enabled", () => {
   });
 
   it("accepts localnet with loopback URL", async () => {
-    const loopbackUrls = [
-      "http://127.0.0.1:8899",
-      "http://localhost:8899",
-      "http://[::1]:8899",
-    ];
+    const loopbackUrls = ["http://127.0.0.1:8899", "http://localhost:8899", "http://[::1]:8899"];
 
     for (const url of loopbackUrls) {
       const result = await assertCluster({

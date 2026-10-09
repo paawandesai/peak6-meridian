@@ -13,10 +13,12 @@
  * AC2: FAULT_INJECT_SOURCE refused on any non-local cluster.
  * AC3: default run makes no live API calls (fixtures + deterministic fallback).
  */
+import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { AnchorProvider, BN, type Program, Wallet } from "@coral-xyz/anchor";
+import { DateTime } from "luxon";
 import {
   type Meridian,
   createMeridianProgram,
@@ -135,48 +137,79 @@ async function main(): Promise<void> {
     faultConfig,
   };
 
-  // Stage 2: Ensure config exists
-  await ensureDeployed(ctx);
+  // AC3: Start demo ops-agent with FixtureTools if ENABLE_LIVE_LLM is not set
+  let demoOpsAgent: ChildProcess | undefined;
+  if (env.ENABLE_LIVE_LLM !== "1") {
+    console.log("\nStarting demo ops-agent with FixtureTools (AC3: no live API calls)...");
+    const port = new URL(env.OPS_AGENT_URL).port;
+    const fixturePath = resolve(import.meta.dirname, "lib/demo/fixtures.json");
+    const storePath = "/tmp/ops-agent-demo-store.json";
+    demoOpsAgent = spawn(
+      "python3",
+      [
+        resolve(import.meta.dirname, "lib/demo/ops-agent-demo.py"),
+        port,
+        env.SERVICE_TOKEN,
+        storePath,
+        fixturePath,
+      ],
+      { stdio: ["ignore", "inherit", "inherit"] },
+    );
+    // Give the server time to start
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    console.log(`  Demo ops-agent started on port ${port} (FixtureTools, no LLM)\n`);
+  }
 
-  // Stage 3: Create a market that will close in 3 minutes
-  console.log("\nStage 3: Creating test market");
-  const marketKey = await createTestMarket(ctx);
-  console.log(
-    `  Market key: ${marketKey.symbol} ${marketKey.tradingDate} $${Number(marketKey.strikeCents) / 100}`,
-  );
-  console.log(`  Close: ${new Date(marketKey.closeTs * 1000).toISOString()}`);
-  console.log(`  Waiting for market close...`);
+  try {
+    // Stage 2: Ensure config exists
+    await ensureDeployed(ctx);
 
-  // Stage 4: Wait for close
-  await waitForClose(ctx, marketKey);
+    // Stage 3: Create a market that will close in 3 minutes
+    console.log("\nStage 3: Creating test market");
+    const marketKey = await createTestMarket(ctx);
+    console.log(
+      `  Market key: ${marketKey.symbol} ${marketKey.tradingDate} $${Number(marketKey.strikeCents) / 100}`,
+    );
+    console.log(`  Close: ${new Date(marketKey.closeTs * 1000).toISOString()}`);
+    console.log(`  Waiting for market close...`);
 
-  // Stage 5: Set oracle values with fault
-  console.log("\nStage 5: Setting oracle values with fault injection");
-  await setFaultedOracle(ctx, marketKey);
+    // Stage 4: Wait for close
+    await waitForClose(ctx, marketKey);
 
-  // Stage 6: Attempt settlement (will fail spread check)
-  console.log("\nStage 6: Attempting settlement (will fail spread check)");
-  const incident = await attemptSettlement(ctx, marketKey);
-  console.log(`  Settlement failed as expected`);
-  console.log(`  Incident posted: ${incident.incidentId}`);
+    // Stage 5: Set oracle values with fault
+    console.log("\nStage 5: Setting oracle values with fault injection");
+    await setFaultedOracle(ctx, marketKey);
 
-  // Stage 7: Get draft from ops-agent
-  console.log("\nStage 7: Fetching override draft from ops-agent");
-  const draft = await getDraft(ctx, incident.incidentId);
-  console.log(`  Draft received: ${draft.proposedPriceCents}¢`);
-  console.log(`  Note: ${draft.note.slice(0, 100)}...`);
+    // Stage 6: Attempt settlement (will fail spread check)
+    console.log("\nStage 6: Attempting settlement (will fail spread check)");
+    const incident = await attemptSettlement(ctx, marketKey);
+    console.log(`  Settlement failed as expected`);
+    console.log(`  Incident posted: ${incident.incidentId}`);
 
-  // Stage 8: Wait for override delay
-  console.log("\nStage 8: Waiting for override delay");
-  await waitForOverrideDelay(ctx, marketKey);
+    // Stage 7: Get draft from ops-agent
+    console.log("\nStage 7: Fetching override draft from ops-agent");
+    const draft = await getDraft(ctx, incident.incidentId);
+    console.log(`  Draft received: ${draft.proposedPriceCents}¢`);
+    console.log(`  Note: ${draft.note.slice(0, 100)}...`);
 
-  // Stage 9: Settle with admin override
-  console.log("\nStage 9: Settling with admin override");
-  const settleTx = await settleWithOverride(ctx, marketKey, draft.proposedPriceCents);
-  console.log(`  Market settled successfully!`);
-  console.log(`  Settle tx: ${settleTx}\n`);
+    // Stage 8: Wait for override delay
+    console.log("\nStage 8: Waiting for override delay");
+    await waitForOverrideDelay(ctx, marketKey);
 
-  console.log("=== Demo completed successfully ===");
+    // Stage 9: Settle with admin override
+    console.log("\nStage 9: Settling with admin override");
+    const settleTx = await settleWithOverride(ctx, marketKey, draft.proposedPriceCents);
+    console.log(`  Market settled successfully!`);
+    console.log(`  Settle tx: ${settleTx}\n`);
+
+    console.log("=== Demo completed successfully ===");
+  } finally {
+    // Cleanup: stop demo ops-agent if it was started
+    if (demoOpsAgent) {
+      console.log("\nStopping demo ops-agent...");
+      demoOpsAgent.kill();
+    }
+  }
 }
 
 async function ensureDeployed(ctx: DemoContext): Promise<void> {
@@ -194,8 +227,8 @@ async function ensureDeployed(ctx: DemoContext): Promise<void> {
 async function createTestMarket(ctx: DemoContext): Promise<MarketKey> {
   const symbol = "META";
   const strikeCents = 68000n;
-  const now = new Date();
-  const date = tradingDate(now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate());
+  const nowET = DateTime.now().setZone("America/New_York");
+  const date = tradingDate(nowET.year, nowET.month, nowET.day);
 
   const addresses = marketAddresses(
     { symbol, tradingDate: date, strikeCents },
@@ -222,9 +255,12 @@ async function createTestMarket(ctx: DemoContext): Promise<MarketKey> {
 }
 
 async function waitForClose(ctx: DemoContext, marketKey: MarketKey): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
+  const blockTime = await ctx.connection.getBlockTime(await ctx.connection.getSlot("confirmed"));
+  const now = blockTime ?? Math.floor(Date.now() / 1000);
   const waitSecs = Math.max(0, marketKey.closeTs - now);
-  console.log(`  Waiting ${waitSecs}s until close...`);
+  console.log(
+    `  Waiting ${waitSecs}s until close (cluster time: ${now}, close: ${marketKey.closeTs})...`,
+  );
   await new Promise((resolve) => setTimeout(resolve, waitSecs * 1000 + 1000)); // Wait until after close
 }
 
@@ -315,8 +351,9 @@ async function attemptSettlement(
       .accountsStrict({
         config: ctx.config,
         market: addresses.market,
-        oracleA: oraclePdas[0],
-        oracleB: oraclePdas[1],
+        feedTiingo: oraclePdas[0],
+        feedTwelveData: oraclePdas[1],
+        payer: ctx.admin.publicKey,
       })
       .rpc();
 
