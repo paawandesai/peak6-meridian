@@ -35,5 +35,5 @@ test("Portfolio lists the wallet's META positions with the on-chain quantities",
   if (no > 0n) {
     await expect(rows.filter({ hasText: "NO" }).first()).toContainText(String(no));
   }
-  await expect(page.getByText(/Mark = book midpoint, not a guaranteed sale price/i)).toBeVisible();
+  await expect(page.getByText(/Mark is the book midpoint, not a guaranteed sale price/i)).toBeVisible();
 });
