@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+
 from meridian_quant.prices import PriceError, Spot
 from meridian_quant.server import STALE_AFTER_SECS, MarketInfo, Service, handle_request, make_server
 

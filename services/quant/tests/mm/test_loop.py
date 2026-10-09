@@ -333,7 +333,7 @@ async def test_skew_applied_correctly(mm_config: MMConfig) -> None:  # noqa: ARG
 @pytest.mark.asyncio
 async def test_inventory_cap_enforced_in_run_once(mm_config: MMConfig) -> None:
     """AC2: MM stops quoting when signed position at ±200 cap (Finding #3).
-    
+
     Drive _run_once with FakeOrderClient balances set to cap. Verify loop
     doesn't place quotes when |YES - NO| >= 200.
     """

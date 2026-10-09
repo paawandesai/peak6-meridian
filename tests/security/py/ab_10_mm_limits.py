@@ -97,8 +97,6 @@ async def test_ab10_order_cap_per_owner() -> None:
 
     # Make cancel_order a no-op for this test to simulate orders that survive
     # (e.g., from other systems or failed cancel attempts)
-    original_cancel = order_client.cancel_order
-
     async def cancel_noop(market: str, order_id: int, owner: str) -> None:
         """No-op cancel for this test."""
         pass
