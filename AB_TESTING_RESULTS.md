@@ -19,8 +19,8 @@
 
 | AB ID | Attack Vector | Tool/Test | Outcome |
 |-------|---------------|-----------|---------|
-| AB-01 | Mint without equal USDC | E2E step 8 (mint pairs) | SAFE - Tested in lifecycle |
-| AB-02 | Redeem mismatched YES/NO | E2E step 21 (redeem) | SAFE - 1:1 redemption enforced |
+| AB-01 | Mint without equal USDC | `ab_01_minting.rs` (LiteSVM) + `ab_01_mint_without_deposit.test.ts` (validator vitest) | SAFE - Malicious MintTo rejected |
+| AB-02 | Redeem mismatched YES/NO | `ab_02_redeem.rs` (LiteSVM) + `ab_02_redeem_attacks.test.ts` (validator vitest) | SAFE - Double-redeem fails, loser pays 0 |
 | AB-03 | Stale oracle data | `ab_03_stale_or_wrong_date.test.ts` on validator | SAFE - Timestamp validation |
 | AB-04 | Spoofed oracle accounts | `ab_04_spoofed_feed.test.ts` on validator | SAFE - Feed ownership verified |
 | AB-05 | Settle before close_ts | `ab_05_settle_before_close.test.ts` on validator | SAFE - Close time enforced |
@@ -29,7 +29,7 @@
 | AB-08 | Force-settle without delay | `ab_07_ab_08_override.rs` (LiteSVM) | SAFE - Delay required |
 | AB-09 | Book invariant violations | `ab_09_ab_10_book.rs` (LiteSVM) | SAFE - Price/qty validation |
 | AB-10 | Order manipulation | `ab_09_orders.rs` (LiteSVM) | SAFE - Order guards |
-| AB-11 | Trade when closed/paused | E2E step 18 (reject after close) | SAFE - Status gates enforced |
+| AB-11 | Trade when closed/paused | `ab_11_close_pause.rs` (LiteSVM) | SAFE - Status gates enforced |
 | AB-12 | Integer overflow | `ab_12_overflow.rs` (LiteSVM) | SAFE - Checked math |
 | AB-13 | Oracle spread > 5 bps | `ab_13_oracle_spread.rs` (LiteSVM) | SAFE - Spread validation |
 | AB-22 | local-oracle in devnet | `ab_22_*.rs` (LiteSVM) | SAFE - Feature isolation |
@@ -42,10 +42,10 @@
 | AB-15 | Draft param range bypass | `tests/security/py/ab_15_draft_range.py` | SAFE - Range validation |
 | AB-16 | Unlocked dependencies | `tests/security/ts/ab_16_locked_dependencies.test.ts` | SAFE - Lockfiles enforced |
 | AB-17 | Committed secrets | `tests/security/ts/ab_17_*.test.ts` | SAFE - No secrets in repo |
-| AB-18 | Invalid trade intents | E2E steps 9-15 (four intents) | SAFE - Intent validation |
+| AB-18 | Invalid trade intents | `ab_18_intents.test.ts` (vitest) | SAFE - Intent validation |
 | AB-19 | Automation key exposure | `tests/security/ts/ab_19_automation_key.test.ts` | SAFE - Keys server-side |
 | AB-20 | Jailbreak attempts | `tests/security/py/ab_20_jailbreak.py` | SAFE - System prompt protected |
-| AB-21 | Faucet limit bypass | E2E steps 23-27 (faucet tests) | SAFE - 24h limit enforced |
+| AB-21 | Faucet limit bypass | `ab_21_faucet.test.ts` (vitest) | SAFE - 24h limit enforced |
 
 ## Validation Methodology
 
