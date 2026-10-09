@@ -395,16 +395,25 @@ class MarketMakerLoop:
             logger.exception(f"Failed to place quote for {market.ticker}")
 
     async def _cancel_all_quotes(self) -> None:
-        """Cancel all resting MM orders (AC2: actually cancels orders)."""
+        """Cancel all resting MM orders (AC2: actually cancels orders).
+
+        Catches per-order to avoid one failed cancel skipping remaining orders
+        (which would leave leftovers and hit the per-market order cap).
+        """
         try:
             markets = await self._fetch_open_markets()
             for market in markets:
                 orders = await self._order_client.fetch_resting_orders(market.market)
                 mm_orders = [o for o in orders if o.owner == self._mm_owner]
                 for order in mm_orders:
-                    await self._order_client.cancel_order(
-                        market=market.market, order_id=order.order_id, owner=self._mm_owner
-                    )
+                    try:
+                        await self._order_client.cancel_order(
+                            market=market.market, order_id=order.order_id, owner=self._mm_owner
+                        )
+                    except Exception:
+                        logger.exception(
+                            f"Failed to cancel order {order.order_id} in {market.market}"
+                        )
         except Exception:
             logger.exception("Failed to cancel quotes")
 
