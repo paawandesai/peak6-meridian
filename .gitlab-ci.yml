@@ -461,6 +461,28 @@ e2e:
       fi
     - make e2e
 
+# ---- deploy -------------------------------------------------------------------------------
+# Deploy services to Railway on main branch (M2-11, M3-08). Needs RAILWAY_TOKEN from protected
+# CI variables. Manual for now; auto-deploy can be enabled later.
+deploy:railway:
+  stage: .pre
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+  variables:
+    TOOLCHAIN: apt node
+    GIT_STRATEGY: clone
+  before_script:
+    - scripts/toolchain.sh $TOOLCHAIN
+    - npm install -g @railway/cli
+  script:
+    - echo "Deploying services to Railway..."
+    - pnpm --filter scripts/deploy exec tsx src/deploy-railway.ts automation || true
+    - pnpm --filter scripts/deploy exec tsx src/deploy-railway.ts quant || true
+    - pnpm --filter scripts/deploy exec tsx src/deploy-railway.ts ops-agent || true
+    - echo "Railway deployment completed"
+
 # ---- schedules ----------------------------------------------------------------------------
 # Fails when docs/log.md has not changed for 24 hours. The operator creates the schedule with
 # the variable HEARTBEAT=1.
