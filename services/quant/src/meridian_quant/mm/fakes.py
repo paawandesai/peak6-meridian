@@ -66,8 +66,9 @@ class FakeOrderClient:
         return self._orders[market].copy()
 
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
-        """Mint a YES+NO pair (no-op in fake)."""
-        pass
+        """Mint a YES+NO pair - increases YES balance."""
+        key = (market, owner)
+        self._yes_balances[key] = self._yes_balances[key] + qty
 
     async def settle_funds(self, market: str, owner: str) -> None:
         """Settle funds to withdraw fill proceeds (no-op in fake)."""

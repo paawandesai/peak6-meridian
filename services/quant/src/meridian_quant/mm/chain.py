@@ -293,7 +293,24 @@ class ChainOrderClient:
             AccountMeta(pubkey=SYSTEM_PROGRAM_ID, is_signer=False, is_writable=False),
         ]
 
-        instruction = Instruction(self.program_id, data, accounts)
+        # Fetch contra orders and include their OpenOrders in remaining_accounts
+        # for credit_other (program credits maker from remaining_accounts)
+        contra_side = "Bid" if side == "Ask" else "Ask"
+        resting_orders = await self.fetch_resting_orders(market)
+        contra_orders = [o for o in resting_orders if o.side == contra_side]
+
+        # Get unique contra owners and their OpenOrders PDAs
+        contra_owners = {Pubkey.from_string(o.owner) for o in contra_orders}
+        remaining_accounts = [
+            AccountMeta(
+                pubkey=derive_open_orders_pda(self.program_id, market_pda, contra_owner),
+                is_signer=False,
+                is_writable=True,
+            )
+            for contra_owner in contra_owners
+        ]
+
+        instruction = Instruction(self.program_id, data, accounts + remaining_accounts)
 
         # Build and send transaction
         # Get recent blockhash

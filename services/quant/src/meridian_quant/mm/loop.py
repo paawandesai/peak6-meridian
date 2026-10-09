@@ -211,11 +211,10 @@ class MarketMakerLoop:
                 logger.exception(f"Failed to read YES balance for {market.market}")
                 continue
 
-            # Only mint if we need more inventory for asks
-            # Mint enough to have at least 2x quote size in inventory
-            target_inventory = 2 * self.config.size_per_side
-            if yes_balance < target_inventory:
-                mint_qty = target_inventory - yes_balance
+            # Only mint if we don't have enough for this iteration's ask
+            # Don't top up to a fixed target - let inventory accumulate from bid fills
+            if yes_balance < self.config.size_per_side:
+                mint_qty = self.config.size_per_side - yes_balance
                 try:
                     await self._order_client.mint_pair(
                         market=market.market, qty=mint_qty, owner=self._mm_owner
@@ -223,7 +222,7 @@ class MarketMakerLoop:
                     # Inventory will be re-synced from wallet on next loop iteration
                     logger.debug(
                         f"Minted {mint_qty} pairs for {market.market} "
-                        f"(wallet: {yes_balance} -> target: {target_inventory})"
+                        f"(wallet: {yes_balance}, need: {self.config.size_per_side})"
                     )
                 except Exception:
                     logger.exception(f"Failed to mint pairs for {market.market}")

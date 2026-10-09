@@ -52,15 +52,16 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
 
         # Check no validator already running
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["solana", "cluster-version", "--url", rpc_url],
                 capture_output=True,
                 timeout=2,
                 check=False,
             )
-            pytest.skip(f"Validator already running on {rpc_url}")
-        except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
-            pass
+            if result.returncode == 0:
+                pytest.skip(f"Validator already running on {rpc_url}")
+        except subprocess.TimeoutExpired:
+            pytest.skip(f"Validator not responding on {rpc_url}")
 
         # Start validator (trap "kill 0" EXIT pattern via Python subprocess management)
         print("Starting solana-test-validator...")
