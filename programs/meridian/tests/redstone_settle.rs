@@ -425,7 +425,7 @@ fn settle_market_fails_stale_oracle() {
 #[test]
 fn settle_market_fails_wrong_price_pda() {
     // AC2 / AB-04: non-PDA or other-ticker price account fails
-    let (mut harness, args, market_pda, signers) = setup_market_with_redstone();
+    let (mut harness, _args, market_pda, signers) = setup_market_with_redstone();
 
     let signing_signers = &signers[..3];
     let payer = Keypair::new();
