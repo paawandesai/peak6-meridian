@@ -115,7 +115,21 @@ class OpsApp:
 def make_server(app: OpsApp, host: str, port: int) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         def _serve(self) -> None:
-            length = int(self.headers.get("Content-Length") or 0)
+            length_str = self.headers.get("Content-Length")
+            try:
+                length = int(length_str) if length_str else 0
+                if length < 0:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'{"error": "negative Content-Length"}')
+                    return
+            except ValueError:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error": "invalid Content-Length"}')
+                return
             body = self.rfile.read(min(length, MAX_BODY_BYTES + 1)) if length else b""
             status, payload = app.handle(
                 self.command, self.path.split("?", 1)[0], dict(self.headers), body
@@ -142,24 +156,28 @@ def main() -> None:  # pragma: no cover - process wiring, exercised by deploymen
     from meridian_ops_agent.tools import HttpSourceTools
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    env = os.environ
     llm: LLMClient | None = None
-    if env.get("OPS_AGENT_LLM") == "anthropic":  # the SDK reads its own credential from the env
+    # the SDK reads ANTHROPIC_API_KEY from the env
+    if os.environ.get("OPS_AGENT_LLM") == "anthropic":
         import anthropic
 
         budget = Budget.from_env()
         llm = LoggedLLM(AnthropicLLM.from_env(anthropic.Anthropic(), budget), budget)
-    store_path = Path(env.get("OPS_AGENT_STORE", "ops-agent-store.json"))
+    store_path = Path(os.environ.get("OPS_AGENT_STORE", "ops-agent-store.json"))
 
     def tools() -> ReadOnlyTools:
         return HttpSourceTools(
-            tiingo_key=env["TIINGO_API_KEY"],
-            twelvedata_key=env["TWELVEDATA_API_KEY"],
+            tiingo_key=os.environ["TIINGO_API_KEY"],
+            twelvedata_key=os.environ["TWELVEDATA_API_KEY"],
             log_reader=lambda _incident_id: "",
         )
 
-    app = OpsApp(token=env["SERVICE_TOKEN"], store=IncidentStore(store_path), tools=tools, llm=llm)
-    server = make_server(app, env.get("OPS_AGENT_HOST", "0.0.0.0"), int(env.get("PORT", "4200")))
+    app = OpsApp(
+        token=os.environ["SERVICE_TOKEN"], store=IncidentStore(store_path), tools=tools, llm=llm
+    )
+    host = os.environ.get("OPS_AGENT_HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", "4200"))
+    server = make_server(app, host, port)
     server.serve_forever()
 
 
