@@ -20,8 +20,10 @@ FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y git build-essential && rm -rf /var/lib/apt/lists/*
 
 # Clone repo preserving .git and checkout specific commit for verification.
-# In CI, GIT_COMMIT defaults to $CI_COMMIT_SHA (the MR HEAD).
-# For local testing after merge, pass --build-arg GIT_COMMIT=<sha> or GIT_BRANCH=main.
+# GIT_COMMIT must be passed via --build-arg to verify a specific SHA.
+# In CI: --build-arg GIT_COMMIT=$CI_COMMIT_SHA
+# Locally: --build-arg GIT_COMMIT=$(git rev-parse HEAD)
+# Falls back to GIT_BRANCH if GIT_COMMIT is not provided.
 # For private repos, pass --build-arg GIT_TOKEN=$CI_JOB_TOKEN in CI.
 ARG GIT_REPO=https://labs.gauntletai.com/paawandesai/peak6-meridian.git
 ARG GIT_TOKEN
