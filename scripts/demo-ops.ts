@@ -29,7 +29,7 @@ import {
   assertCluster,
   STRIKE_CENTS_TO_SCALED,
 } from "@meridian/client";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { z } from "zod";
 
 import {
@@ -235,7 +235,7 @@ async function createTestMarket(ctx: DemoContext): Promise<MarketKey> {
     ctx.program.programId,
   );
 
-  // Check if market exists; if not, needs automation authority to create
+  // Check if market exists; if not, create it (admin is automation authority in demo)
   try {
     const marketData = await ctx.program.account.market.fetch(addresses.market);
     console.log(`  Market exists at ${addresses.market.toString()}`);
@@ -247,10 +247,42 @@ async function createTestMarket(ctx: DemoContext): Promise<MarketKey> {
       closeTs: marketData.closeTs.toNumber(),
     };
   } catch {
-    throw new Error(
-      `Market does not exist at ${addresses.market.toString()}. ` +
-        `Run with automation authority to create markets first, or use an existing market.`,
-    );
+    // Market doesn't exist - create it with a 3-minute close for the demo
+    console.log(`  Market doesn't exist, creating at ${addresses.market.toString()}...`);
+    const blockTime = await ctx.connection.getBlockTime(await ctx.connection.getSlot("confirmed"));
+    const now = blockTime ?? Math.floor(Date.now() / 1000);
+    const closeTs = now + 180; // 3 minutes from now
+
+    await ctx.program.methods
+      .createStrikeMarket(
+        Array.from(symbolBytes(symbol)),
+        new BN(String(strikeCents)),
+        date,
+        new BN(closeTs),
+      )
+      .accountsStrict({
+        config: ctx.config,
+        automationAuthority: ctx.admin.publicKey,
+        market: addresses.market,
+        yesMint: addresses.yesMint,
+        noMint: addresses.noMint,
+        vault: addresses.vault,
+        escrowUsdc: addresses.escrowUsdc,
+        escrowYes: addresses.escrowYes,
+        book: addresses.book,
+        tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([ctx.admin])
+      .rpc();
+
+    console.log(`  Market created! Close in 3 minutes (closeTs: ${closeTs})`);
+    return {
+      symbol,
+      tradingDate: date,
+      strikeCents,
+      closeTs,
+    };
   }
 }
 
