@@ -1,19 +1,42 @@
 """Instruction account structure tests for chain.py (AC1).
 
-Verifies that ChainOrderClient builds instructions matching the IDL by calling
-the actual methods with a mocked RPC client. Regressions in chain.py account
-order would fail these tests.
+Verifies that ChainOrderClient builds instructions matching the IDL by
+intercepting Instruction creation and verifying AccountMeta flags before
+Message compilation. Regressions in chain.py account order/flags would fail.
 """
 
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from solders.hash import Hash
+from solders.instruction import Instruction
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from solders.signature import Signature
 
 from meridian_quant.mm.chain import TOKEN_PROGRAM_ID, ChainOrderClient
+
+
+class InstructionCapture:
+    """Captures Instruction objects created during test execution."""
+
+    def __init__(self) -> None:
+        self.instructions: list[Instruction] = []
+        self.original_init = Instruction.__init__
+
+    def __enter__(self) -> "InstructionCapture":
+        """Patch Instruction.__init__ to capture created instructions."""
+
+        def capturing_init(inst: Instruction, *args: object, **kwargs: object) -> None:
+            self.original_init(inst, *args, **kwargs)  # type: ignore[arg-type]
+            self.instructions.append(inst)
+
+        Instruction.__init__ = capturing_init  # type: ignore[assignment,method-assign]
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Restore original Instruction.__init__."""
+        Instruction.__init__ = self.original_init  # type: ignore[method-assign]
 
 
 async def mock_rpc_client() -> AsyncMock:
@@ -40,6 +63,7 @@ async def mock_rpc_client() -> AsyncMock:
 async def test_place_order_builds_correct_instruction_accounts() -> None:
     """place_order builds instruction with accounts matching IDL order.
 
+    Intercepts Instruction creation to verify AccountMeta before Message compilation.
     IDL order: config, market, book, user, open_orders, user_usdc, user_yes,
     escrow_usdc, escrow_yes, token_program, system_program + remaining_accounts.
     """
@@ -56,24 +80,24 @@ async def test_place_order_builds_correct_instruction_accounts() -> None:
     client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
     client.fetch_resting_orders = mock_fetch_orders  # type: ignore[assignment]
 
-    # Call place_order - this builds and "sends" the instruction
-    await client.place_order(
-        market="AAPL_20261008_23000",
-        side="Bid",
-        price=50,
-        qty=10,
-        owner=str(payer.pubkey()),
-    )
+    # Capture instructions created during place_order
+    with InstructionCapture() as capture:
+        await client.place_order(
+            market="AAPL_20261008_23000",
+            side="Bid",
+            price=50,
+            qty=10,
+            owner=str(payer.pubkey()),
+        )
 
-    # Extract the instruction from the send_transaction call
-    assert mock_client.send_transaction.called
-    transaction = mock_client.send_transaction.call_args[0][0]
-    instruction = transaction.message.instructions[0]
+    # Verify we captured exactly one instruction (place_order)
+    assert len(capture.instructions) == 1
+    instruction = capture.instructions[0]
 
     # Verify account count (11 base accounts, no remaining_accounts since no contra orders)
     assert len(instruction.accounts) == 11
 
-    # Verify flags for each account position (IDL order)
+    # Verify AccountMeta flags for each account position (IDL order)
     accounts = instruction.accounts
     assert not accounts[0].is_signer and not accounts[0].is_writable  # config
     assert not accounts[1].is_signer and not accounts[1].is_writable  # market
@@ -102,17 +126,18 @@ async def test_cancel_order_builds_correct_instruction_accounts() -> None:
     mock_client = await mock_rpc_client()
     client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
 
-    await client.cancel_order(
-        market="AAPL_20261008_23000",
-        order_id=42,
-        owner=str(payer.pubkey()),
-    )
+    # Capture instruction creation
+    with InstructionCapture() as capture:
+        await client.cancel_order(
+            market="AAPL_20261008_23000",
+            order_id=42,
+            owner=str(payer.pubkey()),
+        )
 
-    assert mock_client.send_transaction.called
-    transaction = mock_client.send_transaction.call_args[0][0]
-    instruction = transaction.message.instructions[0]
+    assert len(capture.instructions) == 1
+    instruction = capture.instructions[0]
 
-    # Verify account count and flags
+    # Verify account count and AccountMeta flags
     assert len(instruction.accounts) == 4
     accounts = instruction.accounts
     assert not accounts[0].is_signer and not accounts[0].is_writable  # market
@@ -141,19 +166,18 @@ async def test_mint_pair_builds_correct_instruction_accounts() -> None:
 
     client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
 
-    await client.mint_pair(
-        market="AAPL_20261008_23000",
-        qty=100,
-        owner=str(payer.pubkey()),
-    )
+    # Capture all instructions (might include ATA creation + mint_pair)
+    with InstructionCapture() as capture:
+        await client.mint_pair(
+            market="AAPL_20261008_23000",
+            qty=100,
+            owner=str(payer.pubkey()),
+        )
 
-    assert mock_client.send_transaction.called
-    transaction = mock_client.send_transaction.call_args[0][0]
-    # Find the mint_pair instruction (might be after ATA creation instructions)
-    instructions = transaction.message.instructions
-    mint_instruction = [ix for ix in instructions if len(ix.accounts) == 10][0]
+    # Find the mint_pair instruction (10 accounts, after any ATA creation)
+    mint_instruction = [ix for ix in capture.instructions if len(ix.accounts) == 10][0]
 
-    # Verify account count and flags
+    # Verify account count and AccountMeta flags
     assert len(mint_instruction.accounts) == 10
     accounts = mint_instruction.accounts
     assert not accounts[0].is_signer and not accounts[0].is_writable  # config
@@ -183,17 +207,19 @@ async def test_settle_funds_builds_correct_instruction_accounts() -> None:
     mock_client = await mock_rpc_client()
     client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
 
-    await client.settle_funds(
-        market="AAPL_20261008_23000",
-        owner=str(payer.pubkey()),
-    )
+    # Capture instruction creation
+    with InstructionCapture() as capture:
+        await client.settle_funds(
+            market="AAPL_20261008_23000",
+            owner=str(payer.pubkey()),
+        )
 
-    assert mock_client.send_transaction.called
-    transaction = mock_client.send_transaction.call_args[0][0]
-    instruction = transaction.message.instructions[0]
+    assert len(capture.instructions) == 1
+    instruction = capture.instructions[0]
 
-    # Verify account count and flags (IDL order: market, owner, open_orders,
-    # escrow_usdc, escrow_yes, owner_usdc, owner_yes, token_program)
+    # Verify account count and AccountMeta flags
+    # IDL order: market, owner, open_orders, escrow_usdc, escrow_yes,
+    # owner_usdc, owner_yes, token_program
     assert len(instruction.accounts) == 8
     accounts = instruction.accounts
     assert not accounts[0].is_signer and not accounts[0].is_writable  # market
