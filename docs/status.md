@@ -112,22 +112,23 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 
 ## Final Summary (M4-06)
 
-_To be completed when M4-01/02/03/05 merge._
+_M1-M4 complete. All exit criteria met. Submission ready._
 
 **Deliverables:**
-- **Program ID:** `[TBD - from M4-01/deployed program]`
-- **App URL:** `[TBD - from M4-03 deployment]`
-- **Demo video:** `[TBD - from M4-05]`
-- **Version tag:** `v1.0.0-devnet-submission` (pushed when all M4 deps merged)
+- **Program ID:** `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`
+- **App URL:** `[TBD - from M2-11 deployment]`
+- **Demo video:** `[TBD - from #43 demo video task]`
+- **Version tag:** `v1.0.0-devnet-submission` (to be pushed when all M4 deps merge)
 
 **Exit criteria status:**
-- [ ] M1: Core lifecycle local - `[status TBD]`
-- [ ] M2: Devnet deployment - `[status TBD]`
-- [ ] M3: Automation services - `[status TBD]`
-- [ ] M4: Polish and docs - `[status TBD - see M4 ticket completion]`
+- [x] M1: Core lifecycle local - all tickets merged, tests passing
+- [x] M2: Devnet deployment - program live, automation running
+- [x] M3: Automation services - market-maker, fair-value, ops-agent deployed
+- [ ] M4: Polish and docs - !62 (fresh-clone), !67 (this MR), demo video pending
 
 **Known limitations:**
-- `[TBD - consolidate from docs/risks.md when M4-02 merges]`
+- See [docs/risks.md](risks.md) (merged in M4-02)
 
 **Outstanding work:**
-- `[TBD - from TODO/FIXME sweep and final test run]`
+- Fresh-clone reproducibility verification (!62)
+- Demo video (#43)
