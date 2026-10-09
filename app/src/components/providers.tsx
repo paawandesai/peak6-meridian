@@ -7,6 +7,7 @@ import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { useStandardWalletAdapters } from "@solana/wallet-standard-wallet-adapter-react";
 import { type ReactNode, useMemo } from "react";
 
+import { BrowserMarketSources } from "./markets/data-context";
 import { ReaderProvider } from "./reader-context";
 import { createReader } from "@/lib/chain";
 import { loadPublicConfig } from "@/lib/config";
@@ -21,7 +22,9 @@ export function Providers({ children }: { readonly children: ReactNode }) {
     <ConnectionProvider endpoint={config.rpcUrl}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
-          <ReaderProvider reader={reader}>{children}</ReaderProvider>
+          <ReaderProvider reader={reader}>
+            <BrowserMarketSources>{children}</BrowserMarketSources>
+          </ReaderProvider>
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
