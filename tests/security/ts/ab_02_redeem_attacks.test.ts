@@ -240,7 +240,6 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
     // Settle the market (YES wins: close >= strike)
     // Strike is ~900M cents, so close at 900M + 1 cent means YES wins
     const slot = await v.connection.getSlot("confirmed");
-    const marketAccount = await v.program.account.market.fetch(market);
     const closePrice = BigInt(marketAccount.strikeCents.toString()) + 1n; // at-or-above = YES wins
     await setLocalFeed(v, "META", 0, closePrice, slot);
     await setLocalFeed(v, "META", 1, closePrice, slot);
