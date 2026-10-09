@@ -42,7 +42,11 @@ stages:
 # branch pipelines.
 workflow:
   rules:
+    # MR pipelines route the light jobs to the `meridian-light` runners (see the header). Set at
+    # the workflow level because tag expansion does not see job-level rules:variables.
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      variables:
+        LIGHT_RUNNER_TAG: meridian-light
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -63,8 +67,8 @@ variables:
   PNPM_R_FLAGS: "--workspace-concurrency=1"
   # Part of the cargo cache key; bump (v2, v3, ...) to drop a target/ that has grown too big.
   CARGO_CACHE_VERSION: "v1"
-  # Runner tag for the light jobs; set to `meridian-light` by their MR rules, empty (= untagged,
-  # Vultr #291 only) everywhere else. See the header.
+  # Runner tag for the light jobs; set to `meridian-light` by workflow:rules for MR pipelines,
+  # empty (= untagged, Vultr #291 only) everywhere else. See the header.
   LIGHT_RUNNER_TAG: ""
 
 default:
@@ -210,12 +214,11 @@ default:
   - .gitlab-ci.yml
 
 # Light jobs: MR pipelines route them to the `meridian-light` runners (Vultr #291/#235 or the box
-# runner #296); main stays untagged on Vultr. Jobs list `tags: [$LIGHT_RUNNER_TAG]`.
+# runner #296) through $LIGHT_RUNNER_TAG (workflow:rules); main stays untagged on Vultr. Jobs list
+# `tags: [$LIGHT_RUNNER_TAG]`.
 .light-mr-and-main:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      variables:
-        LIGHT_RUNNER_TAG: meridian-light
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 .light-on-app-change:
@@ -223,8 +226,6 @@ default:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         paths: *app-paths
-      variables:
-        LIGHT_RUNNER_TAG: meridian-light
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
 # ---- manual MR gate ------------------------------------------------------------------------
@@ -254,8 +255,6 @@ guard:human-files:
   stage: check
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      variables:
-        LIGHT_RUNNER_TAG: meridian-light
   tags: [$LIGHT_RUNNER_TAG]
   variables:
     TOOLCHAIN: apt
