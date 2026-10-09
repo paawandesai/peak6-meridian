@@ -30,9 +30,11 @@
 | `MERIDIAN_DEVNET_IDL` | tests | Path to the `make build-devnet` IDL (`target/idl/meridian.json`) for the AB-22 check; the M2-01 test sets it itself and fails if the file is missing | tests only | `target/idl/meridian.json` |
 | `SWITCHBOARD_QUEUE` | automation, scripts | Switchboard devnet queue pubkey | devnet | `<queue pubkey>` |
 | `SWITCHBOARD_FEEDS_JSON` | automation, scripts | Feed pubkeys per ticker and source | devnet | `{"AAPL":["<tiingo feed>","<twelvedata feed>"],...}` |
-| `TIINGO_API_KEY` | automation, app server, quant, ops-agent, feed jobs | Tiingo API | devnet | `test-tiingo-key` |
+| `TIINGO_API_KEY` | automation, app server, quant, ops-agent, feed jobs, demo replay | Tiingo API (live + historical) | devnet | `test-tiingo-key` |
 | `TWELVEDATA_API_KEY` | same | Twelve Data API | devnet | `test-twelvedata-key` |
 | `FINNHUB_API_KEY` | app server, quant, ops-agent | Finnhub live quotes | no | `test-finnhub-key` |
+| `DEMO_MODE` | automation, services | `live` (default) or `replay` - historical price replay for demo | no | `live` |
+| `DEMO_REPLAY_DATE` | automation, services | YYYY-MM-DD to replay (required when DEMO_MODE=replay) | no | `2024-10-08` |
 | `ANTHROPIC_API_KEY` | ops-agent | Claude API | M3 | `sk-ant-test-placeholder` |
 | `OPS_AGENT_MODEL` | ops-agent | Model ID | no | `claude-sonnet-5-5` |
 | `OPS_AGENT_BUDGET_USD` | ops-agent | Hard spend cap; agent refuses calls once reached | no (default 20) | `20` |
