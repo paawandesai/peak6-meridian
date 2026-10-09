@@ -211,7 +211,6 @@ guard:human-files:
 lint:rust:
   stage: check
   extends: .on-rust-change
-  resource_group: meridian-heavy
   timeout: 45 minutes
   variables:
     TOOLCHAIN: apt rust
@@ -341,7 +340,7 @@ test:js-py:
 # dependencies, so its own small cargo cache stays separate from `sbf`.
 coverage:
   stage: test
-  resource_group: meridian-heavy
+  resource_group: meridian-heavy-b
   # Cold toolchain cache compiles cargo-llvm-cov (like cargo-audit, ~25 min); warm ~5–10 min.
   timeout: 45 minutes
   rules:
@@ -375,7 +374,7 @@ e2e:
     - job: test:rust
       optional: true
     - job: test:js-py
-  resource_group: meridian-heavy
+  resource_group: meridian-heavy-b
   timeout: 2 hours
   tags:
     - heavy
