@@ -20,7 +20,7 @@
 
 ## Storyboard (9 Required Elements)
 
-### Shot 1: Wallet Connect (0:00-0:08, ~8s)
+### Shot 1: Wallet Connect (0:00-0:08, ~8s) ✅ READY
 **Page:** `/` (landing)  
 **Actions:**
 1. Click "Connect Wallet" button
@@ -33,7 +33,7 @@
 
 ---
 
-### Shot 2: Faucet (0:08-0:18, ~10s)
+### Shot 2: Faucet (0:08-0:18, ~10s) ✅ READY
 **Page:** `/` or wherever faucet button appears  
 **Actions:**
 1. Click "Get Devnet USDC" or faucet button
@@ -42,12 +42,12 @@
 **Overlay/Narration:** "Grab devnet USDC from the built-in faucet — $100 per wallet."
 
 **Dependencies:** 
-- App `/api/faucet` route working
-- Devnet USDC mint deployed
+- App `/api/faucet` route working ✅
+- Devnet USDC mint deployed ✅
 
 ---
 
-### Shot 3: Buy NO (0:18-0:35, ~17s)
+### Shot 3: Buy NO (0:18-0:35, ~17s) ⏳ PENDING !49
 **Page:** `/trade` (or market detail page)  
 **Actions:**
 1. Navigate to a market (e.g., META Friday $680 strike)
@@ -61,12 +61,13 @@
 **Overlay/Narration:** "Buy NO at 35¢ means you're betting YES stays under your price. Instant on-chain matching."
 
 **Dependencies:**
+- Trade page (!49 M2-06) ⏳
 - Markets created and Open
 - Book has existing orders (or market-maker providing liquidity)
 
 ---
 
-### Shot 4: YES/NO Book (0:35-0:48, ~13s)
+### Shot 4: YES/NO Book (0:35-0:48, ~13s) ⏳ PENDING !49
 **Page:** `/trade` or market detail with visible order book  
 **Actions:**
 1. Show the book panel (bids/asks for YES and NO)
@@ -76,12 +77,13 @@
 **Overlay/Narration:** "The on-chain CLOB shows all resting bids and asks. Trade against other users or the market maker."
 
 **Dependencies:**
+- Trade page (!49 M2-06) ⏳
 - Book has multiple price levels (market-maker running)
 - UI renders book from on-chain `Book` account
 
 ---
 
-### Shot 5: Fair Value + Market Maker (0:48-1:00, ~12s)
+### Shot 5: Fair Value + Market Maker (0:48-1:00, ~12s) ⏳ PENDING !49
 **Page:** Market detail or `/trade` with fair value indicator  
 **Actions:**
 1. Point to fair value display (e.g., "Fair: 64¢" for YES)
@@ -91,13 +93,14 @@
 **Overlay/Narration:** "Fair value from Black-Scholes; the market maker quotes around it, tightening spreads."
 
 **Dependencies:**
-- Quant service running (`GET /fair-values`)
-- Market-maker loop active
-- UI displays fair value (from `/api/market-data`)
+- Trade page (!49 M2-06) ⏳
+- Quant service running (`GET /fair-values`) ✅
+- Market-maker loop active (pending)
+- UI displays fair value (from `/api/market-data`) ✅
 
 ---
 
-### Shot 6: Friday Settlement (1:00-1:15, ~15s)
+### Shot 6: Friday Settlement (1:00-1:15, ~15s) ⏳ PENDING !49
 **Page:** `/trade` or `/` (watch for settlement event)  
 **Actions:**
 1. Show market status changing from "Open" to "Settling" to "Settled"
@@ -107,13 +110,14 @@
 **Overlay/Narration:** "Friday 16:05 ET: Switchboard oracle posts the official close. Market settles on-chain, outcome locked."
 
 **Dependencies:**
-- **Friday settlement event** (automation runs `settle_market` at close + 5 min)
-- Switchboard feeds updated with real Friday close
+- Trade page (!49 M2-06) ⏳
+- **Friday settlement event** (automation runs `settle_market` at close + 5 min) ✅
+- Switchboard feeds updated with real Friday close ✅
 - At least one market settles successfully via oracle (not override)
 
 ---
 
-### Shot 7: Redeem (1:15-1:25, ~10s)
+### Shot 7: Redeem (1:15-1:25, ~10s) ⏳ PENDING !43
 **Page:** Portfolio or market detail with "Redeem" button  
 **Actions:**
 1. Click "Settle Funds" (if needed, separate step)
@@ -124,12 +128,13 @@
 **Overlay/Narration:** "Redeem your winners for USDC. Instant, on-chain."
 
 **Dependencies:**
+- Portfolio page (!43 M2-07) ⏳
 - Market settled (from shot #6)
 - User holds YES or NO tokens in a settled market
 
 ---
 
-### Shot 8: /status Page (1:25-1:35, ~10s)
+### Shot 8: /status Page (1:25-1:35, ~10s) ✅ READY
 **Page:** `/status`  
 **Actions:**
 1. Scroll through Config section (pause state, oracle settings)
@@ -140,13 +145,13 @@
 **Overlay/Narration:** "The status page shows every on-chain invariant and the program's health. Transparency first."
 
 **Dependencies:**
-- `/status` page deployed (M3-04)
+- `/status` page deployed (M3-04) ✅
 - Multiple markets exist (mix of Open/Settled)
 - No invariant violations (or show a test violation if safe)
 
 ---
 
-### Shot 9: Ops-Agent Clip (1:35-2:00, ~25s)
+### Shot 9: Ops-Agent Clip (1:35-2:00, ~25s) ✅ READY
 **Page:** Admin section (or show ops-agent draft JSON/UI)  
 **Actions:**
 1. Show an incident that triggered ops-agent (settlement failure due to spread)
@@ -158,9 +163,9 @@
 
 **Dependencies:**
 - **At least one settlement failure → ops-agent incident** (requires injected oracle fault or real oracle spread > 5 bps)
-- M3-05 (ops-agent service) deployed and wired to app
-- M3-06 (admin override UI) merged
-- Ops-agent has generated at least one draft in "pending_approval" status
+- M3-05 (ops-agent service) deployed and wired to app ✅
+- M3-06 (admin override UI) merged ✅
+- Ops-agent has generated at least one draft in "pending_approval" status (demo-ops script M3-07) ✅
 - If showing override execution: override delay (1 hour default) must have passed OR use a test Config with short delay
 
 ---
