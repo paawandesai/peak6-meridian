@@ -42,7 +42,7 @@ Business rules and units live in [domain.md](domain.md); this file covers struct
 ### App structure (M3-04, M3-06)
 **Status page** (`/status`): Reads Config and all Markets from the chain, checks vault balance against `pairsOutstanding × $1` (USDC locked must equal pairs minted minus redeemed). Displays on-chain pause state and any invariant violations. Read-only, client-rendered.
 
-**Admin override flow** (`app/src/components/admin-override/`): Fetches drafts from `/api/ops/drafts` (which proxies ops-agent's `GET /drafts`), validates each draft against the program's override rules (market must be Open, not already settled; override delay must have passed since settlement failure), and builds `admin_settle_override` transactions for the admin wallet to sign. The proposed price is checked against source range as a sanity cue but not a rejection gate. The flow rejects drafts that fail validation with a specific reason (e.g., "already settled", "delay not met").
+**Admin override flow** (`app/src/components/admin-override/`): Fetches drafts from `/api/ops/drafts` (which proxies ops-agent's `GET /drafts`), validates each draft against the program's override rules (market must be Open/unsettled; `now >= close_ts + override_delay_secs`), and builds `admin_settle_override` transactions for the admin wallet to sign. The proposed price is checked against source range as a sanity cue (not a rejection gate). Drafts that fail the Open or delay check cannot be approved.
 
 **API routes**:
 - `/api/faucet`: Devnet USDC faucet (rate-limited per wallet)
