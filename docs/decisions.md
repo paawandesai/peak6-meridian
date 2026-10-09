@@ -259,3 +259,10 @@ Append-only. The operator appends entries and never edits or deletes human entri
 **Conflict:** supersedes D-005 and suspends D-033's on-chain spread check until M3-10. Amends domain.md § Units and § Settlement rules and tickets M2-02 (superseded), M2-04 and M3-09 AC2. NFR-06 in requirements.md and AB-03/AB-04/AB-13 in threat-model.md are human-owned; their amendments are proposed in a separate MR that needs Paawan's `human-approved` label.
 **Known limitation:** a RedStone value at or after 16:00 ET is the provider's price at the package timestamp, not necessarily the closing-auction print (D-006). The ≤ 5 bps off-chain check against the official close ties it to the close, and a miss goes to the override path.
 **How to reverse:** The oracle adapter keeps its interface; implement another reader (Pyth, M3-10) behind it, change the pinned signer set or price accounts, and upgrade the program on devnet with `--allow-upgrade`.
+
+### D-055 · By: human · 2026-10-09
+**Decision:** Pyth Pro is the primary demo price source. Paawan got a Pyth Pro (Lazer) key: all equity feeds at 1ms (MAG7) plus crypto/FX. For the demo, Pyth drives live prices/quotes/fair value and settlement where feasible. RedStone (D-054) stays as the second on-chain source and fallback; settlement keeps the two-source check (D-033) when both are available. Demo historical replay (#52) is a permanent toggle shipping alongside live Pyth mode as soon as Pyth lands. The key is a server-only secret (`PYTH_API_TOKEN`), never in logs, commits, or the client bundle.
+**Why:** Pyth Pro delivers 1ms equity data for all MAG7 tickers, enabling live demo with real-time price discovery. The two-source on-chain verification (D-033) returns with RedStone as the fallback, strengthening settlement integrity (NFR-06).
+**Alternatives rejected:** RedStone-only (no live intraday); historical replay without live mode (less compelling demo); exposing PYTH_API_TOKEN client-side (AB-17 secret exposure).
+**Conflict:** Supersedes "Pyth later" in D-054.
+**How to reverse:** Remove Pyth adapter from settlement, use RedStone-only with off-chain official-close cross-check as in D-054 (3).
