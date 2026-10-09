@@ -8,8 +8,11 @@
 # AC2: Validator :8899 and app :3000 both listening within 15 minutes (900s).
 #
 # Usage:
-#   docker build -f Dockerfile.fresh-clone-test .                              # test main
-#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_BRANCH=m4-01-fresh-clone .  # test feature branch
+#   docker build -f Dockerfile.fresh-clone-test .                              # test main (default)
+#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_BRANCH=<branch> .  # test feature branch
+#
+# GIT_BRANCH defaults to 'main' (feature branches are deleted post-merge).
+# MR verification runs use --build-arg GIT_BRANCH=<mr-branch>.
 
 FROM ubuntu:24.04
 
