@@ -177,11 +177,13 @@ See `make help` or `Makefile` for all targets.
 
 **This is a devnet demo.** No real money. No regulatory compliance. No mainnet deployment.
 
-See [docs/risks.md](docs/risks.md) for:
-- Known limitations (devnet only, single admin, test-USDC)
-- Residual risks (oracle outages, admin key compromise)
-- Out-of-scope threats
-- Mitigations in place
+Known limitations:
+- Devnet only (test-USDC, no real funds)
+- Single admin keypair controls markets and settlement
+- Oracle outages halt settlement
+- No mainnet deployment planned
+
+See [docs/threat-model.md](docs/threat-model.md) for complete security analysis.
 
 ## License
 

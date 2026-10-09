@@ -43,13 +43,14 @@ RUN timeout 1200 make toolchain || (echo "FAIL: toolchain timeout" && exit 1)
 FROM toolchain as build-test
 RUN timeout 1200 make install || (echo "FAIL: install timeout" && exit 1)
 RUN timeout 1200 make build-local || (echo "FAIL: build-local timeout" && exit 1)
-# e2e requires running validator, skip in container
-RUN echo "PASS: make toolchain && make install && make build-local completed"
+RUN timeout 1200 make e2e || (echo "FAIL: e2e timeout or failure" && exit 1)
+RUN echo "PASS: make toolchain && make install && make build-local && make e2e completed"
 
 # AC2 test: dev starts validator and app
 FROM toolchain as dev-test
+RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/lists/*
 RUN timeout 900 make install || (echo "FAIL: install timeout" && exit 1)
-# Start dev in background and check ports
+# Start dev in background and check ports (FAIL expected: validator hangs in container without TTY)
 RUN timeout 900 sh -c 'make dev & sleep 300 && nc -zv localhost 8899 && nc -zv localhost 3000' || \
-    (echo "FAIL: dev services not listening" && exit 1)
+    (echo "NOTE: dev-test expected to fail in Docker (validator needs TTY); test manually" && exit 1)
 RUN echo "PASS: make dev started validator (:8899) and app (:3000) in 15 min"
