@@ -854,3 +854,128 @@ async def test_fetch_resting_orders_failure_skips_quoting(mm_config: MMConfig) -
     # Assert: fetch was called but no quotes placed (fail closed)
     assert order_client.fetch_called, "fetch_resting_orders should have been called"
     assert not order_client.place_called, "Should NOT place quotes when fetch fails (AB-10)"
+
+
+@pytest.mark.asyncio
+async def test_cancel_fetch_failure_per_market_isolation(mm_config: MMConfig) -> None:
+    """AB-10/AC1: cancel fetch failure on market A doesn't abort cancel of B/C.
+    
+    Scenario: Three markets (A, B, C). fetch_resting_orders fails on A but
+    succeeds on B and C. Cancel should continue for B and C, and quote phase
+    should skip A (fail closed) but quote B and C if capacity allows.
+    """
+    # Use today's trading date (YYYYMMDD in ET) so markets aren't filtered as prior-day
+    now = datetime.now(UTC)
+    et_now = now.astimezone(ZoneInfo("America/New_York"))
+    trading_date = int(et_now.strftime("%Y%m%d"))
+    close_ts = int(datetime.now(UTC).timestamp()) + 7200
+    
+    market_a = MarketState(
+        market="AAPL_20261008_23000",
+        ticker="AAPL",
+        trading_date=trading_date,
+        strike_cents=23_000,
+        close_ts=close_ts,
+        is_open=True,
+        pairs_outstanding=100,
+    )
+    market_b = MarketState(
+        market="AAPL_20261008_24000",
+        ticker="AAPL",
+        trading_date=trading_date,
+        strike_cents=24_000,
+        close_ts=close_ts,
+        is_open=True,
+        pairs_outstanding=100,
+    )
+    market_c = MarketState(
+        market="AAPL_20261008_25000",
+        ticker="AAPL",
+        trading_date=trading_date,
+        strike_cents=25_000,
+        close_ts=close_ts,
+        is_open=True,
+        pairs_outstanding=100,
+    )
+    
+    market_source = FakeMarketSource([market_a, market_b, market_c])
+    
+    fv_a = FairValue(
+        market="AAPL_20261008_23000",
+        ticker="AAPL",
+        strike_cents=23_000,
+        fair_cents=50,
+        sigma=0.2,
+        spot=230.0,
+        as_of=datetime.now(UTC),
+    )
+    fv_b = FairValue(
+        market="AAPL_20261008_24000",
+        ticker="AAPL",
+        strike_cents=24_000,
+        fair_cents=40,
+        sigma=0.2,
+        spot=230.0,
+        as_of=datetime.now(UTC),
+    )
+    fv_c = FairValue(
+        market="AAPL_20261008_25000",
+        ticker="AAPL",
+        strike_cents=25_000,
+        fair_cents=30,
+        sigma=0.2,
+        spot=230.0,
+        as_of=datetime.now(UTC),
+    )
+    fv_source = FakeFairValueSource([fv_a, fv_b, fv_c])
+    
+    # Create order client that fails fetch on market A only
+    class PartialFailOrderClient(FakeOrderClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.fetch_calls: list[str] = []
+            self.cancel_calls: list[str] = []
+            self.place_calls: list[str] = []
+            
+        async def fetch_resting_orders(self, market: str) -> list[RestingOrder]:
+            self.fetch_calls.append(market)
+            if market == "AAPL_20261008_23000":
+                raise Exception("Simulated RPC error on market A")
+            return await super().fetch_resting_orders(market)
+        
+        async def cancel_order(self, market: str, order_id: int, owner: str) -> None:
+            self.cancel_calls.append(market)
+            await super().cancel_order(market, order_id, owner)
+        
+        async def place_order(
+            self, market: str, side: str, price: int, qty: int, owner: str
+        ) -> int:
+            self.place_calls.append(market)
+            return await super().place_order(market, side, price, qty, owner)
+    
+    order_client = PartialFailOrderClient()
+    mm = MarketMakerLoop(mm_config, market_source, fv_source, order_client)
+    
+    # Run loop
+    await mm._run_once()
+    
+    # Assert: fetch was attempted for all three markets
+    assert len(order_client.fetch_calls) >= 3, "Should attempt fetch for all markets"
+    assert "AAPL_20261008_23000" in order_client.fetch_calls
+    assert "AAPL_20261008_24000" in order_client.fetch_calls
+    assert "AAPL_20261008_25000" in order_client.fetch_calls
+    
+    # Assert: cancel was NOT attempted for A (fetch failed), but WAS for B and C
+    # (per-market isolation in cancel phase)
+    # Note: if there are no existing orders, cancel_calls might be empty
+    # The key is that B and C got their chance (fetch succeeded)
+    
+    # Assert: quote was NOT placed for A (cancel listing failed)
+    # but WAS placed for B and C (cancel listing succeeded, capacity allows)
+    a_quoted = "AAPL_20261008_23000" in order_client.place_calls
+    b_quoted = "AAPL_20261008_24000" in order_client.place_calls
+    c_quoted = "AAPL_20261008_25000" in order_client.place_calls
+    
+    assert not a_quoted, "Should NOT quote market A (cancel listing failed)"
+    assert b_quoted, "Should quote market B (cancel listing succeeded)"
+    assert c_quoted, "Should quote market C (cancel listing succeeded)"

@@ -129,7 +129,8 @@ class MarketMakerLoop:
                 return
 
             # Cancel all old quotes first (frees escrowed YES to OpenOrders.free_yes)
-            await self._cancel_all_quotes(open_markets)
+            # Track markets where cancel listing failed (AB-10: don't quote those markets)
+            cancel_failed_markets = await self._cancel_all_quotes(open_markets)
 
             # Settle funds to move free_yes to wallet
             await self._settle_funds(open_markets)
@@ -139,8 +140,8 @@ class MarketMakerLoop:
             synced_markets = await self._sync_inventory(open_markets)
 
             # Place new quotes (no cancel needed, already cancelled above)
-            # Only quote markets that were successfully synced
-            await self._quote_all_strikes(fair_values, synced_markets)
+            # Only quote markets that were successfully synced AND had successful cancel listing
+            await self._quote_all_strikes(fair_values, synced_markets, cancel_failed_markets)
 
             # Update coverage metric (denominator = all open markets per AC4)
             # Coverage is share of OPEN strikes with quotes, not share of synced
@@ -301,12 +302,21 @@ class MarketMakerLoop:
         self,
         fair_values: list[FairValue],
         markets: list[MarketState],
+        cancel_failed_markets: set[str] | None = None,
     ) -> None:
         """Generate and place quotes for all open strikes.
 
         Finding #3: Only quote today's markets; prior-day markets remain Open for
         settlement (AB-11) but don't get new quotes.
+
+        Args:
+            fair_values: Fair values from the quant service.
+            markets: Open markets (typically from _sync_inventory).
+            cancel_failed_markets: Market IDs where cancel listing failed.
+                These markets are skipped (AB-10: fail closed on fetch errors).
         """
+        if cancel_failed_markets is None:
+            cancel_failed_markets = set()
         # Get today's trading date (YYYYMMDD in ET)
         now = self._clock()
         et_now = now.astimezone(ZoneInfo("America/New_York"))
@@ -337,6 +347,11 @@ class MarketMakerLoop:
                 None,
             )
             if not fv_market:
+                continue
+
+            # Skip markets where cancel listing failed (AB-10: fail closed)
+            if fv_market.market in cancel_failed_markets:
+                logger.warning(f"Skipping {fv.ticker}: cancel listing failed for this market")
                 continue
 
             # Get current inventory using MarketKey (Finding #5)
@@ -426,21 +441,32 @@ class MarketMakerLoop:
         except Exception:
             logger.exception(f"Failed to place quote for {market.ticker}")
 
-    async def _cancel_all_quotes(self, markets: list[MarketState] | None = None) -> None:
+    async def _cancel_all_quotes(self, markets: list[MarketState] | None = None) -> set[str]:
         """Cancel all resting MM orders (AC2: actually cancels orders).
 
-        Catches per-order to avoid one failed cancel skipping remaining orders
-        (which would leave leftovers and hit the per-market order cap).
+        Catches per-order and per-market to avoid one failure skipping remaining
+        markets/orders (which would leave leftovers and hit the per-market order cap).
 
         Args:
             markets: Already-fetched open markets. If None, fetches them.
                 Passing the already-fetched list avoids refetching, which can
                 return [] on RPC error and leave stale orders undetected.
+
+        Returns:
+            Set of market IDs where fetch_resting_orders failed. These markets
+            should not be quoted (AB-10: fail closed on fetch errors).
         """
+        failed_markets: set[str] = set()
         try:
             if markets is None:
                 markets = await self._fetch_open_markets()
-            for market in markets:
+        except Exception:
+            logger.exception("Failed to fetch open markets for cancel")
+            # Return empty set - all markets failed
+            return failed_markets
+
+        for market in markets:
+            try:
                 orders = await self._order_client.fetch_resting_orders(market.market)
                 mm_orders = [o for o in orders if o.owner == self._mm_owner]
                 for order in mm_orders:
@@ -452,8 +478,11 @@ class MarketMakerLoop:
                         logger.exception(
                             f"Failed to cancel order {order.order_id} in {market.market}"
                         )
-        except Exception:
-            logger.exception("Failed to cancel quotes")
+            except Exception:
+                logger.exception(f"Failed to fetch orders for cancel in {market.market}")
+                failed_markets.add(market.market)
+
+        return failed_markets
 
     async def _update_coverage(self, markets: list[MarketState]) -> None:
         """Update the book coverage metric (AC4: actually fetches orders).
