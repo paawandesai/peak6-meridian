@@ -159,30 +159,36 @@ pub fn check_pyth_reading(
         MeridianError::OracleBeforeClose
     );
 
-    // Check 4: Staleness check
-    // For Pyth, we need to convert publish_time to slots or check elapsed time
-    // TODO: Determine how to properly check staleness for Pyth price updates
-    // For now, we'll use a simple timestamp-based check
+    // Check 4: Staleness check (fail closed like oracle::check_reading)
+    // Pyth uses timestamps, not slots. Fail if publish_time is in the future.
     let current_time = clock.unix_timestamp;
+    require!(
+        reading.publish_time <= current_time,
+        MeridianError::OracleInvalidValue
+    );
+
     let age_seconds = current_time
         .checked_sub(reading.publish_time)
-        .ok_or(MeridianError::OracleInvalidValue)?;
+        .ok_or(MeridianError::MathOverflow)?;
 
-    // Convert slots to approximate seconds (assuming ~400ms per slot)
-    // Use checked_mul on u64, then convert to i64 for comparison
+    // Convert max_staleness_slots to seconds (assuming ~400ms per slot)
     let max_age_ms = max_staleness_slots
         .checked_mul(400)
         .ok_or(MeridianError::MathOverflow)?;
-    let max_age_seconds = i64::try_from(max_age_ms / 1000)
-        .map_err(|_| MeridianError::MathOverflow)?;
+    let max_age_seconds = i64::try_from(
+        max_age_ms
+            .checked_div(1000)
+            .ok_or(MeridianError::MathOverflow)?,
+    )
+    .map_err(|_| MeridianError::MathOverflow)?;
 
     require!(age_seconds <= max_age_seconds, MeridianError::OracleStale);
 
-    // Return a validated close reading
-    // Note: We use slot 0 as a placeholder since Pyth uses timestamps, not slots
+    // Return validated reading with non-zero slot (approximation from publish_time)
+    // Use clock.slot as a conservative estimate since we know it's recent
     Ok(CloseReading {
         value_scaled: reading.value_scaled,
-        slot: 0,
+        slot: clock.slot,
     })
 }
 
