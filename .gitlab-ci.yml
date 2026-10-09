@@ -507,7 +507,6 @@ e2e:
         export E2E_PREBUILT=1
       fi
     - make e2e
-
 # ---- e2e:ui (M2-13, human review) ---------------------------------------------------------
 # Playwright smoke: local validator + app + injected test wallet (tests/e2e/playwright). Tagged
 # `heavy` and in the `meridian-heavy` resource group like `e2e` (validator ~1.4 GB RSS plus
@@ -548,6 +547,28 @@ e2e:ui:
     expire_in: 1 week
     paths:
       - tests/e2e/playwright-report/
+
+# Fresh-clone test (M4-01): builds and runs from scratch in a fresh Ubuntu 24.04 container.
+# Manual everywhere (expensive: 20+ min docker-in-docker on 8 GB box). Verifies AC1
+# (toolchain+build+e2e <20 min) and AC2 (:8899+:3000 up <15 min). Requires privileged runner.
+fresh-clone:
+  stage: e2e
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+  needs: []
+  timeout: 30 minutes
+  tags:
+    - heavy
+  image: docker:24-cli
+  services:
+    - docker:24-dind
+  script:
+    - docker build -f Dockerfile.fresh-clone-test --build-arg GIT_TOKEN=$CI_JOB_TOKEN --build-arg GIT_COMMIT=$CI_COMMIT_SHA .
 
 # ---- schedules ----------------------------------------------------------------------------
 # Fails when docs/log.md has not changed for 24 hours. The operator creates the schedule with
