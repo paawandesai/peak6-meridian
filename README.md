@@ -28,12 +28,45 @@ make deploy-devnet                                            # program, test-US
 make deploy-devnet DEPLOY_ARGS="--feeds deployments/feeds.devnet.json"   # pin real Switchboard feeds
 ```
 
-## Demo
-_Filled in as milestones ship._
-- **M1:** _pending_
-- **M2:** _pending_
-- **M3:** _pending_
-- **M4:** _pending_
+## Features
+
+### Implemented (M1-M3)
+
+**Solana Program**
+- Binary 0DTE outcome markets on MAG7 stocks (AAPL, AMZN, GOOGL, META, MSFT, NVDA, TSLA)
+- On-chain order book with limit orders (Buy YES, Sell YES, Buy NO, Sell NO)
+- Four trade intents: bullish, bearish, inside strike, outside strike
+- Switchboard Oracle integration for fair settlement
+- Admin controls: add strikes, pause/unpause, force-settle with 60s delay
+- Winner redemption ($1.00 per winning token, $0.00 for losers)
+
+**Automation Services**
+- Morning job: daily market creation at 9:30 AM ET
+- Settlement job: closes markets at 4:00 PM ET, settles from oracle
+- Fair-value pricing service (Python)
+- Safety oversight with Claude API (ops-agent)
+
+**Frontend (Next.js 15)**
+- Markets page: live prices, order book, market status
+- Trade page: four intent flows, wallet integration (Phantom/Solflare)
+- Portfolio page: positions, P&L tracking, winner redemption
+- History page: trade and fill history
+- Admin page: add strikes, pause/unpause markets
+- Status page: system invariants and liveness checks
+- Test-USDC faucet (1 claim per wallet per 24h)
+
+**Devnet Deployment**
+- Live program on Solana devnet
+- Switchboard feeds pinned and verified
+- Automated lifecycle: create → trade → settle → redeem
+- Fresh-clone reproducibility verified
+
+### In Progress (M4)
+- Red-team security validation (22 abuse cases)
+- README and demo materials
+- Final submission preparation
+
+See [CHANGELOG.md](CHANGELOG.md) for complete feature list by milestone.
 
 ## Risks and limitations
 See docs/risks.md (written in M4). No regulatory or compliance claims are made.
