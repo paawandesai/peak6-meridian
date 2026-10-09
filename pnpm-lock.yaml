@@ -173,6 +173,12 @@ importers:
         specifier: 4.23.15
         version: 4.23.15
 
+  scripts/redstone:
+    devDependencies:
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+
   scripts/switchboard:
     dependencies:
       '@coral-xyz/anchor':
