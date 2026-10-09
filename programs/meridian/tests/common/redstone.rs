@@ -40,7 +40,8 @@ impl TestSigner {
     /// RedStone format: v = recovery_id + 27 (Ethereum convention).
     fn sign(&self, message: &[u8]) -> [u8; 65] {
         let digest: [u8; 32] = Keccak256::digest(message).into();
-        let (sig, recid): (Signature, RecoveryId) = self.signing_key
+        let (sig, recid): (Signature, RecoveryId) = self
+            .signing_key
             .sign_prehash_recoverable(&digest)
             .expect("signing failed");
 

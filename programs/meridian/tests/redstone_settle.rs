@@ -2,7 +2,11 @@
 //! Tests: success after post, rejection cases (timestamp/staleness/wrong PDA/before close),
 //! property test at strike boundary.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::arithmetic_side_effects)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::arithmetic_side_effects
+)]
 
 mod common;
 
@@ -11,7 +15,7 @@ use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 use common::redstone::{RedstonePayloadBuilder, TestSigner};
 use common::{
     assert_meridian_error, config_pda, expect_success, symbol, MarketArgs, MarketHarness,
-    FUNDING_LAMPORTS, BASE_CLOSE_TS, BASE_TRADING_DATE,
+    BASE_CLOSE_TS, BASE_TRADING_DATE, FUNDING_LAMPORTS,
 };
 use meridian::errors::MeridianError;
 use meridian::state::{Market, MarketStatus, Outcome};
@@ -31,10 +35,7 @@ fn setup_market_with_redstone() -> (MarketHarness, MarketArgs, Pubkey, Vec<TestS
     let signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
     let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
 
-    let (oracle_config_pda, _) = Pubkey::find_program_address(
-        &[b"oracle_config"],
-        &meridian::ID,
-    );
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let params = meridian::SetOracleConfigParams {
         signers: addresses.clone(),
@@ -55,7 +56,9 @@ fn setup_market_with_redstone() -> (MarketHarness, MarketArgs, Pubkey, Vec<TestS
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
     // Create a market
@@ -83,7 +86,11 @@ fn settle_market_succeeds_after_redstone_post() {
     let signing_signers = &signers[..3];
 
     let payer = Keypair::new();
-    harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
 
     let ticker = args.ticker;
     let value = 2050_0000_0000u64; // $2050 > $2000 strike → YES wins
@@ -96,15 +103,9 @@ fn settle_market_succeeds_after_redstone_post() {
     }
     let payload = builder.build();
 
-    let (price_pda, _) = Pubkey::find_program_address(
-        &[b"redstone_price", &ticker],
-        &meridian::ID,
-    );
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
 
-    let (oracle_config_pda, _) = Pubkey::find_program_address(
-        &[b"oracle_config"],
-        &meridian::ID,
-    );
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
@@ -123,12 +124,18 @@ fn settle_market_succeeds_after_redstone_post() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send_with_budget(instruction, &[&payer], 400_000);
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&payer], 400_000);
     expect_success(&result);
 
     // Now settle the market
     let settler = Keypair::new();
-    harness.harness.svm.airdrop(&settler.pubkey(), FUNDING_LAMPORTS).unwrap();
+    harness
+        .harness
+        .svm
+        .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
 
     let settle_ix = meridian::instruction::SettleMarket {};
     let settle_accounts = meridian::accounts::SettleMarket {

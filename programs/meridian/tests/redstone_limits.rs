@@ -1,7 +1,11 @@
 //! M2-15 AC4: RedStone compute and size limits.
 //! Tests: CU under 400,000 for post and settle, transaction size within limit.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::arithmetic_side_effects)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::arithmetic_side_effects
+)]
 
 mod common;
 
@@ -9,8 +13,8 @@ use anchor_lang::prelude::Pubkey;
 use anchor_lang::{InstructionData, ToAccountMetas};
 use common::redstone::{RedstonePayloadBuilder, TestSigner};
 use common::{
-    config_pda, expect_success, symbol, transaction_size, MarketArgs, MarketHarness,
-    FUNDING_LAMPORTS, BASE_CLOSE_TS, BASE_TRADING_DATE,
+    config_pda, expect_success, symbol, transaction_size, MarketArgs, MarketHarness, BASE_CLOSE_TS,
+    BASE_TRADING_DATE, FUNDING_LAMPORTS,
 };
 use solana_sdk::instruction::Instruction;
 use solana_sdk::packet::PACKET_DATA_SIZE;
@@ -31,10 +35,7 @@ fn post_redstone_price_stays_under_cu_limit() {
     let signers_test: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
     let addresses: Vec<[u8; 20]> = signers_test.iter().map(|s| s.ethereum_address()).collect();
 
-    let (oracle_config_pda, _) = Pubkey::find_program_address(
-        &[b"oracle_config"],
-        &meridian::ID,
-    );
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let params = meridian::SetOracleConfigParams {
         signers: addresses,
@@ -55,12 +56,18 @@ fn post_redstone_price_stays_under_cu_limit() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
     // Post price with all 5 signers
     let payer = Keypair::new();
-    harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
 
     let ticker = symbol("NVDA");
     let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
@@ -69,10 +76,7 @@ fn post_redstone_price_stays_under_cu_limit() {
     }
     let payload = builder.build();
 
-    let (price_pda, _) = Pubkey::find_program_address(
-        &[b"redstone_price", &ticker],
-        &meridian::ID,
-    );
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
 
     let post_ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
@@ -91,7 +95,9 @@ fn post_redstone_price_stays_under_cu_limit() {
         accounts: post_accounts.to_account_metas(None),
         data: post_ix.data(),
     };
-    let post_result = harness.harness.send_with_budget(post_instruction, &[&payer], 400_000);
+    let post_result = harness
+        .harness
+        .send_with_budget(post_instruction, &[&payer], 400_000);
     let meta = expect_success(&post_result);
 
     // Check CU consumption
@@ -117,10 +123,7 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
     let remaining = signing_signers.split_off(3);
     drop(remaining);
 
-    let (oracle_config_pda, _) = Pubkey::find_program_address(
-        &[b"oracle_config"],
-        &meridian::ID,
-    );
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let params = meridian::SetOracleConfigParams {
         signers: addresses,
@@ -141,7 +144,9 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
     // Create market
@@ -158,7 +163,11 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
 
     // Post RedStone price
     let payer = Keypair::new();
-    harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
 
     let ticker = args.ticker;
     let timestamp_ms = (BASE_CLOSE_TS as i64) * 1000 + 1000;
@@ -168,10 +177,7 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
     }
     let payload = builder.build();
 
-    let (price_pda, _) = Pubkey::find_program_address(
-        &[b"redstone_price", &ticker],
-        &meridian::ID,
-    );
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
 
     let post_ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
@@ -195,7 +201,11 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
 
     // Settle market
     let settler = Keypair::new();
-    harness.harness.svm.airdrop(&settler.pubkey(), FUNDING_LAMPORTS).unwrap();
+    harness
+        .harness
+        .svm
+        .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
 
     let settle_ix = meridian::instruction::SettleMarket {};
     let settle_accounts = meridian::accounts::SettleMarket {
@@ -213,7 +223,9 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
         accounts: settle_accounts.to_account_metas(None),
         data: settle_ix.data(),
     };
-    let settle_result = harness.harness.send_with_budget(settle_instruction, &[&settler], 400_000);
+    let settle_result = harness
+        .harness
+        .send_with_budget(settle_instruction, &[&settler], 400_000);
     let meta = expect_success(&settle_result);
 
     // Check CU consumption
@@ -241,15 +253,9 @@ fn redstone_payload_fits_in_transaction() {
     let payload = builder.build();
 
     let ticker = symbol("NVDA");
-    let (price_pda, _) = Pubkey::find_program_address(
-        &[b"redstone_price", &ticker],
-        &meridian::ID,
-    );
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
 
-    let (oracle_config_pda, _) = Pubkey::find_program_address(
-        &[b"oracle_config"],
-        &meridian::ID,
-    );
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let post_ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,

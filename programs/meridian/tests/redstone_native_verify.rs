@@ -29,14 +29,20 @@ fn native_verify_single_signer() {
     println!("signable_bytes.len: {}", pkg.signable_bytes.len());
     if pkg.signable_bytes.len() >= 8 {
         println!("signable_bytes[0..8]: {:?}", &pkg.signable_bytes[0..8]);
-        println!("signable_bytes[last 8]: {:?}", &pkg.signable_bytes[pkg.signable_bytes.len()-8..]);
+        println!(
+            "signable_bytes[last 8]: {:?}",
+            &pkg.signable_bytes[pkg.signable_bytes.len() - 8..]
+        );
     }
 
     use sha3::{Digest, Keccak256};
     let hash: [u8; 32] = Keccak256::digest(&pkg.signable_bytes).into();
     println!("message_hash: {:?}", hash);
     println!("v: {}", pkg.signature[64]);
-    println!("recovery_id: {}", pkg.signature[64].checked_sub(27).unwrap());
+    println!(
+        "recovery_id: {}",
+        pkg.signature[64].checked_sub(27).unwrap()
+    );
 
     // Verify signature using the program's verifier (native libsecp256k1)
     let recovered_addr = verify_signature(&packages[0]).expect("verify_signature failed");
@@ -74,7 +80,8 @@ fn native_verify_three_of_five_signers() {
     // Check it matches one of the signing addresses
     assert!(
         signing_addrs.contains(&recovered_addr),
-        "Recovered address {:?} not in signer set", recovered_addr
+        "Recovered address {:?} not in signer set",
+        recovered_addr
     );
 
     println!("✓ Native verification PASSED for 3-of-5 signers");

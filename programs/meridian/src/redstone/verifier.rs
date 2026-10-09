@@ -3,8 +3,8 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::keccak;
 
-use crate::errors::MeridianError;
 use super::parser::RedstonePackage;
+use crate::errors::MeridianError;
 
 /// Verify RedStone package signature and recover Ethereum address.
 ///
@@ -13,9 +13,7 @@ use super::parser::RedstonePackage;
 /// 2. Call secp256k1_recover syscall
 /// 3. Compute Ethereum address (last 20 bytes of keccak256(pubkey))
 pub fn verify_signature(package: &RedstonePackage) -> Result<[u8; 20]> {
-    use anchor_lang::solana_program::secp256k1_recover::{
-        secp256k1_recover, Secp256k1Pubkey,
-    };
+    use anchor_lang::solana_program::secp256k1_recover::{secp256k1_recover, Secp256k1Pubkey};
 
     // Compute keccak256 hash of signable bytes
     let message_hash = keccak::hash(&package.signable_bytes);
@@ -24,7 +22,8 @@ pub fn verify_signature(package: &RedstonePackage) -> Result<[u8; 20]> {
     // RedStone uses Ethereum convention: v = 27 or 28
     // Solana secp256k1_recover expects recovery_id = 0 or 1
     let v = package.signature[64];
-    let recovery_id = v.checked_sub(27)
+    let recovery_id = v
+        .checked_sub(27)
         .ok_or(MeridianError::RedStoneInvalidSignature)?;
 
     // Prepare signature (r‖s, 64 bytes)
@@ -32,12 +31,8 @@ pub fn verify_signature(package: &RedstonePackage) -> Result<[u8; 20]> {
     sig_bytes.copy_from_slice(&package.signature[..64]);
 
     // Call secp256k1_recover syscall
-    let pubkey: Secp256k1Pubkey = secp256k1_recover(
-        message_hash.as_ref(),
-        recovery_id,
-        &sig_bytes,
-    )
-    .map_err(|_| MeridianError::RedStoneInvalidSignature)?;
+    let pubkey: Secp256k1Pubkey = secp256k1_recover(message_hash.as_ref(), recovery_id, &sig_bytes)
+        .map_err(|_| MeridianError::RedStoneInvalidSignature)?;
 
     // Ethereum address = last 20 bytes of keccak256(pubkey)
     let pubkey_hash = keccak::hash(&pubkey.0);

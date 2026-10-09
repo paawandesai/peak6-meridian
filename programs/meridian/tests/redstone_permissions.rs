@@ -1,7 +1,11 @@
 //! M2-15 AC3: RedStone permission tests.
 //! Tests: set_oracle_config admin-only, threshold validation, post_redstone_price permissionless.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::arithmetic_side_effects)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::arithmetic_side_effects
+)]
 
 mod common;
 
@@ -23,14 +27,15 @@ fn set_oracle_config_rejects_non_admin() {
     // AC3: set_oracle_config rejects non-admin signer
     let mut harness = MarketHarness::new();
     let non_admin = Keypair::new();
-    harness.harness.svm.airdrop(&non_admin.pubkey(), FUNDING_LAMPORTS).unwrap();
+    harness
+        .harness
+        .svm
+        .airdrop(&non_admin.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
 
     let signers: Vec<[u8; 20]> = (0..5).map(|_| [0u8; 20]).collect();
 
-    let (oracle_config_pda, _) = Pubkey::find_program_address(
-        &[b"oracle_config"],
-        &meridian::ID,
-    );
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let params = meridian::SetOracleConfigParams {
         signers,
@@ -51,7 +56,9 @@ fn set_oracle_config_rejects_non_admin() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send_with_budget(instruction, &[&non_admin], 400_000);
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&non_admin], 400_000);
     assert_meridian_error(&result, MeridianError::AdminOnly);
 }
 
@@ -63,10 +70,7 @@ fn set_oracle_config_rejects_threshold_zero() {
 
     let signers: Vec<[u8; 20]> = (0..5).map(|_| [0u8; 20]).collect();
 
-    let (oracle_config_pda, _) = Pubkey::find_program_address(
-        &[b"oracle_config"],
-        &meridian::ID,
-    );
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let params = meridian::SetOracleConfigParams {
         signers,
@@ -87,7 +91,9 @@ fn set_oracle_config_rejects_threshold_zero() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
     assert_meridian_error(&result, MeridianError::OracleThresholdTooLow);
 }
 
@@ -99,10 +105,7 @@ fn set_oracle_config_rejects_threshold_too_high() {
 
     let signers: Vec<[u8; 20]> = (0..3).map(|_| [0u8; 20]).collect();
 
-    let (oracle_config_pda, _) = Pubkey::find_program_address(
-        &[b"oracle_config"],
-        &meridian::ID,
-    );
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let params = meridian::SetOracleConfigParams {
         signers,
@@ -123,7 +126,9 @@ fn set_oracle_config_rejects_threshold_too_high() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
     assert_meridian_error(&result, MeridianError::OracleThresholdTooHigh);
 }
 
@@ -140,10 +145,7 @@ fn post_redstone_price_is_permissionless() {
     let remaining = signing_signers.split_off(3);
     drop(remaining);
 
-    let (oracle_config_pda, _) = Pubkey::find_program_address(
-        &[b"oracle_config"],
-        &meridian::ID,
-    );
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let params = meridian::SetOracleConfigParams {
         signers: addresses,
@@ -164,12 +166,18 @@ fn post_redstone_price_is_permissionless() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
     // Now post price as a random payer (not admin)
     let random_payer = Keypair::new();
-    harness.harness.svm.airdrop(&random_payer.pubkey(), FUNDING_LAMPORTS).unwrap();
+    harness
+        .harness
+        .svm
+        .airdrop(&random_payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
 
     let ticker = symbol("NVDA");
     let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
@@ -178,10 +186,7 @@ fn post_redstone_price_is_permissionless() {
     }
     let payload = builder.build();
 
-    let (price_pda, _) = Pubkey::find_program_address(
-        &[b"redstone_price", &ticker],
-        &meridian::ID,
-    );
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
 
     let post_ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,

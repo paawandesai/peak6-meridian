@@ -37,7 +37,7 @@ pub fn handle_post_redstone_price(
     symbol: [u8; SYMBOL_LEN],
     payload: Vec<u8>,
 ) -> Result<()> {
-    use crate::redstone::{parse_payload, verify_signature, compute_median};
+    use crate::redstone::{compute_median, parse_payload, verify_signature};
 
     // Parse RedStone payload
     let packages = parse_payload(&payload)?;

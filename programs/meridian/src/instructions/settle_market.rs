@@ -8,7 +8,7 @@ use crate::errors::MeridianError;
 use crate::events::MarketSettled;
 use crate::oracle::{combine, read_close, read_redstone_price, yes_wins};
 use crate::state::{
-    Config, Market, MarketStatus, Outcome, OracleConfig, RedstonePrice, SettleSource, CONFIG_SEED,
+    Config, Market, MarketStatus, OracleConfig, Outcome, RedstonePrice, SettleSource, CONFIG_SEED,
     FEEDS_PER_TICKER, MARKET_SEED,
 };
 

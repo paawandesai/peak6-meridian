@@ -18,7 +18,7 @@
 use anchor_lang::prelude::*;
 
 use crate::errors::MeridianError;
-use crate::state::{BPS_DENOMINATOR, RedstonePrice, STRIKE_CENTS_TO_SCALED, SYMBOL_LEN};
+use crate::state::{RedstonePrice, BPS_DENOMINATOR, STRIKE_CENTS_TO_SCALED, SYMBOL_LEN};
 
 /// Switchboard On-Demand program on mainnet-beta.
 pub const SWITCHBOARD_MAINNET_PID: Pubkey = pubkey!("SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv");
