@@ -113,7 +113,9 @@ class MarketMakerLoop:
             # Get open markets first (needed for close_ts check)
             open_markets = await self._fetch_open_markets()
             if not open_markets:
-                logger.debug("No open markets")
+                logger.warning("No open markets (RPC error or truly empty), pulling all quotes")
+                await self._cancel_all_quotes()
+                await self._settle_funds()
                 self._coverage = 0.0
                 return
 
