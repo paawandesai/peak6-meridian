@@ -99,21 +99,21 @@ def test_skew_calculation() -> None:
     tracker.set(key, 100)
     assert tracker.get(key).skew_cents(skew_per_50=1) == 2
 
-    # -49 contracts → -1¢ skew (-49 // 50 = -1 floor division)
+    # -49 contracts → 0¢ skew (truncate toward zero: -49 in [-49, -1] → 0)
     tracker.set(key, -49)
-    assert tracker.get(key).skew_cents(skew_per_50=1) == -1
+    assert tracker.get(key).skew_cents(skew_per_50=1) == 0
 
     # -50 contracts → -1¢ skew (-50 // 50 = -1)
     tracker.set(key, -50)
     assert tracker.get(key).skew_cents(skew_per_50=1) == -1
 
-    # -51 contracts → -2¢ skew (-51 // 50 = -2 floor division)
+    # -51 contracts → -1¢ skew (truncate toward zero: -51 in [-99, -50] → -1)
     tracker.set(key, -51)
-    assert tracker.get(key).skew_cents(skew_per_50=1) == -2
+    assert tracker.get(key).skew_cents(skew_per_50=1) == -1
 
-    # -99 contracts → -2¢ skew (-99 // 50 = -2 floor division)
+    # -99 contracts → -1¢ skew (truncate toward zero: -99 in [-99, -50] → -1)
     tracker.set(key, -99)
-    assert tracker.get(key).skew_cents(skew_per_50=1) == -2
+    assert tracker.get(key).skew_cents(skew_per_50=1) == -1
 
     # -100 contracts → -2¢ skew (-100 // 50 = -2)
     tracker.set(key, -100)
