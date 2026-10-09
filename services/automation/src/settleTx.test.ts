@@ -192,7 +192,9 @@ async function splitPlan(markets = 40) {
   return { w, plan };
 }
 
-describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
+// Each test builds a split plan of 40-80 markets (real transaction building), which took > 5 s on
+// a loaded CI runner (pipeline 42851): give the group a 30 s budget instead of the 5 s default.
+describe("sendPlan: the 30-slot staleness budget (AC5)", { timeout: 30_000 }, () => {
   const BUDGET = 20; // max_staleness_slots 30 minus the safety margin
 
   it("sends the update, then the settles, when the slots stay within the budget", async () => {
