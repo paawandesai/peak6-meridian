@@ -28,6 +28,7 @@ import os
 import threading
 from datetime import UTC, datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import httpx
 from solana.rpc.async_api import AsyncClient
@@ -87,7 +88,16 @@ class OnChainSources:
         self._tiingo_key = tiingo_key
 
     def markets(self) -> list[MarketInfo]:
-        """Get open markets from cache (populated by MM loop)."""
+        """Get open markets from cache (populated by MM loop).
+
+        Filters to today's ET trading_date only. Prior-day markets stay Open for
+        settlement (AB-11) but should not appear on /fair-values for M3-03.
+        """
+        # Get today's trading date (YYYYMMDD in ET)
+        now = datetime.now(UTC)
+        et_now = now.astimezone(ZoneInfo("America/New_York"))
+        today_trading_date = int(et_now.strftime("%Y%m%d"))
+
         cached_markets = self._market_cache.get()
         return [
             MarketInfo(
@@ -97,7 +107,7 @@ class OnChainSources:
                 close_ts=m.close_ts,
             )
             for m in cached_markets
-            if m.is_open
+            if m.is_open and m.trading_date == today_trading_date
         ]
 
     def spot(self, ticker: str) -> Spot:
