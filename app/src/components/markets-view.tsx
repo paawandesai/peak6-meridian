@@ -58,10 +58,7 @@ export function MarketsView({
   const config = useAsync(() => reader.getConfig(), [reader]);
   const sources = useMarketSources();
   const all = state.status === "ready" ? state.value : [];
-  const active = useMemo(
-    () => (clock === null ? [] : activeDateMarkets(all, clock)),
-    [all, clock],
-  );
+  const active = useMemo(() => (clock === null ? [] : activeDateMarkets(all, clock)), [all, clock]);
   const data = useMarketData(active, sources.data ?? NO_SOURCES);
   const openTimes = useOpenTimes(active);
 
