@@ -186,9 +186,9 @@ export function resetDemoWallet(): void {
 
 export function registerDemoWallet(): void {
   if (typeof window === "undefined") return;
-  // Allow demo wallet on devnet (production demo) and localnet (CI tests)
+  // AC6: The demo wallet is devnet-only for security. Only register when the cluster is devnet.
   const cluster = process.env.NEXT_PUBLIC_CLUSTER;
-  if (cluster !== "devnet" && cluster !== "localnet") return;
+  if (cluster !== "devnet") return;
 
   const wallet = createOrLoadDemoWallet();
   const w = window as unknown as {
