@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
+from zoneinfo import ZoneInfo
 
 import pytest
 from solders.keypair import Keypair
@@ -658,13 +659,13 @@ async def test_empty_fair_values_pulls_all_quotes(mm_config: MMConfig) -> None:
 
 @pytest.mark.asyncio
 async def test_missing_ata_vs_rpc_timeout(mm_config: MMConfig) -> None:
-    """Missing ATA returns 0 and still mints; RPC timeout skips mint and quote (AC1).
+    """Missing ATA (balance=0) still mints/quotes; RPC timeout does not (AC1).
 
-    Tests that ChainOrderClient correctly distinguishes:
-    - Missing ATA (get_account_info returns None): balance=0, mint succeeds
-    - RPC timeout (exception): propagates, skips mint, skips quote
+    Tests full _run_once behavior with mocked RPC:
+    - Missing ATA (get_account_info.value=None): balance=0, mints, places quotes
+    - RPC timeout (exception): does not mint, does not place quotes
     """
-    # Create a minimal mock RPC client
+    # Part 1: Test ChainOrderClient's low-level behavior
     mock_rpc = AsyncMock()
     program_id = Pubkey.from_string("5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi")
     usdc_mint = Pubkey.from_string("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
@@ -672,18 +673,117 @@ async def test_missing_ata_vs_rpc_timeout(mm_config: MMConfig) -> None:
     payer = Keypair()
     client = ChainOrderClient(mock_rpc, program_id, payer, usdc_mint)
 
-    # Test 1: Missing ATA (account doesn't exist)
-    # get_account_info returns None -> should return 0
+    # Test 1a: Missing ATA (account doesn't exist)
     account_info_response = MagicMock()
-    account_info_response.value = None  # Account doesn't exist
+    account_info_response.value = None
     mock_rpc.get_account_info.return_value = account_info_response
 
     balance = await client.get_yes_token_balance("AAPL_20261008_23000", str(payer.pubkey()))
     assert balance == 0, "Missing ATA should return 0"
 
-    # Test 2: RPC timeout (exception raised)
-    # Should propagate the exception
+    # Test 1b: RPC timeout (exception raised)
     mock_rpc.get_account_info.side_effect = Exception("RPC timeout")
 
     with pytest.raises(Exception, match="RPC timeout"):
         await client.get_yes_token_balance("AAPL_20261008_23000", str(payer.pubkey()))
+
+    # Part 2: Test full MM loop behavior with missing ATA vs RPC error
+    # Use FakeOrderClient that tracks mints and quotes, but inject balance errors
+
+    class FakeOrderClientWithATAErrors(FakeOrderClient):
+        """Fake client that can simulate missing ATA (balance=0) or RPC errors."""
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            super().__init__(*args, **kwargs)
+            self.simulate_missing_ata_initial = False  # Only for first read
+            self.simulate_rpc_timeout = False
+            self.mint_called = False
+            self.place_called = False
+            self._first_balance_read = True
+
+        async def get_yes_token_balance(self, market: str, owner: str) -> int:
+            if self.simulate_rpc_timeout:
+                raise Exception("RPC timeout")
+            # Simulate missing ATA only on first read (before mint)
+            if self.simulate_missing_ata_initial and self._first_balance_read:
+                return 0  # ATA doesn't exist initially
+            return await super().get_yes_token_balance(market, owner)
+
+        async def get_no_token_balance(self, market: str, owner: str) -> int:
+            if self.simulate_rpc_timeout:
+                raise Exception("RPC timeout")
+            if self.simulate_missing_ata_initial and self._first_balance_read:
+                self._first_balance_read = False  # Next reads will use actual balance
+                return 0
+            return await super().get_no_token_balance(market, owner)
+
+        async def mint_pair(self, market: str, qty: int, owner: str) -> None:
+            self.mint_called = True
+            if self.simulate_rpc_timeout:
+                raise Exception("RPC timeout")
+            await super().mint_pair(market, qty, owner)
+
+        async def place_order(
+            self, market: str, side: str, price: int, qty: int, owner: str
+        ) -> int:
+            self.place_called = True
+            return await super().place_order(market, side, price, qty, owner)
+
+    # Test 2a: Missing ATA (balance=0) should still mint and place
+    # Use today's trading date (ET timezone)
+    now = datetime.now(UTC)
+    et_now = now.astimezone(ZoneInfo("America/New_York"))
+    today_trading_date = int(et_now.strftime("%Y%m%d"))
+
+    market_id = f"AAPL_{today_trading_date}_23000"
+    market_source = FakeMarketSource()
+    market = MarketState(
+        market=market_id,
+        ticker="AAPL",
+        strike_cents=23000,
+        trading_date=today_trading_date,
+        close_ts=int((now + timedelta(hours=1)).timestamp()),
+        is_open=True,
+        pairs_outstanding=0,
+    )
+    market_source._markets = [market]
+
+    order_client_ata = FakeOrderClientWithATAErrors()
+    order_client_ata.simulate_missing_ata_initial = True
+
+    fv_source = FakeFairValueSource()
+    fv_source._fair_values = [
+        FairValue(
+            market=market_id,
+            ticker="AAPL",
+            strike_cents=23000,
+            fair_cents=5000,
+            sigma=0.3,
+            spot=230.0,
+            as_of=now,
+        )
+    ]
+
+    mm_ata = MarketMakerLoop(mm_config, market_source, fv_source, order_client_ata)
+
+    # Run loop - should mint and place despite missing ATA (balance=0)
+    order_client_ata.mint_called = False
+    order_client_ata.place_called = False
+    await mm_ata._run_once()
+
+    assert order_client_ata.mint_called, "Missing ATA (balance=0) should still mint"
+    assert order_client_ata.place_called, "Missing ATA (balance=0) should still place quotes"
+
+    # Test 2b: RPC timeout should NOT mint and NOT place
+    order_client_timeout = FakeOrderClientWithATAErrors()
+    order_client_timeout.simulate_rpc_timeout = True
+
+    mm_timeout = MarketMakerLoop(mm_config, market_source, fv_source, order_client_timeout)
+
+    # Run loop - should NOT mint or place due to RPC timeout during balance check
+    order_client_timeout.mint_called = False
+    order_client_timeout.place_called = False
+    await mm_timeout._run_once()
+
+    assert not order_client_timeout.mint_called, "RPC timeout should skip mint"
+    assert not order_client_timeout.place_called, "RPC timeout should skip quote placement"
