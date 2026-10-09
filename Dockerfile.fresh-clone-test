@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y git build-essential && rm -rf /var/lib/
 
 # Clone repo preserving .git (pass commit via --build-arg)
 ARG GIT_REPO=https://labs.gauntletai.com/paawandesai/peak6-meridian.git
-ARG GIT_COMMIT=8241c9b2331d4fcdbd38de3fc5f40ea35a524e02
+ARG GIT_COMMIT=be6f97d615af54b39bb5d2d7a333ce54fa32b9bb
 WORKDIR /workspace
 RUN git clone ${GIT_REPO} meridian
 WORKDIR /workspace/meridian
