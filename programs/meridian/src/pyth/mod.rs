@@ -241,6 +241,7 @@ pub fn read_pyth_close(
 )]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     fn clock(slot: u64, unix_timestamp: i64) -> Clock {
         Clock {
