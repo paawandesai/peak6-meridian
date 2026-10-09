@@ -161,11 +161,31 @@ _FETCH_TIMEOUT_S = 10
 
 
 def urllib_fetch(url: str, headers: dict[str, str]) -> str:
-    """HTTPS GET to the two provider hosts only, with a timeout. Raises on any failure."""
+    """HTTPS GET to the two provider hosts only, with a timeout. Raises on any failure.
+
+    Redirects are disabled to prevent leaking Authorization headers to unauthorized hosts (AB-20).
+    Python 3.13+ copies Authorization on redirects, so a 3xx from an allowlisted host could send
+    API keys off-host and bypass _ALLOWED_HOSTS.
+    """
     if not url.startswith(_ALLOWED_HOSTS):
         raise ToolPolicyError("fetch refused: host is not a configured data provider")
+
+    # Disable redirects: a 3xx response would raise HTTPError instead of following
+    class NoRedirectHandler(urlrequest.HTTPRedirectHandler):
+        def redirect_request(
+            self,
+            req: object,
+            fp: object,
+            code: object,
+            msg: object,
+            headers: object,
+            newurl: object,
+        ) -> None:
+            return None
+
+    opener = urlrequest.build_opener(NoRedirectHandler)
     req = urlrequest.Request(url, headers=headers, method="GET")
-    with urlrequest.urlopen(req, timeout=_FETCH_TIMEOUT_S) as response:
+    with opener.open(req, timeout=_FETCH_TIMEOUT_S) as response:
         return str(response.read(1_000_000).decode("utf-8", errors="replace"))
 
 
