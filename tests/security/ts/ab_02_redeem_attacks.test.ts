@@ -145,12 +145,44 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
       await new Promise((r) => setTimeout(r, 1000));
 
       const { market, closeTs } = await createMarket(v, 10);
+
+      const marketAccount = await v.program.account.market.fetch(market);
+      const config = await v.program.account.config.fetch(v.config);
+
+      const userUsdc = getAta(config.usdcMint, user.publicKey);
+      const userYes = getAta(marketAccount.yesMint, user.publicKey);
+      const userNo = getAta(marketAccount.noMint, user.publicKey);
+
+      // Create ATAs and mint 10 pairs
+      await createAta(v, user, userUsdc, config.usdcMint);
+      await createAta(v, user, userYes, marketAccount.yesMint);
+      await createAta(v, user, userNo, marketAccount.noMint);
+
+      await fundUsdc(v, user.publicKey, userUsdc, 10);
+      await v.program.methods
+        .mintPair(new BN(10))
+        .accountsStrict({
+          config: v.config,
+          market,
+          user: user.publicKey,
+          userUsdc,
+          userYes,
+          userNo,
+          yesMint: marketAccount.yesMint,
+          noMint: marketAccount.noMint,
+          vault: marketAccount.vault,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([user])
+        .rpc();
+
       await waitUntil(v, closeTs);
 
-      // Settle: YES wins (close > strike)
+      // Settle: YES wins (close >= strike)
       const slot = await v.connection.getSlot("confirmed");
-      await setLocalFeed(v, "META", 0, 50_000n, slot);
-      await setLocalFeed(v, "META", 1, 50_000n, slot);
+      const closePrice = BigInt(marketAccount.strikeCents.toString()) + 1n;
+      await setLocalFeed(v, "META", 0, closePrice, slot);
+      await setLocalFeed(v, "META", 1, closePrice, slot);
 
       const feeds: readonly [PublicKey, PublicKey] = [
         localFeedPda(v.programId, "META", 0),
@@ -158,39 +190,27 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
       ] as const;
       expect(await trySettle(v, market, feeds)).toBe("settled");
 
-      const marketAccount = await v.program.account.market.fetch(market);
-      const config = await v.program.account.config.fetch(v.config);
+      // Redeem NO (loser): burns 10 NO, receives 0 USDC
+      const usdcBefore = await v.connection.getTokenAccountBalance(userUsdc);
+      await v.program.methods
+        .redeem(new BN(0), new BN(10)) // 0 YES, 10 NO (loser)
+        .accountsStrict({
+          market,
+          user: user.publicKey,
+          userUsdc,
+          userYes,
+          userNo,
+          yesMint: marketAccount.yesMint,
+          noMint: marketAccount.noMint,
+          vault: marketAccount.vault,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([user])
+        .rpc();
 
-      // User would need NO tokens to redeem (the loser)
-      // Since user has no tokens, redeem will fail with insufficient balance
-      // In a real attack, even if user had NO tokens, they would burn and get 0 USDC
-      const userUsdc = getAta(config.usdcMint, user.publicKey);
-      const userYes = getAta(marketAccount.yesMint, user.publicKey);
-      const userNo = getAta(marketAccount.noMint, user.publicKey);
-
-      // Attempt: redeem NO (loser) - expects to receive 0 USDC after burning tokens
-      try {
-        await v.program.methods
-          .redeem(new BN(0), new BN(1)) // 0 YES, 1 NO (loser)
-          .accountsStrict({
-            market,
-            user: user.publicKey,
-            userUsdc,
-            userYes,
-            userNo,
-            yesMint: marketAccount.yesMint,
-            noMint: marketAccount.noMint,
-            vault: marketAccount.vault,
-            tokenProgram: TOKEN_PROGRAM_ID,
-          })
-          .signers([user])
-          .rpc();
-        throw new Error("Expected redeem to fail (no tokens)");
-      } catch (error) {
-        // Fails because user has no NO tokens to burn
-        const err = programError(error);
-        expect(err.length).toBeGreaterThan(0);
-      }
+      // Verify loser pays 0: USDC balance unchanged
+      const usdcAfter = await v.connection.getTokenAccountBalance(userUsdc);
+      expect(usdcAfter.value.amount).toBe(usdcBefore.value.amount);
     },
   );
 
