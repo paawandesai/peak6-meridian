@@ -1,15 +1,16 @@
 /**
  * M3-07 AC3: Default demo-ops makes no live API calls.
  *
- * Verifies that demo-ops.ts source code does not construct Anthropic/Tiingo/TwelveData
- * clients. The demo calls ops-agent (which is started externally with or without
- * OPS_AGENT_LLM), but demo-ops itself must not make live API calls.
+ * Verifies that the demo default path (ENABLE_LIVE_LLM unset) actually uses FixtureTools
+ * and never constructs HttpSourceTools or AnthropicLLM. Checks both demo-ops.ts (which
+ * must not call live APIs itself) and ops-agent-demo.py (which must wire FixtureTools).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 
 const DEMO_OPS_PATH = join(__dirname, "../../../scripts/demo-ops.ts");
+const OPS_AGENT_DEMO_PATH = join(__dirname, "../../../scripts/lib/demo/ops-agent-demo.py");
 
 describe("demo-ops AC3: no live API client construction", () => {
   const demoOpsSource = readFileSync(DEMO_OPS_PATH, "utf-8");
@@ -54,5 +55,43 @@ describe("demo-ops AC3: no live API client construction", () => {
     // Demo-ops logs this but doesn't start ops-agent itself
     expect(demoOpsSource).toContain("ENABLE_LIVE_LLM");
     expect(demoOpsSource).toContain("deterministic fallback");
+  });
+});
+
+describe("ops-agent-demo.py AC3: FixtureTools only, no live clients", () => {
+  const opsAgentDemoSource = readFileSync(OPS_AGENT_DEMO_PATH, "utf-8");
+
+  it("imports and constructs FixtureTools with recorded data", () => {
+    // AC3: demo launcher must use FixtureTools, not HttpSourceTools
+    expect(opsAgentDemoSource).toContain("from meridian_ops_agent.tools import FixtureTools");
+    expect(opsAgentDemoSource).toContain("FixtureTools(reports");
+    expect(opsAgentDemoSource).toContain("fixture_data.get");
+  });
+
+  it("does NOT import or construct HttpSourceTools", () => {
+    // AC3: no live Tiingo/TwelveData clients (HttpSourceTools may appear in docstrings)
+    expect(opsAgentDemoSource).not.toContain(
+      "from meridian_ops_agent.tools import HttpSourceTools",
+    );
+    expect(opsAgentDemoSource).not.toContain("HttpSourceTools(");
+    expect(opsAgentDemoSource).not.toContain("tiingo_key");
+    expect(opsAgentDemoSource).not.toContain("twelvedata_key");
+  });
+
+  it("does NOT import or construct AnthropicLLM", () => {
+    // AC3: deterministic fallback only (llm=None), no live Claude calls
+    expect(opsAgentDemoSource).not.toContain("AnthropicLLM");
+    expect(opsAgentDemoSource).not.toContain("LoggedLLM");
+    expect(opsAgentDemoSource).toContain("llm = None");
+    expect(opsAgentDemoSource).toContain("Deterministic fallback only");
+  });
+
+  it("wires OpsApp with FixtureTools factory and llm=None", () => {
+    // AC3: OpsApp must receive tools factory that returns FixtureTools, and llm=None
+    expect(opsAgentDemoSource).toContain("def tools_factory");
+    expect(opsAgentDemoSource).toContain("return FixtureTools");
+    expect(opsAgentDemoSource).toContain("OpsApp(");
+    expect(opsAgentDemoSource).toContain("tools=tools_factory");
+    expect(opsAgentDemoSource).toContain("llm=llm");
   });
 });
