@@ -42,7 +42,9 @@ describe("gateFor (US-07)", () => {
   });
 
   it("explains a resting limit Buy NO (YES escrowed, NO held) instead of offering an exit", () => {
-    expect(gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: true, escrowedYesFromAsks: true })).toEqual({
+    expect(
+      gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: true, escrowedYesFromAsks: true }),
+    ).toEqual({
       blocked: true,
       kind: "resting-buy-no",
       text: RESTING_BUY_NO_TEXT,
@@ -57,7 +59,9 @@ describe("gateFor (US-07)", () => {
 
   it("does not apply the Buy-NO exception when holding NO without a resting Ask", () => {
     // Holding NO without a resting Ask triggers normal hold-NO constraint.
-    expect(gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: false, escrowedYesFromAsks: false })).toEqual({
+    expect(
+      gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: false, escrowedYesFromAsks: false }),
+    ).toEqual({
       blocked: true,
       kind: "hold-no",
       text: "You hold 10 NO on this strike. Sell NO first to buy YES.",
@@ -67,12 +71,32 @@ describe("gateFor (US-07)", () => {
     });
   });
 
-  it("blocks Buy NO when holding escrowed YES (Sell YES or Buy NO resting)", () => {
-    // Even with wallet YES === 0, escrowed YES from asks blocks Buy NO (AC3 / UI-04 AC2).
-    expect(gateFor("BUY_NO", { yes: 0n, no: 0n, hasRestingAsk: false, escrowedYesFromAsks: true })).toMatchObject({
+  it("blocks Buy NO when holding escrowed YES, instructs to cancel asks (AC3)", () => {
+    // When wallet YES === 0 but escrowed in resting asks, cannot Sell YES (tokens on book).
+    // User must cancel the resting asks first (AC3 / UI-04 AC2).
+    expect(
+      gateFor("BUY_NO", { yes: 0n, no: 0n, hasRestingAsk: false, escrowedYesFromAsks: true }),
+    ).toEqual({
       blocked: true,
       kind: "hold-yes",
+      text: "Your YES tokens are escrowed in resting asks. Cancel those orders first.",
+      exit: null,
+      exitLabel: null,
+      exitQty: 0n,
+    });
+  });
+
+  it("blocks Buy NO when holding wallet YES, offers Sell YES exit", () => {
+    // When YES is in wallet (not escrowed), the exit is Sell YES.
+    expect(
+      gateFor("BUY_NO", { yes: 5n, no: 0n, hasRestingAsk: false, escrowedYesFromAsks: false }),
+    ).toEqual({
+      blocked: true,
+      kind: "hold-yes",
+      text: "You hold 5 YES on this strike. Sell YES first to buy NO.",
       exit: "SELL_YES",
+      exitLabel: "Sell YES",
+      exitQty: 5n,
     });
   });
 });

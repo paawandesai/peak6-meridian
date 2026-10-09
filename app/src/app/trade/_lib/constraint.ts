@@ -56,6 +56,17 @@ export function gateFor(intent: Intent, holdings: Holdings): IntentGate {
     };
   }
   if (intent === "BUY_NO" && (holdings.yes > 0n || holdings.escrowedYesFromAsks)) {
+    // If YES is only in escrow (resting asks), user must cancel, not sell
+    if (holdings.yes === 0n && holdings.escrowedYesFromAsks) {
+      return {
+        blocked: true,
+        kind: "hold-yes",
+        text: "Your YES tokens are escrowed in resting asks. Cancel those orders first.",
+        exit: null,
+        exitLabel: null,
+        exitQty: 0n,
+      };
+    }
     return {
       blocked: true,
       kind: "hold-yes",
