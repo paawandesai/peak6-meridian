@@ -2,12 +2,9 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Demo wallet (M4-07 AC9)", () => {
   test("offers demo wallet, connects, funds, and trades", async ({ page }) => {
-    // Demo wallet is available in devnet (production) and localnet (CI tests)
+    // Demo wallet is devnet-only per AC6
     const cluster = process.env.NEXT_PUBLIC_CLUSTER;
-    test.skip(
-      cluster !== "devnet" && cluster !== "localnet",
-      "This test requires devnet or localnet cluster",
-    );
+    test.skip(cluster !== "devnet", "Demo wallet only registers on devnet (AC6)");
 
     // Navigate to markets (root page)
     await page.goto("/");
