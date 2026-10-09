@@ -74,7 +74,7 @@ const STEPS: readonly Step[] = [
   },
 ];
 
-test.fixme("the four intents each ask the wallet for exactly one signature", async ({
+test("the four intents each ask the wallet for exactly one signature", async ({
   page,
   state,
   wallet,

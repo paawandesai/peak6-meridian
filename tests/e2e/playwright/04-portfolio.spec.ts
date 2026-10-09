@@ -1,14 +1,13 @@
 /**
  * Portfolio shows the positions the trade spec created. Written against design.md v2 §5 Portfolio
- * and M2-07 (!43); fixme until /portfolio merges.
- * TODO(!43 M2-07): remove `fixme` once !43 merges to main, check support/ui.ts locators.
+ * and M2-07 (!43).
  */
 import { openChain, seededMarket, tokenAccounts, tokenBalance } from "./support/chain";
 import { expect, test } from "./support/fixtures";
 import { connectionFor } from "./support/state";
 import { connectWallet } from "./support/wallet";
 
-test.fixme("Portfolio lists the wallet's META positions with the on-chain quantities", async ({
+test("Portfolio lists the wallet's META positions with the on-chain quantities", async ({
   page,
   state,
   wallet,

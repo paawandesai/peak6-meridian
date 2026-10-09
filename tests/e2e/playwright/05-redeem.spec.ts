@@ -22,7 +22,7 @@ import { connectWallet } from "./support/wallet";
 const PAIRS = 10n;
 const USDC_PER_PAIR = 1_000_000n;
 
-test.fixme("a settled winner redeems at $1.00 each with one signature", async ({
+test("a settled winner redeems at $1.00 each with one signature", async ({
   page,
   state,
   wallet,
