@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { assertCluster, findConfigPda, redactRpcUrl } from "@meridian/client";
-import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { computeFeedHash, loadFeedDefinitions } from "switchboard-scripts";
 
 import { assertNoLocalOracle, sha256Hex } from "./artifacts";
@@ -13,6 +13,7 @@ import {
   sendConfigStep,
   verifyMint,
 } from "./chain-io";
+import { readOracleConfigFile, type OracleConfigParams } from "./oracle-config";
 import {
   assertConfigAdmin,
   assertConfigMatches,
@@ -149,6 +150,16 @@ async function loadFeeds(options: Options, connection: Connection): Promise<Feed
     );
   }
   return feeds;
+}
+
+/** Loads and validates `--oracle-config` before anything is sent (M2-15 AC6). */
+async function loadOracleConfig(path: string, log: (msg: string) => void): Promise<OracleConfigParams> {
+  const config = readOracleConfigFile(path);
+  log(
+    `oracle config: ${config.signers.length} signers, threshold ${config.signerThreshold}, ` +
+      `max delay ${config.maxPackageDelaySecs}s`,
+  );
+  return config;
 }
 
 async function ensureProgram(
@@ -409,15 +420,11 @@ async function deploy(
   });
   log(`cluster: ${cluster}`);
 
-  // Fail closed: --oracle-config is not yet wired (depends on !75 for set_oracle_config instruction).
-  if (options.oracleConfigPath !== undefined) {
-    throw new Error(
-      "--oracle-config is not yet implemented: set_oracle_config instruction not available " +
-        "(depends on !75 RedStone program + IDL). Remove the flag or wait for !75 to merge.",
-    );
-  }
-
   const feeds = options.feedsPath === undefined ? undefined : await loadFeeds(options, connection);
+  const oracleConfig =
+    options.oracleConfigPath === undefined
+      ? undefined
+      : await loadOracleConfig(options.oracleConfigPath, log);
 
   const ctx: Context = { options, connection, admin, programId, log, actions: [], runSolana };
   const program = createProgram(connection, admin, programId);
@@ -469,6 +476,26 @@ async function deploy(
     throw new Error("the Config is missing after initialize_config");
   }
   assertConfigAdmin(config, admin.publicKey);
+
+  // Set oracle config if provided (M2-15 AC6).
+  if (oracleConfig !== undefined) {
+    const signers = oracleConfig.signers.map((hex) => {
+      const bytes = Buffer.from(hex.slice(2), "hex");
+      if (bytes.length !== 20) {
+        throw new Error(`signer ${hex} is not 20 bytes`);
+      }
+      return Array.from(bytes);
+    });
+    await program.methods
+      .setOracleConfig(signers, oracleConfig.signerThreshold, oracleConfig.maxPackageDelaySecs)
+      .accounts({ admin: admin.publicKey })
+      .rpc({ commitment: "confirmed" });
+    ctx.actions.push("set-oracle-config");
+    log(
+      `set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`,
+    );
+  }
+
   const finalRecord = buildRecord(cluster, ctx, mint, config, upgradeAuthority);
   const written = writeRecord(options.outPath, finalRecord);
   log(`${written ? "wrote" : "unchanged:"} ${options.outPath}`);

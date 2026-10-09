@@ -463,19 +463,25 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
     5 * MINUTE,
   );
 
-  it("M2-15b --oracle-config fails closed when set_oracle_config instruction not available", async () => {
-    const configPath = join(work, "oracle-config-fail-closed.json");
+  it("AC6 --oracle-config calls set_oracle_config (M2-15)", async () => {
+    const configPath = join(work, "oracle-config.json");
     writeFileSync(
       configPath,
       JSON.stringify({
-        signers: ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"],
-        signerThreshold: 1,
+        signers: [
+          "0x1234567890123456789012345678901234567890",
+          "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+          "0x1111111111111111111111111111111111111111",
+        ],
+        signerThreshold: 2,
         maxPackageDelaySecs: 600,
       }),
     );
-    await expect(run({ oracleConfigPath: configPath })).rejects.toThrow(
-      /--oracle-config is not yet implemented.*depends on !75/,
-    );
+
+    const result = await run({ oracleConfigPath: configPath });
+
+    // Verify set-oracle-config was called
+    expect(result.actions).toContain("set-oracle-config");
   });
 
   it(

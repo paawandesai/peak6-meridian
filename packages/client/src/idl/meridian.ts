@@ -1292,6 +1292,7 @@ export type Meridian = {
           docs: [
             "RedStone verified price for this ticker (M2-15, D-054). Optional: if present, use",
             "RedStone path instead of Switchboard.",
+            "AB-04: PDA seeds constraint ensures this is the price account for market.ticker.",
           ];
           optional: true;
         },
@@ -1299,8 +1300,17 @@ export type Meridian = {
           name: "oracleConfig";
           docs: [
             "Oracle configuration with RedStone signer set. Required when using RedStone path.",
+            "AB-04: PDA seeds constraint ensures this is the canonical oracle config.",
           ];
           optional: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
         },
         {
           name: "payer";
@@ -1665,26 +1675,31 @@ export type Meridian = {
     },
     {
       code: 6040;
+      name: "redStoneFeedIdMismatch";
+      msg: "RedStone feed_id does not match the canonical feed_id for this ticker";
+    },
+    {
+      code: 6041;
       name: "oracleThresholdTooLow";
       msg: "Signer threshold must be at least 1";
     },
     {
-      code: 6041;
+      code: 6042;
       name: "oracleThresholdTooHigh";
       msg: "Signer threshold cannot exceed the signer count";
     },
     {
-      code: 6042;
+      code: 6043;
       name: "pairQuantityMismatch";
       msg: "Pair redeem needs equal YES and NO quantities before settlement";
     },
     {
-      code: 6043;
+      code: 6044;
       name: "nothingToRedeem";
       msg: "Nothing to redeem";
     },
     {
-      code: 6044;
+      code: 6045;
       name: "mathOverflow";
       msg: "Arithmetic overflow";
     },
