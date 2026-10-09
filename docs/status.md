@@ -112,7 +112,7 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 
 ## Final Summary (M4-06)
 
-M1-M4 complete. All exit criteria met. Submission ready. Code freeze Sun Oct 11 09:00 CT. Devnet program ID: `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`. App URL: `[TBD - from M2-11]`. Demo video: `[TBD - from #43]`.
+M1-M3 complete. M4 in progress. Submission ready pending M4 dependencies. Code freeze Sun Oct 11 09:00 CT. Devnet program ID: `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`. App URL: `[TBD - from M2-11]`. Demo video: `[TBD - from #43]`.
 
 **Version tag:** `v1.0.0-devnet-submission` (to be pushed when all M4 deps merge)
 
