@@ -71,7 +71,7 @@ function Page({ address }: { readonly address: string }) {
         nowSecs={nowSecs}
         markets={markets.status === "ready" ? markets.value : null}
         config={appConfig.status === "ready" ? appConfig.value : null}
-        currentPath="/"
+        currentPath={`/trade/${address}`}
       >
         <FaucetButton />
       </AppHeader>
