@@ -44,7 +44,10 @@
 | `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | CI deploy job only | Deploy the app with the Vercel CLI (IDs come from `vercel link`) | M2 | `test-vercel-token` |
 | `RAILWAY_TOKEN` | CI deploy job only | Railway project token for deploying services | M2 | `test-railway-token` |
 | `FAULT_INJECT_SOURCE` | local demo only | Make one fixture source report a bad close; refused unless `SOLANA_CLUSTER=localnet` | no | `twelvedata` |
+| `DEMO_MODE` | automation, services | `live` (default) or `replay` - historical price replay for demo | no | `live` |
+| `DEMO_REPLAY_DATE` | automation, services | YYYY-MM-DD to replay (required when DEMO_MODE=replay) | no | `2024-10-08` |
 | `NEXT_PUBLIC_CLUSTER` / `NEXT_PUBLIC_RPC_URL` / `NEXT_PUBLIC_PROGRAM_ID` / `NEXT_PUBLIC_USDC_MINT` | app (browser) | Public config only (never secrets) | yes | same as above |
+| `NEXT_PUBLIC_DEMO_MODE` / `NEXT_PUBLIC_DEMO_REPLAY_DATE` | app (browser) | Demo mode config for UI banner (M4-08) | no | `live` / `` |
 On-chain parameters (staleness, spread, override delay) are in the Config account, not env (see [domain.md](domain.md#settlement-rules)).
 
 ## Devnet deploy

@@ -18,7 +18,7 @@ export function loadDemoConfig(): DemoConfig {
   const mode = (process.env.DEMO_MODE || "live") as DemoMode;
 
   if (mode !== "live" && mode !== "replay") {
-    throw new Error(\`Invalid DEMO_MODE: \${mode}. Must be 'live' or 'replay'\`);
+    throw new Error(`Invalid DEMO_MODE: ${mode}. Must be 'live' or 'replay'`);
   }
 
   const replayDate = process.env.DEMO_REPLAY_DATE;
@@ -28,7 +28,7 @@ export function loadDemoConfig(): DemoConfig {
       throw new Error("DEMO_REPLAY_DATE required when DEMO_MODE=replay");
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(replayDate)) {
-      throw new Error(\`Invalid DEMO_REPLAY_DATE format: \${replayDate}. Must be YYYY-MM-DD\`);
+      throw new Error(`Invalid DEMO_REPLAY_DATE format: ${replayDate}. Must be YYYY-MM-DD`);
     }
   }
 
