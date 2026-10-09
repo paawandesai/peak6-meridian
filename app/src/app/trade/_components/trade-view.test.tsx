@@ -361,6 +361,25 @@ describe("position constraint (AC3, UI-04 AC2)", () => {
     // The resting order can be cancelled from the list below.
     expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
   });
+
+  it("wallet YES === 0 with resting Sell YES ask requires cancel, not sell (AC3)", async () => {
+    // When YES is escrowed in a resting ask but wallet balance is 0, cannot Sell YES.
+    // User must cancel the ask first.
+    const book = {
+      bids: BOOK.bids,
+      asks: [...BOOK.asks, order("ask", 62, 5, USER, 10)],
+    };
+    renderView({ wallet: EMPTY_WALLET, book });
+    await screen.findByTestId("simulated").catch(() => undefined);
+    await pick("Buy NO");
+    const block = await screen.findByTestId("constraint-block");
+    expect(block).toHaveTextContent(
+      "Your YES tokens are escrowed in resting asks. Cancel those orders first.",
+    );
+    expect(within(block).queryByRole("button")).toBeNull(); // no Sell YES button
+    // The resting ask can be cancelled from the list below.
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+  });
 });
 
 describe("the book (UI-04 AC4, AC9)", () => {
