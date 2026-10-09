@@ -237,10 +237,13 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
 
     await waitUntil(v, closeTs);
 
-    // Settle the market (YES wins at 50)
+    // Settle the market (YES wins: close >= strike)
+    // Strike is ~900M cents, so close at 900M + 1 cent means YES wins
     const slot = await v.connection.getSlot("confirmed");
-    await setLocalFeed(v, "META", 0, 50_000n, slot);
-    await setLocalFeed(v, "META", 1, 50_000n, slot);
+    const marketAccount = await v.program.account.market.fetch(market);
+    const closePrice = BigInt(marketAccount.strikeCents.toString()) + 1n; // at-or-above = YES wins
+    await setLocalFeed(v, "META", 0, closePrice, slot);
+    await setLocalFeed(v, "META", 1, closePrice, slot);
     const feeds: readonly [PublicKey, PublicKey] = [
       localFeedPda(v.programId, "META", 0),
       localFeedPda(v.programId, "META", 1),
@@ -248,8 +251,9 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
     expect(await trySettle(v, market, feeds)).toBe("settled");
 
     // First redeem: should succeed (burn 10 YES, receive 10 USDC)
+    const usdcBefore = await v.connection.getTokenAccountBalance(userUsdc);
     await v.program.methods
-      .redeem(new BN(10), new BN(0)) // winner redeem (YES won)
+      .redeem(new BN(10), new BN(0)) // winner redeem (YES won at-or-above strike)
       .accountsStrict({
         market,
         user: user.publicKey,
@@ -263,6 +267,11 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
       })
       .signers([user])
       .rpc();
+
+    // Verify winner payout: 10 USDC received (10 pairs * 1 USDC collateral)
+    const usdcAfter = await v.connection.getTokenAccountBalance(userUsdc);
+    const received = BigInt(usdcAfter.value.amount) - BigInt(usdcBefore.value.amount);
+    expect(received).toBe(10_000_000n); // 10 USDC (6 decimals)
 
     // Second redeem: should fail (tokens were burned, balance is now 0)
     try {
