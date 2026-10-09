@@ -85,7 +85,8 @@ export function TradeView(props: Props) {
   const holdings: Holdings = {
     yes: walletData?.yes ?? 0n,
     no: walletData?.no ?? 0n,
-    hasRestingAsk: own.some((order) => order.side === "Ask"),
+    // Only a Buy NO rest (YES Ask with no NO held) is the exception; a Sell YES rest while holding NO is not.
+    hasRestingAsk: own.some((order) => order.side === "Ask") && (walletData?.no ?? 0n) === 0n,
   };
   const refresh = (): void => {
     book.refresh();

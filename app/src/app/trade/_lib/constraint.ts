@@ -33,7 +33,7 @@ export const RESTING_BUY_NO_TEXT =
 const NOT_BLOCKED: IntentGate = { blocked: false };
 
 export function gateFor(intent: Intent, holdings: Holdings): IntentGate {
-  if (intent === "BUY_YES" && holdings.no > 0n) {
+  if (intent === "BUY_YES" && (holdings.no > 0n || holdings.hasRestingAsk)) {
     if (holdings.hasRestingAsk) {
       return {
         blocked: true,

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useReader } from "./reader-context";
 import { useAsync } from "./use-async";
 import {
@@ -9,6 +11,7 @@ import {
   marketStatus,
   type MarketRow,
 } from "@/lib/markets";
+import { tradeHref } from "@/app/trade/_lib/href";
 
 const STATUS_STYLE = {
   Open: "bg-emerald-100 text-emerald-800",
@@ -45,7 +48,11 @@ function MarketTable({ markets, nowSecs }: { markets: readonly MarketRow[]; nowS
           const status = marketStatus(market, nowSecs);
           return (
             <tr key={market.address} className="border-t border-slate-200">
-              <td className="py-1.5 font-mono">{formatStrike(market.strikeCents)}</td>
+              <td className="py-1.5 font-mono">
+                <Link href={tradeHref(market)} className="hover:underline">
+                  {formatStrike(market.strikeCents)}
+                </Link>
+              </td>
               <td className="py-1.5">{formatTradingDate(market.tradingDate)}</td>
               <td className="py-1.5">
                 <span className={`rounded px-2 py-0.5 text-xs ${STATUS_STYLE[status]}`}>

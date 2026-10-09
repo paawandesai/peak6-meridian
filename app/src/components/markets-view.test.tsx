@@ -57,4 +57,24 @@ describe("MarketsView", () => {
       "NVDA",
     ]);
   });
+
+  it("links each strike to its Trade page (UI-04 AC8)", async () => {
+    const markets = [
+      market({ address: "addr1", ticker: "NVDA", strikeCents: 15_000n }),
+      market({ address: "addr2", ticker: "AAPL", strikeCents: 22_000n }),
+      market({ address: "addr3", ticker: "AAPL", strikeCents: 23_000n }),
+    ];
+    render(
+      withReader(
+        reader({ listMarkets: () => Promise.resolve(markets) }),
+        <MarketsView nowSecs={NOW} />,
+      ),
+    );
+
+    const strikeLinks = await screen.findAllByRole("link");
+    expect(strikeLinks).toHaveLength(3);
+    expect(strikeLinks[0]).toHaveAttribute("href", "/trade/addr2");
+    expect(strikeLinks[1]).toHaveAttribute("href", "/trade/addr3");
+    expect(strikeLinks[2]).toHaveAttribute("href", "/trade/addr1");
+  });
 });
