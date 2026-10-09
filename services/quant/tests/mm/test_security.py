@@ -2,17 +2,22 @@
 
 import json
 import logging
+from datetime import UTC, datetime, timedelta
 from io import StringIO
+from unittest.mock import AsyncMock
 
+import pytest
 from solders.keypair import Keypair
 
 from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.loop import MarketMakerLoop
+from meridian_quant.mm.types import FairValue, MarketState
 
 
-def test_no_keypair_in_logs() -> None:
-    """Keypair is never logged (AC5)."""
+@pytest.mark.asyncio
+async def test_no_keypair_in_logs() -> None:
+    """Keypair and service token never logged in production _run_once (AC5)."""
     # Capture logs
     log_capture = StringIO()
     handler = logging.StreamHandler(log_capture)
@@ -23,7 +28,7 @@ def test_no_keypair_in_logs() -> None:
     logger.setLevel(logging.DEBUG)
 
     try:
-        # Create MM with a test keypair
+        # Create MM with a test keypair and service token
         test_kp = Keypair()
         # Convert to JSON array format per environment.md
         keypair_str = json.dumps(list(bytes(test_kp)))
@@ -33,31 +38,59 @@ def test_no_keypair_in_logs() -> None:
                 "market_maker_keypair": keypair_str,
                 "program_id": "11111111111111111111111111111112",
                 "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-                "service_token": "secret_token",
+                "service_token": "secret_token_12345",
             }
         )
 
-        _mm = MarketMakerLoop(
+        # Setup market and fair value for _run_once
+        now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)
+        close_ts = int((now + timedelta(hours=1)).timestamp())
+        market = MarketState(
+            market="TEST_20261008_23000",
+            ticker="TEST",
+            strike_cents=23000,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        )
+        fair_value = FairValue(
+            market=market.market,
+            ticker=market.ticker,
+            strike_cents=market.strike_cents,
+            fair_cents=50,
+            sigma=0.2,
+            spot=230.0,
+            as_of=now,
+        )
+
+        # Mock order client to avoid actual chain calls
+        order_client = FakeOrderClient()
+        # Mock mint_pair and place_order to verify they're called without logging secrets
+        order_client.mint_pair = AsyncMock(return_value=None)  # type: ignore[method-assign]
+        order_client.place_order = AsyncMock(return_value=1)  # type: ignore[method-assign]
+
+        mm = MarketMakerLoop(
             config,
-            market_source=FakeMarketSource(),
-            fair_value_source=FakeFairValueSource(),
-            order_client=FakeOrderClient(),
-        )  # noqa: F841 - testing initialization doesn't leak
+            market_source=FakeMarketSource([market]),
+            fair_value_source=FakeFairValueSource([fair_value]),
+            order_client=order_client,
+            clock=lambda: now,
+        )
 
-        # Log startup (this is what production code does - safe logging)
-        logger.info("MM initialized")
-        logger.debug(f"RPC: {config.rpc_url}")
+        # Run production code (_run_once logs internally)
+        await mm._run_once()
 
-        # Check that keypair is not in logs
+        # Check that production logs don't contain secrets
         log_output = log_capture.getvalue()
 
-        # The keypair string should not appear in safe logs
-        assert keypair_str not in log_output
+        # The keypair JSON string should NOT appear in production logs
+        assert keypair_str not in log_output, "Keypair JSON leaked in production logs"
 
-        # Service token should also not appear in safe logs
-        assert "secret_token" not in log_output
+        # Service token should NOT appear in production logs
+        assert "secret_token_12345" not in log_output, "Service token leaked in production logs"
 
-        # But if someone were to log model_dump(), that WOULD leak (anti-pattern)
+        # But if someone were to log model_dump(), that WOULD leak (anti-pattern to avoid)
         unsafe_dump = str(config.model_dump())
         assert keypair_str in unsafe_dump  # This shows why we must never log model_dump()
 
