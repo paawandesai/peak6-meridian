@@ -75,21 +75,26 @@ export function ethereumAddressToBytes(address: string): number[] {
 }
 
 /**
- * RedStone redstone-primary-prod signer addresses (M2-15, D-054).
+ * RedStone redstone-primary-prod authorized signer addresses (M2-15, D-054).
  *
- * Source: https://docs.redstone.finance/docs/smart-contract-devs/get-started/redstone-core
- * (redstone-primary-prod signers from official RedStone documentation)
+ * Source: @redstone-finance/sdk@1.0.0
+ * File: package/src/registry/initial-state.json
+ * Extracted via: npm pack @redstone-finance/sdk && tar -xzf redstone-finance-sdk-1.0.0.tgz
+ * Query: nodes[] | select(.dataServiceId == "redstone-primary-prod") | .evmAddress
  *
- * TODO: Replace with actual addresses from RedStone docs when web access available.
- * These are placeholder addresses for development - MUST be updated with real
- * redstone-primary-prod signer addresses before devnet deploy.
+ * These are the first 5 Ethereum addresses from the redstone-primary-prod data service nodes:
+ * - keyrock-1: 0x8cdBF4FE234F106eFB28D84Ef466bBaf8616f8D9
+ * - altair:    0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774
+ * - wayfarer:  0xdEB22f54738d54976C4c0fe5ce6d408E40d88499
+ * - morpheus:  0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202
+ * - ciri:      0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE
  */
 export const REDSTONE_PRIMARY_PROD_SIGNERS = [
-  "0x0000000000000000000000000000000000000001", // Signer 1 (PLACEHOLDER)
-  "0x0000000000000000000000000000000000000002", // Signer 2 (PLACEHOLDER)
-  "0x0000000000000000000000000000000000000003", // Signer 3 (PLACEHOLDER)
-  "0x0000000000000000000000000000000000000004", // Signer 4 (PLACEHOLDER)
-  "0x0000000000000000000000000000000000000005", // Signer 5 (PLACEHOLDER)
+  "0x8cdBF4FE234F106eFB28D84Ef466bBaf8616f8D9",
+  "0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774",
+  "0xdEB22f54738d54976C4c0fe5ce6d408E40d88499",
+  "0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202",
+  "0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE",
 ] as const;
 
 /** Default oracle configuration for redstone-primary-prod (M2-15, D-054). */
