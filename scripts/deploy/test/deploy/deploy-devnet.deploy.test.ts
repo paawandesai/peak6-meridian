@@ -629,6 +629,8 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
             market: addresses.market,
             feedTiingo: tiingo,
             feedTwelveData: twelve,
+            redstonePrice: null,
+            oracleConfig: null,
             payer: admin.keypair.publicKey,
           })
           .rpc({ commitment: "confirmed" });
