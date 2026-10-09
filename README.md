@@ -49,11 +49,13 @@ make e2e  # Create → mint → trade (4 paths) → settle → redeem
 
 ## Devnet
 
-**Live deployment:**
-- **App:** https://meridian-app.vercel.app _(when deployed)_
+**On-chain deployment:**
 - **Program ID:** `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`  
   [View on Explorer](https://explorer.solana.com/address/H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm?cluster=devnet)
-- **Test-USDC:** Get from the faucet button in the app (1 claim per wallet per 24h)
+- **Test-USDC mint:** `GKuoE1akZCNnA4ouVdB6P3ngSnanBM28oydPS54fSnT5`  
+  [View on Explorer](https://explorer.solana.com/address/GKuoE1akZCNnA4ouVdB6P3ngSnanBM28oydPS54fSnT5?cluster=devnet)
+
+> **App deployment pending.** The frontend will be deployed after M4-03. Use `make dev` for local testing.
 
 **Deploy to devnet** (requires keypairs per [docs/environment.md](docs/environment.md)):
 ```bash
@@ -62,15 +64,15 @@ make deploy-devnet  # Deploys program, creates test-USDC mint, initializes confi
 
 ## Demo: Trading a Binary Contract
 
-> **Full walkthrough with screenshots:** [docs/demo.md](docs/demo.md)
+> **Note:** App deployment pending M4-03. Use `make dev` for local testing.  
+> **Walkthrough with screenshots:** [docs/demo.md](docs/demo.md)
 
-Here's how to trade "Will AAPL close ≥ $230.00 today?" on devnet:
+To test locally, run `make dev` and visit `http://localhost:3000`:
 
-### 1. Get Test-USDC
-1. Visit https://meridian-app.vercel.app
-2. Connect your Phantom or Solflare wallet
-3. Click "Get test-USDC" (header)
-4. Approve the transaction
+### 1. Get Test-USDC (local)
+1. The local validator auto-airdrops SOL on wallet connect
+2. Click "Get test-USDC" (header) to claim test USDC
+3. Approve the transaction in your wallet
 
 ### 2. Navigate to Markets
 - Click "Markets" in the navigation
