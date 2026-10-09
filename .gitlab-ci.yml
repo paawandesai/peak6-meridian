@@ -424,7 +424,9 @@ test:rust:
 test:js-py:
   stage: test
   extends: .light-on-app-change
-  needs: [build]
+  needs:
+    - job: build
+      optional: true
   tags: [$LIGHT_RUNNER_TAG]
   # Own group (not meridian-heavy): one JS/Python test job at a time across all Meridian
   # pipelines, so it no longer queues behind Rust builds but never stacks on the 8 GB Vultr box.
