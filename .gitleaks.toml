@@ -26,4 +26,5 @@ commits = [
   "c01b06527ea6861f62c52837adb09b58b2d5780e", # M2-15b oracle-config.ts: public RedStone signer addresses
   "5773805adb071ef55f555d9a946584c3b354bbe2", # M2-15b oracle-config.test.ts: public RedStone test address
   "2f4fe2f5b1208de5b5d4065844657a6282bcb19a", # M2-15b oracle-config.test.ts: public RedStone test address (rebased)
+  "4ebfd5030df352a8a4f96a2b70021927c2bddff8", # M3-10 Pyth: fake test secret in client.test.ts
 ]
