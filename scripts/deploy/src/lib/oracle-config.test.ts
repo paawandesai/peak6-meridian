@@ -14,7 +14,7 @@ let tempDir: string | null = null;
 
 beforeEach(async () => {
   const { makeTempDir } = await import("../../test/deploy/harness");
-  tempDir = makeTempDir();
+  tempDir = makeTempDir("oracle-config-test");
 });
 
 afterEach(async () => {
@@ -56,7 +56,10 @@ describe("oracle-config (M2-15b)", () => {
     writeFileSync(
       configPath,
       JSON.stringify({
-        signers: ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa", "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB"],
+        signers: [
+          "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa",
+          "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
+        ],
         signerThreshold: 2,
         maxPackageDelaySecs: 300,
       }),

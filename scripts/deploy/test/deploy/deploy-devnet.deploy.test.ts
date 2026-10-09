@@ -122,6 +122,7 @@ function options(rpcUrl: string, overrides: Partial<Options> = {}): Options {
     queue: FIXTURE_QUEUE,
     outPath: join(work, "record.json"),
     feedsPath: undefined,
+    oracleConfigPath: undefined,
     skipBuild: true,
     allowUpgrade: false,
     ...overrides,
