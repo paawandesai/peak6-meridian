@@ -100,28 +100,29 @@ pub fn parse_pyth_price(data: &[u8]) -> Result<PythReading> {
         MeridianError::OracleInvalidValue
     );
 
-    // Parse VerificationLevel to find message offset
+    // Parse VerificationLevel to find message offset and expected total length
     // Borsh encoding: Partial=0 (2 bytes: tag + num_signatures), Full=1 (1 byte: tag only)
     let level_tag = *data.get(40).ok_or(MeridianError::OracleInvalidValue)?;
-    let msg_offset = match level_tag {
-        0 => 42, // Partial: 2 bytes (tag + num_signatures)
-        1 => 41, // Full: 1 byte
+    let (msg_offset, expected_len) = match level_tag {
+        0 => (42, 134), // Partial: 2 bytes, total = 8+32+2+84+8 = 134
+        1 => (41, 133), // Full: 1 byte, total = 8+32+1+84+8 = 133
         _ => return Err(MeridianError::OracleInvalidValue.into()),
     };
 
-    // PriceFeedMessage layout: feed_id(32) + price(8) + conf(8) + expo(4) + publish_time(8) + posted_slot(8) = 68
-    require!(
-        data.len() >= msg_offset + 68,
-        MeridianError::OracleInvalidValue
-    );
+    // Exact length check (fail closed like oracle::parse_pull_feed)
+    require!(data.len() == expected_len, MeridianError::OracleInvalidValue);
 
-    // Parse PriceFeedMessage fields
+    // Parse PriceFeedMessage (SDK layout, 84 bytes total):
+    // feed_id(32) + price(8) + conf(8) + exponent(4) + publish_time(8) +
+    // prev_publish_time(8) + ema_price(8) + ema_conf(8)
     let feed_id = read_array::<32>(data, msg_offset)?;
     let price_i64 = i64::from_le_bytes(read_array(data, msg_offset + 32)?);
     let conf = u64::from_le_bytes(read_array(data, msg_offset + 40)?);
     let expo = i32::from_le_bytes(read_array(data, msg_offset + 48)?);
     let publish_time = i64::from_le_bytes(read_array(data, msg_offset + 52)?);
-    let posted_slot = u64::from_le_bytes(read_array(data, msg_offset + 60)?);
+    // Skip: prev_publish_time(8) at +60, ema_price(8) at +68, ema_conf(8) at +76
+    // posted_slot is after PriceFeedMessage: msg_offset + 84
+    let posted_slot = u64::from_le_bytes(read_array(data, msg_offset + 84)?);
 
     // Scale to 18 decimals: Pyth price = price_i64 * 10^expo, target = price * 10^18
     // So: value_scaled = price_i64 * 10^(18 + expo)
