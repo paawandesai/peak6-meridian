@@ -119,13 +119,16 @@ class MarketMakerLoop:
                 await self._cancel_all_quotes()
                 return
 
-            # Update inventory from on-chain state
-            await self._sync_inventory(open_markets)
+            # Cancel all old quotes first (frees escrowed YES to OpenOrders.free_yes)
+            await self._cancel_all_quotes()
 
-            # Settle funds to recycle proceeds
+            # Settle funds to move free_yes to wallet
             await self._settle_funds()
 
-            # Generate and place quotes for each open strike
+            # Sync inventory from wallet (now all YES is in wallet, not escrowed)
+            await self._sync_inventory(open_markets)
+
+            # Place new quotes (no cancel needed, already cancelled above)
             await self._quote_all_strikes(fair_values, open_markets)
 
             # Update coverage metric
@@ -324,20 +327,12 @@ class MarketMakerLoop:
             orders_per_market[fv_market.market] = orders_per_market.get(fv_market.market, 0) + 2
 
     async def _place_quote(self, market: MarketState, quote: Quote) -> None:
-        """Place a two-sided quote, canceling existing quotes first.
+        """Place a two-sided quote.
 
-        Prevents stacking orders on repeated _run_once() calls by canceling
-        existing MM quotes for this market before placing new ones.
+        Old quotes are already cancelled in _run_once before this is called,
+        so this just places the new bid and ask.
         """
         try:
-            # Cancel existing MM quotes for this market to avoid stacking
-            existing_orders = await self._order_client.fetch_resting_orders(market.market)
-            mm_orders = [o for o in existing_orders if o.owner == self._mm_owner]
-            for order in mm_orders:
-                await self._order_client.cancel_order(
-                    market=market.market, order_id=order.order_id, owner=self._mm_owner
-                )
-
             # Place new bid
             await self._order_client.place_order(
                 market=market.market,

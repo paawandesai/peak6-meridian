@@ -456,10 +456,9 @@ class ChainOrderClient:
         vault = derive_vault_pda(self.program_id, market_pda)
 
         # Create YES/NO ATAs idempotently (required for mint_pair)
-        # Check if ATAs exist, create if not
-        try:
-            await self.rpc.get_account_info(user_yes)
-        except Exception:
+        # Missing accounts return value=None, not an exception
+        yes_info = await self.rpc.get_account_info(user_yes)
+        if yes_info.value is None:
             # Create YES ATA
             create_yes_ix = create_associated_token_account(
                 self.payer.pubkey(), owner_pubkey, yes_mint
@@ -470,9 +469,8 @@ class ChainOrderClient:
             sig = await self.rpc.send_transaction(tx)
             await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
 
-        try:
-            await self.rpc.get_account_info(user_no)
-        except Exception:
+        no_info = await self.rpc.get_account_info(user_no)
+        if no_info.value is None:
             # Create NO ATA
             create_no_ix = create_associated_token_account(
                 self.payer.pubkey(), owner_pubkey, no_mint
