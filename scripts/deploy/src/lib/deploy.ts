@@ -495,25 +495,70 @@ async function deploy(
   }
   assertConfigAdmin(config, admin.publicKey);
 
-  // Set oracle config if provided (M2-15 AC6).
+  // Set oracle config if provided (M2-15 AC6). Idempotent: skip if on-chain already matches.
   if (oracleConfig !== undefined) {
-    const signers = oracleConfig.signers.map((hex) => {
-      const bytes = Buffer.from(hex.slice(2), "hex");
-      if (bytes.length !== 20) {
-        throw new Error(`signer ${hex} is not 20 bytes`);
+    const oracleConfigPda = PublicKey.findProgramAddressSync(
+      [Buffer.from("oracle_config")],
+      ctx.programId,
+    )[0];
+
+    // Check if on-chain config already matches (idempotent like planConfig)
+    let alreadyMatches = false;
+    try {
+      const onChain = await program.account.oracleConfig.fetch(oracleConfigPda);
+      const signersMatch =
+        onChain.signers.length === oracleConfig.signers.length &&
+        onChain.signers.every((signerBytes: number[], i: number) => {
+          const expected = oracleConfig.signers[i];
+          if (!expected) return false;
+          const hex = Buffer.from(signerBytes).toString("hex");
+          return `0x${hex}` === expected.toLowerCase();
+        });
+      const thresholdMatches = onChain.signerThreshold === oracleConfig.signerThreshold;
+      const delayMatches = onChain.maxPackageDelaySecs.toNumber() === oracleConfig.maxPackageDelaySecs;
+      alreadyMatches = signersMatch && thresholdMatches && delayMatches;
+    } catch {
+      // OracleConfig not set yet, proceed with set
+    }
+
+    if (!alreadyMatches) {
+      const signers = oracleConfig.signers.map((hex) => {
+        const bytes = Buffer.from(hex.slice(2), "hex");
+        if (bytes.length !== 20) {
+          throw new Error(`signer ${hex} is not 20 bytes`);
+        }
+        return Array.from(bytes);
+      });
+      await program.methods
+        .setOracleConfig({
+          signers,
+          signerThreshold: oracleConfig.signerThreshold,
+          maxPackageDelaySecs: oracleConfig.maxPackageDelaySecs,
+        })
+        .accounts({ admin: admin.publicKey })
+        .rpc({ commitment: "confirmed" });
+      ctx.actions.push("set-oracle-config");
+      log(`set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`);
+
+      // Fail closed: verify on-chain matches input
+      const verified = await program.account.oracleConfig.fetch(oracleConfigPda);
+      const verifiedSignersMatch =
+        verified.signers.length === oracleConfig.signers.length &&
+        verified.signers.every((signerBytes: number[], i: number) => {
+          const expected = oracleConfig.signers[i];
+          if (!expected) return false;
+          const hex = Buffer.from(signerBytes).toString("hex");
+          return `0x${hex}` === expected.toLowerCase();
+        });
+      const verifiedThresholdMatches = verified.signerThreshold === oracleConfig.signerThreshold;
+      const verifiedDelayMatches = verified.maxPackageDelaySecs.toNumber() === oracleConfig.maxPackageDelaySecs;
+
+      if (!verifiedSignersMatch || !verifiedThresholdMatches || !verifiedDelayMatches) {
+        throw new Error(
+          "OracleConfig mismatch after set_oracle_config: on-chain state does not match input file",
+        );
       }
-      return Array.from(bytes);
-    });
-    await program.methods
-      .setOracleConfig({
-        signers,
-        signerThreshold: oracleConfig.signerThreshold,
-        maxPackageDelaySecs: oracleConfig.maxPackageDelaySecs,
-      })
-      .accounts({ admin: admin.publicKey })
-      .rpc({ commitment: "confirmed" });
-    ctx.actions.push("set-oracle-config");
-    log(`set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`);
+    }
   }
 
   // Fetch on-chain oracle config to preserve in record, even if --oracle-config not passed this run
