@@ -197,12 +197,17 @@ class MarketMakerLoop:
         return False
 
     async def _fetch_open_markets(self) -> list[MarketState]:
-        """Fetch open markets (AC1: uses injected source)."""
+        """Fetch open markets (AC1: uses injected source).
+
+        Re-raises on error to fail closed (AC2): returning [] would make
+        _run_once think the book is empty when it's actually an RPC failure,
+        causing cancel to refetch and also get [], leaving stale orders.
+        """
         try:
             return await self._market_source.fetch_open_markets()
         except Exception:
             logger.exception("Failed to fetch open markets")
-            return []
+            raise
 
     async def _sync_inventory(self, markets: list[MarketState]) -> list[MarketState]:
         """Sync inventory from on-chain YES token balances (AC1/AC2).
@@ -320,7 +325,8 @@ class MarketMakerLoop:
                 orders_per_market[market.market] = len(mm_orders)
             except Exception:
                 logger.exception(f"Failed to fetch orders for {market.ticker}")
-                orders_per_market[market.market] = 0
+                # Do NOT set to 0 (AB-10: would allow placing on top of invisible leftovers).
+                # Skip this market entirely - it won't be in orders_per_market.
 
         for fv in fair_values:
             # Match FV to market by exact market ID (both use TICKER_YYYYMMDD_STRIKE).
@@ -364,7 +370,14 @@ class MarketMakerLoop:
 
             # Check order cap PER MARKET: placing a two-sided quote adds 2 orders (AB-10)
             # domain.md: "max 8 resting orders per owner per market"
-            current_market_orders = orders_per_market.get(fv_market.market, 0)
+            # If market not in dict, fetch failed - skip (fail closed)
+            if fv_market.market not in orders_per_market:
+                logger.warning(
+                    f"Skipping {fv.ticker} ${fv.strike_cents / 100:.0f}: "
+                    f"fetch_resting_orders failed (cannot verify order cap)"
+                )
+                continue
+            current_market_orders = orders_per_market[fv_market.market]
             if current_market_orders + 2 > self.config.max_orders_per_owner:
                 logger.warning(
                     f"Skipping {fv.ticker} ${fv.strike_cents / 100:.0f}: would exceed "
