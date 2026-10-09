@@ -1,7 +1,7 @@
 """AB-10: Market maker limits (AC3).
 
 Abuse case: MM never exceeds per-owner resting-order cap (8) or inventory cap (200).
-Prices always in 1–99.
+Prices always in 1-99.
 """
 
 from datetime import UTC, datetime
@@ -65,7 +65,7 @@ def test_ab10_order_cap_per_owner() -> None:
     total_orders = len(quotes_generated) * 2
 
     # If MM were to place all quotes, it would exceed cap
-    assert total_orders == 10  # 5 markets × 2 = 10 orders
+    assert total_orders == 10  # 5 markets x 2 = 10 orders
     assert total_orders > 8    # Would exceed the cap
 
     # MM must limit to at most 4 markets (8 orders) at a time
@@ -169,3 +169,31 @@ def test_ab10_inventory_tracking_consistency() -> None:
     tracker.update(key2, 100)
     assert tracker.get(key1).position == 60
     assert tracker.get(key2).position == 100
+
+
+def test_ab10_mm_stops_quoting_at_inventory_limit() -> None:
+    """MM stops quoting when position + quote_size would exceed limit (Finding #3)."""
+    tracker = InventoryTracker()
+    key = MarketKey(ticker="AAPL", trading_date=20261008, strike_cents=68000)
+    max_inv = 200
+    quote_size = 10
+
+    # Position at 195: can still quote (195 + 10 = 205 > 200, so should NOT quote)
+    tracker.set(key, 195)
+    assert tracker.within_limits(key, max_inv)  # Still within limits
+    assert not tracker.can_add(key, quote_size, max_inv)  # But can't add more
+
+    # Position at 190: can quote (190 + 10 = 200, exactly at limit)
+    tracker.set(key, 190)
+    assert tracker.within_limits(key, max_inv)
+    assert tracker.can_add(key, quote_size, max_inv)
+
+    # Position at 200: within limits but can't add more
+    tracker.set(key, 200)
+    assert tracker.within_limits(key, max_inv)  # At limit
+    assert not tracker.can_add(key, 1, max_inv)  # Can't add any more
+
+    # Negative direction: position at -195
+    tracker.set(key, -195)
+    assert tracker.within_limits(key, max_inv)
+    assert not tracker.can_add(key, -quote_size, max_inv)  # Would go to -205

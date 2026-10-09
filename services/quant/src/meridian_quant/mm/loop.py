@@ -15,7 +15,7 @@ from .config import MMConfig
 from .inventory import InventoryTracker
 from .metrics import book_coverage
 from .quoter import generate_quote
-from .types import FairValue, MarketState
+from .types import FairValue, MarketKey, MarketState
 
 logger = logging.getLogger(__name__)
 
@@ -186,14 +186,32 @@ class MarketMakerLoop:
             if not market or not market.is_open:
                 continue
 
-            # Get current inventory
-            inv = self.inventory.get(fv.strike_cents)
+            # Get current inventory using MarketKey (Finding #5)
+            market_key = MarketKey(
+                ticker=fv.ticker, trading_date=market.trading_date, strike_cents=fv.strike_cents
+            )
+            inv = self.inventory.get(market_key)
 
-            # Check inventory limits
-            if not self.inventory.within_limits(fv.strike_cents, self.config.max_inventory):
+            # Check inventory limits: must be within limits AND able to add quote size
+            # This prevents quoting when at the limit (e.g., position=200)
+            if not self.inventory.within_limits(market_key, self.config.max_inventory):
                 logger.warning(
                     f"Inventory limit exceeded for {fv.ticker} ${fv.strike_cents/100:.0f}, "
                     f"position={inv.position}"
+                )
+                continue
+
+            # Check if we can add the quote size without exceeding limits
+            # Quote could get filled on either side, so check both
+            max_inv = self.config.max_inventory
+            quote_size = self.config.size_per_side
+            if not (
+                self.inventory.can_add(market_key, quote_size, max_inv)
+                and self.inventory.can_add(market_key, -quote_size, max_inv)
+            ):
+                logger.warning(
+                    f"Cannot quote {fv.ticker} ${fv.strike_cents/100:.0f}: "
+                    f"position={inv.position}, size={quote_size} would exceed limits"
                 )
                 continue
 
