@@ -1,4 +1,4 @@
-"""Market maker metrics."""
+"""Market maker metrics (Finding #4: key by market, not price)."""
 
 from collections.abc import Sequence
 
@@ -6,33 +6,32 @@ from .types import RestingOrder
 
 
 def book_coverage(
-    open_strikes: Sequence[int],
+    open_markets: Sequence[str],  # Finding #4: list of market addresses
     resting_orders: Sequence[RestingOrder],
     mm_owner: str,
 ) -> float:
-    """Calculate the share of open strikes with a two-sided MM quote.
-
-    A strike is "covered" if it has at least one MM bid and one MM ask.
+    """Calculate the share of open markets with a two-sided MM quote.
+    
+    Finding #4: Key by market, not order.price. A market is "covered" if the
+    MM owner has at least one bid and one ask on that market.
+    
     Returns a value in [0.0, 1.0].
     """
-    if not open_strikes:
+    if not open_markets:
         return 0.0
-
-    # Group MM orders by strike
-    strikes_with_bids: set[int] = set()
-    strikes_with_asks: set[int] = set()
-
+    
+    # Group MM orders by market
+    markets_with_bids: set[str] = set()
+    markets_with_asks: set[str] = set()
+    
     for order in resting_orders:
         if order.owner == mm_owner:
-            # Extract strike from market address (not ideal, but works for metric)
-            # In practice, orders should include strike or market metadata
             if order.side == "Bid":
-                strikes_with_bids.add(order.price)  # Placeholder
+                markets_with_bids.add(order.market)
             else:
-                strikes_with_asks.add(order.price)
-
-    # For now, simplified: count strikes that have both sides
-    # Real impl would parse market from order and match to strikes
-    covered_count = len(strikes_with_bids & strikes_with_asks)
-
-    return covered_count / len(open_strikes)
+                markets_with_asks.add(order.market)
+    
+    # Count markets that have both a bid and an ask
+    covered_markets = markets_with_bids & markets_with_asks
+    
+    return len(covered_markets) / len(open_markets)
