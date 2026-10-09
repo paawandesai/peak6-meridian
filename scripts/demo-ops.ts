@@ -25,6 +25,7 @@ import {
   symbolBytes,
   tradingDate,
   assertCluster,
+  STRIKE_CENTS_TO_SCALED,
 } from "@meridian/client";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { z } from "zod";
@@ -195,31 +196,29 @@ async function createTestMarket(ctx: DemoContext): Promise<MarketKey> {
   const strikeCents = 68000n;
   const now = new Date();
   const date = tradingDate(now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate());
-  const closeTs = Math.floor(Date.now() / 1000) + 180; // Close in 3 minutes
 
   const addresses = marketAddresses(
     { symbol, tradingDate: date, strikeCents },
     ctx.program.programId,
   );
 
-  // Try to fetch the market; if it exists, use it; otherwise create it
+  // Check if market exists; if not, needs automation authority to create
   try {
-    await ctx.program.account.market.fetch(addresses.market);
-    console.log(`  Market already exists at ${addresses.market.toString()}`);
+    const marketData = await ctx.program.account.market.fetch(addresses.market);
+    console.log(`  Market exists at ${addresses.market.toString()}`);
+    console.log(`  Using existing closeTs: ${marketData.closeTs.toString()}`);
+    return {
+      symbol,
+      tradingDate: date,
+      strikeCents,
+      closeTs: marketData.closeTs.toNumber(),
+    };
   } catch {
-    // Market doesn't exist, create it
-    // Note: This requires automation authority keypair which we don't have in the demo
-    // For the demo, we'll just document that a market should exist
-    console.log(`  Market would be created at ${addresses.market.toString()}`);
-    console.log(`  (In full demo, automation service creates markets)`);
+    throw new Error(
+      `Market does not exist at ${addresses.market.toString()}. ` +
+        `Run with automation authority to create markets first, or use an existing market.`,
+    );
   }
-
-  return {
-    symbol,
-    tradingDate: date,
-    strikeCents,
-    closeTs,
-  };
 }
 
 async function waitForClose(ctx: DemoContext, marketKey: MarketKey): Promise<void> {
@@ -260,12 +259,16 @@ async function setFaultedOracle(ctx: DemoContext, marketKey: MarketKey): Promise
       ctx.program.programId,
     );
 
+    // Scale price: cents * 10^16 (as in tests/e2e/src/lifecycle.ts)
+    const scaledValue = new BN((BigInt(priceCents) * STRIKE_CENTS_TO_SCALED).toString());
+    const currentSlot = new BN(await ctx.connection.getSlot("confirmed"));
+
     await ctx.program.methods
       .localOracleSet(
         Array.from(symbolBytes(marketKey.symbol)),
         sourceSlotNum,
-        new BN(String(priceCents)),
-        new BN(String(marketKey.closeTs)),
+        scaledValue,
+        currentSlot,
       )
       .accountsStrict({
         config: ctx.config,
@@ -276,7 +279,9 @@ async function setFaultedOracle(ctx: DemoContext, marketKey: MarketKey): Promise
       .signers([ctx.admin])
       .rpc();
 
-    console.log(`  Set source ${sourceSlotNum}: ${priceCents}¢`);
+    console.log(
+      `  Set source ${sourceSlotNum}: ${priceCents}¢ (scaled: ${scaledValue.toString()})`,
+    );
   }
 }
 
@@ -284,8 +289,43 @@ async function attemptSettlement(
   ctx: DemoContext,
   marketKey: MarketKey,
 ): Promise<{ incidentId: string }> {
-  // In the real demo, we would call settle_market which would fail
-  // For now, we'll skip the actual settlement attempt and just post the incident
+  const addresses = marketAddresses(
+    {
+      symbol: marketKey.symbol,
+      tradingDate: marketKey.tradingDate,
+      strikeCents: marketKey.strikeCents,
+    },
+    ctx.program.programId,
+  );
+
+  // Try to settle with settle_market - should fail spread check due to 2% fault
+  console.log(`  Attempting settle_market (will fail spread check)...`);
+  try {
+    // Derive oracle PDAs for both sources
+    const oraclePdas = [0, 1].map(
+      (slotIndex) =>
+        PublicKey.findProgramAddressSync(
+          [Buffer.from("local_feed"), symbolBytes(marketKey.symbol), Buffer.from([slotIndex])],
+          ctx.program.programId,
+        )[0],
+    );
+
+    await ctx.program.methods
+      .settleMarket()
+      .accountsStrict({
+        config: ctx.config,
+        market: addresses.market,
+        oracleA: oraclePdas[0],
+        oracleB: oraclePdas[1],
+      })
+      .rpc();
+
+    // If we get here, settlement succeeded (shouldn't happen with 2% fault)
+    throw new Error("Settlement succeeded unexpectedly - spread check should have failed");
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.log(`  Settlement failed as expected: ${errorMsg}`);
+  }
 
   // POST /incidents to ops-agent (with timeout per AC3)
   const controller = new AbortController();
@@ -318,11 +358,21 @@ async function attemptSettlement(
   }
 }
 
-const DraftSchema = z.object({
+// Draft schema matching M3-05 DraftView (architecture.md)
+const sourceSchema = z.object({
+  name: z.string(),
+  close: z.number().int().nonnegative(),
+  as_of: z.string(),
+});
+
+const draftSchema = z.object({
   incident_id: z.string(),
-  proposed_price_cents: z.number().int().min(1).max(9999),
+  market: z.string(),
+  proposed_price_cents: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  sources: z.array(sourceSchema),
+  spread_bps: z.number().int().nonnegative(),
   note: z.string(),
-  proposed_at: z.string(),
+  status: z.string(),
 });
 
 async function getDraft(
@@ -353,7 +403,7 @@ async function getDraft(
       throw new Error(`Failed to fetch drafts: ${response.status} ${await response.text()}`);
     }
 
-    const drafts = z.array(DraftSchema).parse(await response.json());
+    const drafts = z.array(draftSchema).parse(await response.json());
 
     // Find the draft for our incident (not ignored)
     const draft = drafts.find((d) => d.incident_id === incidentId);
