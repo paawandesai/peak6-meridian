@@ -1,17 +1,17 @@
 {
   "reports": [
     {
-      "name": "Tiingo",
+      "name": "tiingo",
       "close": {
-        "name": "Tiingo",
+        "name": "tiingo",
         "close_cents": 68000,
         "as_of": "2026-10-09T20:05:00Z"
       }
     },
     {
-      "name": "Twelve Data",
+      "name": "twelvedata",
       "close": {
-        "name": "Twelve Data",
+        "name": "twelvedata",
         "close_cents": 68000,
         "as_of": "2026-10-09T20:05:00Z"
       }

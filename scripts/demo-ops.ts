@@ -146,8 +146,10 @@ async function main(): Promise<void> {
     const fixturePath = resolve(import.meta.dirname, "lib/demo/fixtures.json");
     const storePath = "/tmp/ops-agent-demo-store.json";
     demoOpsAgent = spawn(
-      "python3",
+      "uv",
       [
+        "run",
+        "python",
         resolve(import.meta.dirname, "lib/demo/ops-agent-demo.py"),
         port,
         env.SERVICE_TOKEN,
@@ -499,15 +501,16 @@ async function getDraft(
 }
 
 async function waitForOverrideDelay(ctx: DemoContext, marketKey: MarketKey): Promise<void> {
-  const configAccount = await ctx.program.account.config.fetch(ctx.config);
-  const delaySecs = configAccount.overrideDelaySecs;
-  const enableAt = marketKey.closeTs + delaySecs;
-  const now = Math.floor(Date.now() / 1000);
+  // Use a short local delay for the demo (60s) instead of the on-chain default (3600s)
+  const localDelaySecs = 60;
+  const enableAt = marketKey.closeTs + localDelaySecs;
+  const blockTime = await ctx.connection.getBlockTime(await ctx.connection.getSlot("confirmed"));
+  const now = blockTime ?? Math.floor(Date.now() / 1000);
   const waitSecs = Math.max(0, enableAt - now);
 
-  console.log(`  Override delay: ${delaySecs}s`);
+  console.log(`  Override delay: ${localDelaySecs}s (local demo delay)`);
   console.log(`  Available at: ${new Date(enableAt * 1000).toISOString()}`);
-  console.log(`  Waiting ${waitSecs}s...`);
+  console.log(`  Waiting ${waitSecs}s (cluster time: ${now}, enable: ${enableAt})...`);
 
   await new Promise((resolve) => setTimeout(resolve, waitSecs * 1000 + 1000)); // Wait until after delay
 }
