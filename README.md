@@ -62,7 +62,7 @@ make deploy-devnet  # Deploys program, creates test-USDC mint, initializes confi
 
 ## Demo: Trading a Binary Contract
 
-> **Note:** Screenshots pending app deployment (M4-03). Text walkthrough provided below.
+> **Note:** Screenshots and live demo walkthrough will be added after !37 (M2-11 deployment) merges (operator Tier 1 decision). Text walkthrough provided below.
 
 Here's how to trade "Will AAPL close ≥ $230.00 today?" on devnet:
 
