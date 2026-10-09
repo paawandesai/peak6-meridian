@@ -4,17 +4,17 @@ Abuse case: MM never exceeds per-owner resting-order cap (8) or inventory cap (2
 Prices always in 1-99.
 """
 
+from datetime import UTC, datetime, timedelta
+
 import base58
 import pytest
-from datetime import UTC, datetime, timedelta
-from solders.keypair import Keypair  # type: ignore[import-untyped]
-
 from meridian_quant.mm.config import MAX_PRICE_CENTS, MIN_PRICE_CENTS, MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.inventory import InventoryTracker
 from meridian_quant.mm.loop import MarketMakerLoop
 from meridian_quant.mm.quoter import generate_quote
 from meridian_quant.mm.types import FairValue, Inventory, MarketKey, MarketState
+from solders.keypair import Keypair  # type: ignore[import-untyped]
 
 
 def test_ab10_inventory_cap_enforced() -> None:
