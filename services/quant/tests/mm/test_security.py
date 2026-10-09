@@ -3,8 +3,7 @@
 import logging
 from io import StringIO
 
-import base58
-from solders.keypair import Keypair  # type: ignore[import-untyped]
+from solders.keypair import Keypair
 
 from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
@@ -25,7 +24,7 @@ def test_no_keypair_in_logs() -> None:
     try:
         # Create MM with a test keypair
         test_kp = Keypair()
-        keypair_str = base58.b58encode(bytes(test_kp)).decode('ascii')
+        keypair_str = str(test_kp)
 
         config = MMConfig(
             market_maker_keypair=keypair_str,
@@ -64,7 +63,7 @@ def test_no_keypair_in_logs() -> None:
 def test_config_repr_does_not_leak_secrets() -> None:
     """Config repr/str doesn't leak sensitive fields (AC5)."""
     test_kp = Keypair()
-    keypair_str = base58.b58encode(bytes(test_kp)).decode('ascii')
+    keypair_str = str(test_kp)
 
     config = MMConfig(
         market_maker_keypair=keypair_str,

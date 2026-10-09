@@ -2,9 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
-import base58
 import pytest
-from solders.keypair import Keypair  # type: ignore[import-untyped]
+from solders.keypair import Keypair
 
 from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
@@ -21,9 +20,8 @@ def test_keypair() -> Keypair:
 @pytest.fixture
 def mm_config(test_keypair: Keypair) -> MMConfig:
     """Test MM configuration."""
-    keypair_bytes = bytes(test_keypair)
     return MMConfig(
-        market_maker_keypair=base58.b58encode(keypair_bytes).decode("ascii"),
+        market_maker_keypair=str(test_keypair),
         program_id="11111111111111111111111111111112",
         service_token="test_token",
     )

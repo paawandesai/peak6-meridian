@@ -14,8 +14,7 @@ from typing import Literal
 
 import httpx
 from solana.rpc.async_api import AsyncClient
-from solana.rpc.commitment import Confirmed
-from solders.keypair import Keypair  # type: ignore[import-untyped]
+from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 
 from .types import FairValue, MarketState, RestingOrder
@@ -125,7 +124,9 @@ class OnChainOrderClient:
         - Sign with self.payer, send transaction
         - Parse order_id from event or return value
         """
-        logger.error("OnChainOrderClient.place_order not implemented - use FakeOrderClient for tests")
+        logger.error(
+            "OnChainOrderClient.place_order not implemented - use FakeOrderClient for tests"
+        )
         raise NotImplementedError("Production: build place_order instruction + send tx")
 
     async def cancel_order(self, market: str, order_id: int, owner: str) -> None:

@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class MMConfig(BaseSettings):
     """Market maker configuration from environment."""
 
-    model_config = SettingsConfigDict(case_sensitive=False)
+    model_config = SettingsConfigDict(case_sensitive=False, populate_by_name=True)
 
     # Solana connection (Finding #6: no MM_ prefix per environment.md)
     rpc_url: str = Field(default="http://localhost:8899", alias="SOLANA_RPC_URL")

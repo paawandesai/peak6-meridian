@@ -2,9 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
-import base58
 import pytest
-from solders.keypair import Keypair  # type: ignore[import-untyped]
+from solders.keypair import Keypair
 
 from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
@@ -22,11 +21,8 @@ def test_keypair() -> Keypair:
 @pytest.fixture
 def mm_config(test_keypair: Keypair) -> MMConfig:
     """Test MM configuration."""
-    # Use a valid keypair's bytes
-    keypair_bytes = bytes(test_keypair)
-    # Encode as base58 for the config (note: this is the full 64-byte seed+pubkey)
     return MMConfig(
-        market_maker_keypair=base58.b58encode(keypair_bytes).decode('ascii'),
+        market_maker_keypair=str(test_keypair),
         program_id="11111111111111111111111111111112",
         service_token="test_token",
     )
@@ -37,7 +33,10 @@ async def test_pull_on_stale_spot_data(mm_config: MMConfig) -> None:
     """MM pulls all quotes when spot data is > 10s old (AC2)."""
     # Inject a fake clock
     now = datetime.now(UTC)
-    fake_clock = lambda: now
+
+    def fake_clock() -> datetime:
+        return now
+
     mm = MarketMakerLoop(
         mm_config,
         market_source=FakeMarketSource(),
@@ -70,7 +69,10 @@ async def test_pull_on_stale_spot_data(mm_config: MMConfig) -> None:
 async def test_no_pull_on_fresh_spot_data(mm_config: MMConfig) -> None:
     """MM does not pull quotes when spot data is fresh (AC2)."""
     now = datetime.now(UTC)
-    fake_clock = lambda: now
+
+    def fake_clock() -> datetime:
+        return now
+
     mm = MarketMakerLoop(
         mm_config,
         market_source=FakeMarketSource(),
@@ -100,7 +102,10 @@ async def test_no_pull_on_fresh_spot_data(mm_config: MMConfig) -> None:
 async def test_pull_on_stale_flag(mm_config: MMConfig) -> None:
     """MM pulls all quotes when fair value has stale=True flag (AC2)."""
     now = datetime.now(UTC)
-    fake_clock = lambda: now
+
+    def fake_clock() -> datetime:
+        return now
+
     mm = MarketMakerLoop(
         mm_config,
         market_source=FakeMarketSource(),
@@ -131,7 +136,10 @@ async def test_pull_within_2_min_of_close(mm_config: MMConfig) -> None:
     """MM pulls quotes when < 2 min to close (AC2, Finding #2)."""
     # Set fake clock at 15:58:30 (90 seconds before close at 16:00)
     now = datetime(2026, 10, 8, 15, 58, 30, tzinfo=UTC)
-    fake_clock = lambda: now
+
+    def fake_clock() -> datetime:
+        return now
+
     mm = MarketMakerLoop(
         mm_config,
         market_source=FakeMarketSource(),
@@ -177,7 +185,10 @@ async def test_no_pull_when_far_from_close(mm_config: MMConfig) -> None:
     """MM does not pull when > 2 min to close (AC2, Finding #2)."""
     # Set fake clock at 15:00 (1 hour before close)
     now = datetime(2026, 10, 8, 15, 0, 0, tzinfo=UTC)
-    fake_clock = lambda: now
+
+    def fake_clock() -> datetime:
+        return now
+
     mm = MarketMakerLoop(
         mm_config,
         market_source=FakeMarketSource(),

@@ -1,5 +1,4 @@
-import base58
-from solders.keypair import Keypair  # type: ignore[import-untyped]
+from solders.keypair import Keypair
 
 from meridian_quant import health
 from meridian_quant.mm.config import MMConfig
@@ -16,7 +15,7 @@ def test_health_includes_book_coverage_when_mm_running() -> None:
     # Create a test MM loop
     keypair = Keypair()
     config = MMConfig(
-        market_maker_keypair=base58.b58encode(bytes(keypair)).decode("ascii"),
+        market_maker_keypair=str(keypair),
         program_id="11111111111111111111111111111112",
         service_token="test_token",
     )

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from solana.rpc.async_api import AsyncClient
-from solders.keypair import Keypair  # type: ignore[import-untyped]
+from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 
 from .config import MMConfig
@@ -199,16 +199,16 @@ class MarketMakerLoop:
                     logger.exception(f"Failed to fetch orders for {market.ticker}")
 
         for fv in fair_values:
-            market = next(
+            fv_market: MarketState | None = next(
                 (m for m in markets if m.strike_cents == fv.strike_cents and m.ticker == fv.ticker),
                 None,
             )
-            if not market or not market.is_open:
+            if not fv_market or not fv_market.is_open:
                 continue
 
             # Get current inventory using MarketKey (Finding #5)
             market_key = MarketKey(
-                ticker=fv.ticker, trading_date=market.trading_date, strike_cents=fv.strike_cents
+                ticker=fv.ticker, trading_date=fv_market.trading_date, strike_cents=fv.strike_cents
             )
             inv = self.inventory.get(market_key)
 

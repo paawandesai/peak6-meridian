@@ -10,9 +10,8 @@ operations. Test uses fakes per operator directive.
 
 from datetime import UTC, datetime, timedelta
 
-import base58
 import pytest
-from solders.keypair import Keypair  # type: ignore[import-untyped]
+from solders.keypair import Keypair
 
 from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
@@ -79,7 +78,7 @@ async def test_mm_quotes_all_open_strikes_local_validator() -> None:
     # Create MM loop with dependency injection (operator: "fake is fine")
     keypair = Keypair()
     config = MMConfig(
-        market_maker_keypair=base58.b58encode(bytes(keypair)).decode("ascii"),
+        market_maker_keypair=str(keypair),
         program_id="11111111111111111111111111111112",
         service_token="test_token",
     )
@@ -109,16 +108,23 @@ async def test_mm_quotes_all_open_strikes_local_validator() -> None:
         bids = [o for o in mm_orders if o.side == "Bid"]
         asks = [o for o in mm_orders if o.side == "Ask"]
 
-        assert len(bids) == 1, f"{market.ticker} ${market.strike_cents/100:.0f}: expected 1 bid, got {len(bids)}"
-        assert len(asks) == 1, f"{market.ticker} ${market.strike_cents/100:.0f}: expected 1 ask, got {len(asks)}"
+        assert len(bids) == 1, (
+            f"{market.ticker} ${market.strike_cents/100:.0f}: expected 1 bid, got {len(bids)}"
+        )
+        assert len(asks) == 1, (
+            f"{market.ticker} ${market.strike_cents/100:.0f}: expected 1 ask, got {len(asks)}"
+        )
 
         # Verify bid < ask
-        assert bids[0].price < asks[0].price, f"{market.ticker}: bid {bids[0].price} >= ask {asks[0].price}"
+        assert bids[0].price < asks[0].price, (
+            f"{market.ticker}: bid {bids[0].price} >= ask {asks[0].price}"
+        )
 
     # Verify total order count respects cap (3 markets × 2 = 6 orders < 8 cap)
-    total_orders = sum(
-        len([o for o in await order_client.fetch_resting_orders(m.market) if o.owner == mm_owner])
-        for m in markets
-    )
+    order_counts = []
+    for m in markets:
+        orders = await order_client.fetch_resting_orders(m.market)
+        order_counts.append(len([o for o in orders if o.owner == mm_owner]))
+    total_orders = sum(order_counts)
     assert total_orders == 6, f"Expected 6 orders (3 strikes × 2), got {total_orders}"
     assert total_orders <= 8, "Exceeded max_orders_per_owner cap (8)"

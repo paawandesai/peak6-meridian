@@ -6,7 +6,6 @@ Prices always in 1-99.
 
 from datetime import UTC, datetime, timedelta
 
-import base58
 import pytest
 from meridian_quant.mm.config import MAX_PRICE_CENTS, MIN_PRICE_CENTS, MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
@@ -14,7 +13,7 @@ from meridian_quant.mm.inventory import InventoryTracker
 from meridian_quant.mm.loop import MarketMakerLoop
 from meridian_quant.mm.quoter import generate_quote
 from meridian_quant.mm.types import FairValue, Inventory, MarketKey, MarketState
-from solders.keypair import Keypair  # type: ignore[import-untyped]
+from solders.keypair import Keypair
 
 
 def test_ab10_inventory_cap_enforced() -> None:
@@ -111,7 +110,7 @@ async def test_ab10_order_cap_per_owner() -> None:
     # Create MM loop with fakes
     keypair = Keypair()
     config = MMConfig(
-        market_maker_keypair=base58.b58encode(bytes(keypair)).decode("ascii"),
+        market_maker_keypair=str(keypair),
         program_id="11111111111111111111111111111112",
         service_token="test_token",
     )
