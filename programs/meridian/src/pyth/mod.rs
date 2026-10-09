@@ -142,10 +142,12 @@ pub fn check_pyth_reading(
         .ok_or(MeridianError::OracleInvalidValue)?;
 
     // Convert slots to approximate seconds (assuming ~400ms per slot)
-    let max_age_seconds = i64::from(max_staleness_slots)
+    // Use checked_mul on u64, then convert to i64 for comparison
+    let max_age_ms = max_staleness_slots
         .checked_mul(400)
-        .and_then(|ms| ms.checked_div(1000))
         .ok_or(MeridianError::MathOverflow)?;
+    let max_age_seconds = i64::try_from(max_age_ms / 1000)
+        .map_err(|_| MeridianError::MathOverflow)?;
 
     require!(age_seconds <= max_age_seconds, MeridianError::OracleStale);
 
