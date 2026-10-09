@@ -5,11 +5,6 @@ intercepting Instruction creation and verifying AccountMeta flags before
 Message compilation. Regressions in chain.py account order/flags would fail.
 """
 
-# Test market: AAPL 2026-10-08 strike $230.00
-# Derived from program 5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi
-# PDA seeds: b"market" + b"AAPL" + 20261008.to_bytes(4, 'little') + 23000.to_bytes(8, 'little')
-TEST_MARKET_PUBKEY = "DyAQwhVQNpAhWMUhd83YShjS244PoU2QotChDStexM7Z"
-
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -27,6 +22,11 @@ from meridian_quant.mm.chain import (
     derive_open_orders_pda,
 )
 from meridian_quant.mm.types import RestingOrder
+
+# Test market: AAPL 2026-10-08 strike $230.00
+# Derived from program 5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi
+# PDA seeds: b"market" + b"AAPL" + 20261008.to_bytes(4, 'little') + 23000.to_bytes(8, 'little')
+TEST_MARKET_PUBKEY = "DyAQwhVQNpAhWMUhd83YShjS244PoU2QotChDStexM7Z"
 
 
 class InstructionCapture:

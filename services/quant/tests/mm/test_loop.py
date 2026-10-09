@@ -13,11 +13,6 @@ from meridian_quant.mm.chain import ChainOrderClient
 from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.loop import MarketMakerLoop
-
-# Test market: AAPL 2026-10-08 strike $230.00
-# Derived from program 5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi
-# PDA seeds: b"market" + b"AAPL" + 20261008.to_bytes(4, 'little') + 23000.to_bytes(8, 'little')
-TEST_MARKET_PUBKEY = "DyAQwhVQNpAhWMUhd83YShjS244PoU2QotChDStexM7Z"
 from meridian_quant.mm.quoter import generate_quote
 from meridian_quant.mm.types import (
     FairValue,
@@ -26,6 +21,11 @@ from meridian_quant.mm.types import (
     MarketState,
     RestingOrder,
 )
+
+# Test market: AAPL 2026-10-08 strike $230.00
+# Derived from program 5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi
+# PDA seeds: b"market" + b"AAPL" + 20261008.to_bytes(4, 'little') + 23000.to_bytes(8, 'little')
+TEST_MARKET_PUBKEY = "DyAQwhVQNpAhWMUhd83YShjS244PoU2QotChDStexM7Z"
 
 
 @pytest.fixture

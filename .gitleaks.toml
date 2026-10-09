@@ -37,6 +37,8 @@ commits = [
   "93e6a8e6710cdd2a4f14c575a29fa337183d9383", # MR !28 old head: fake KEY in market-data-server.test.ts
   "6d3fd0f3d822519e62283c574246b41296043902", # MR !27 old head: fake API keys in switchboard.test.ts
   "5eb5bbfab1b3ab4313e438057fef67e6be3fed5d", # MR !27 old head: public lookup-table address in a fixture
+  "5413bf8b39e129eb68a4ced830fc77f2af4b3dc9", # MR !82 (M2-15b): public RedStone signer Ethereum addresses
+  "2f4fe2f5b1208de5b5d4065844657a6282bcb19a", # MR !82 (M2-15b): test fixtures with fake Ethereum addresses
 ]
 
 [[allowlists]]
