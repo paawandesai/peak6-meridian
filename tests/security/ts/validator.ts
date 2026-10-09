@@ -156,6 +156,8 @@ export async function trySettle(
         market,
         feedTiingo: feeds[0],
         feedTwelveData: feeds[1],
+        redstonePrice: null, // Local oracle path (Switchboard)
+        oracleConfig: null, // Local oracle path
         payer: v.admin.publicKey,
       })
       .rpc();

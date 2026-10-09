@@ -47,7 +47,12 @@ pub fn compute_median(mut values: Vec<u64>) -> u64 {
     values.sort_unstable();
     let len = values.len();
     if len % 2 == 0 {
-        (values[len / 2 - 1] + values[len / 2]) / 2
+        // Average of two middle values, using saturating arithmetic to avoid overflow
+        let mid_idx = len / 2;
+        let low_idx = mid_idx.saturating_sub(1);
+        let mid_low = values[low_idx];
+        let mid_high = values[mid_idx];
+        mid_low.saturating_add(mid_high) / 2
     } else {
         values[len / 2]
     }

@@ -1,23 +1,30 @@
 //! RedStone payload parser (M2-15).
+//! Official RedStone Base/standard layout per @redstone-finance/protocol.
 
 use anchor_lang::prelude::*;
 
 use crate::errors::MeridianError;
 
-/// RedStone marker: 9 bytes at the end of every payload.
-pub const REDSTONE_MARKER: [u8; 9] = [0x00, 0x00, 0x02, 0xed, 0x57, 0x19, 0x9a, 0x00, 0x00];
+/// RedStone marker: 9 bytes at the end of every payload (official: 0x000002ed57011e0000).
+pub const REDSTONE_MARKER: [u8; 9] = [0x00, 0x00, 0x02, 0xed, 0x57, 0x01, 0x1e, 0x00, 0x00];
 
 /// Maximum payload size to prevent DoS (16 KB).
 pub const MAX_PAYLOAD_SIZE: usize = 16_384;
 
-/// Data point size: 32 bytes (u256 value).
-const DATA_POINT_VALUE_SIZE: usize = 32;
 /// Feed ID size: 32 bytes.
 const FEED_ID_SIZE: usize = 32;
 /// Signature size: 65 bytes (r‖s‖v).
 const SIGNATURE_SIZE: usize = 65;
 /// Timestamp size: 6 bytes (milliseconds).
 const TIMESTAMP_SIZE: usize = 6;
+/// Data points count size: 3 bytes (official format).
+const DATA_POINTS_COUNT_SIZE: usize = 3;
+/// Data point value byte size field: 4 bytes (official format).
+const DATA_POINT_VALUE_BYTE_SIZE_SIZE: usize = 4;
+/// Data packages count size: 2 bytes.
+const DATA_PACKAGES_COUNT_SIZE: usize = 2;
+/// Unsigned metadata byte size field: 3 bytes (official format).
+const UNSIGNED_METADATA_BYTE_SIZE_SIZE: usize = 3;
 
 /// Parsed RedStone data package.
 #[derive(Clone, Debug)]
@@ -35,6 +42,7 @@ pub struct RedstonePackage {
 }
 
 /// Parse RedStone payload and extract data packages.
+/// Official RedStone Base/standard layout: each package is independently signed.
 pub fn parse_payload(payload: &[u8]) -> Result<Vec<RedstonePackage>> {
     require!(
         payload.len() <= MAX_PAYLOAD_SIZE && payload.len() >= REDSTONE_MARKER.len(),
@@ -42,90 +50,163 @@ pub fn parse_payload(payload: &[u8]) -> Result<Vec<RedstonePackage>> {
     );
 
     // Verify RedStone marker at end
-    let marker_start = payload.len() - REDSTONE_MARKER.len();
+    let marker_start = payload
+        .len()
+        .checked_sub(REDSTONE_MARKER.len())
+        .ok_or(MeridianError::RedStoneMalformedPayload)?;
     require!(
-        &payload[marker_start..] == REDSTONE_MARKER,
+        payload[marker_start..] == REDSTONE_MARKER,
         MeridianError::RedStoneMalformedPayload
     );
 
     // Parse backwards from marker
     let mut cursor = marker_start;
 
-    // Unsigned metadata size (2 bytes)
+    // Unsigned metadata size (3 bytes, official format)
     cursor = cursor
-        .checked_sub(2)
+        .checked_sub(UNSIGNED_METADATA_BYTE_SIZE_SIZE)
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
-    let metadata_size = u16::from_be_bytes([payload[cursor], payload[cursor + 1]]) as usize;
+    let metadata_size = read_u24_be(payload, cursor)?;
     cursor = cursor
         .checked_sub(metadata_size)
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
 
-    // Signature count
+    // Data packages count (2 bytes)
     cursor = cursor
-        .checked_sub(2)
+        .checked_sub(DATA_PACKAGES_COUNT_SIZE)
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
-    let sig_count = u16::from_be_bytes([payload[cursor], payload[cursor + 1]]) as usize;
+    let packages_count = u16::from_be_bytes([
+        *payload
+            .get(cursor)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?,
+        *payload
+            .get(cursor.checked_add(1).ok_or(MeridianError::MathOverflow)?)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?,
+    ]) as usize;
     require!(
-        sig_count > 0 && sig_count <= 8,
+        packages_count > 0 && packages_count <= 8,
         MeridianError::RedStoneMalformedPayload
     );
 
-    // Signatures
-    let sigs_size = sig_count
-        .checked_mul(SIGNATURE_SIZE)
-        .ok_or(MeridianError::MathOverflow)?;
-    cursor = cursor
-        .checked_sub(sigs_size)
+    // Parse each data package (independently signed)
+    let mut packages = Vec::with_capacity(packages_count);
+    for _ in 0..packages_count {
+        let package = parse_data_package(payload, &mut cursor)?;
+        packages.push(package);
+    }
+
+    Ok(packages)
+}
+
+/// Parse a single data package (signature + data points + timestamp).
+/// Each package is independently signed: signable_bytes = everything before the signature.
+fn parse_data_package(payload: &[u8], cursor: &mut usize) -> Result<RedstonePackage> {
+    // Signature (65 bytes)
+    *cursor = cursor
+        .checked_sub(SIGNATURE_SIZE)
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
-    let signatures_start = cursor;
+    let sig_start = *cursor;
+    let sig_end = sig_start
+        .checked_add(SIGNATURE_SIZE)
+        .ok_or(MeridianError::MathOverflow)?;
+    let mut signature = [0u8; 65];
+    signature.copy_from_slice(
+        payload
+            .get(sig_start..sig_end)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?,
+    );
+
+    let signable_end = sig_start; // Everything before signature is signable
+
+    // Data points count (3 bytes, official format)
+    *cursor = cursor
+        .checked_sub(DATA_POINTS_COUNT_SIZE)
+        .ok_or(MeridianError::RedStoneMalformedPayload)?;
+    let dp_count = read_u24_be(payload, *cursor)?;
+    require!(dp_count == 1, MeridianError::RedStoneMalformedPayload); // Simplification: single data point
+
+    // Data point value byte size (4 bytes, official format)
+    *cursor = cursor
+        .checked_sub(DATA_POINT_VALUE_BYTE_SIZE_SIZE)
+        .ok_or(MeridianError::RedStoneMalformedPayload)?;
+    let value_size = u32::from_be_bytes([
+        *payload
+            .get(*cursor)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?,
+        *payload
+            .get(cursor.checked_add(1).ok_or(MeridianError::MathOverflow)?)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?,
+        *payload
+            .get(cursor.checked_add(2).ok_or(MeridianError::MathOverflow)?)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?,
+        *payload
+            .get(cursor.checked_add(3).ok_or(MeridianError::MathOverflow)?)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?,
+    ]) as usize;
+    require!(value_size == 32, MeridianError::RedStoneMalformedPayload); // Only 32-byte u256 values
 
     // Timestamp (6 bytes)
-    cursor = cursor
+    *cursor = cursor
         .checked_sub(TIMESTAMP_SIZE)
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
-    let ts = &payload[cursor..cursor + TIMESTAMP_SIZE];
+    let ts_end = cursor
+        .checked_add(TIMESTAMP_SIZE)
+        .ok_or(MeridianError::MathOverflow)?;
+    let ts = payload
+        .get(*cursor..ts_end)
+        .ok_or(MeridianError::RedStoneMalformedPayload)?;
     let timestamp_ms = i64::from_be_bytes([0, 0, ts[0], ts[1], ts[2], ts[3], ts[4], ts[5]]);
 
-    // Data point count
-    cursor = cursor
-        .checked_sub(2)
+    // Data point (value + feed_id, single point)
+    // Value (32 bytes, u256 big-endian)
+    *cursor = cursor
+        .checked_sub(value_size)
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
-    let dp_count = u16::from_be_bytes([payload[cursor], payload[cursor + 1]]) as usize;
-    require!(dp_count == 1, MeridianError::RedStoneMalformedPayload); // Simplification
-
-    // Data point (feed_id + value)
-    let dp_size = FEED_ID_SIZE + DATA_POINT_VALUE_SIZE;
-    cursor = cursor
-        .checked_sub(dp_size)
+    let val_end = cursor
+        .checked_add(value_size)
+        .ok_or(MeridianError::MathOverflow)?;
+    let val = payload
+        .get(*cursor..val_end)
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
-
-    let mut feed_id = [0u8; 32];
-    feed_id.copy_from_slice(&payload[cursor..cursor + FEED_ID_SIZE]);
-
-    let val_start = cursor + FEED_ID_SIZE;
-    let val = &payload[val_start..val_start + DATA_POINT_VALUE_SIZE];
+    // Extract last 8 bytes as u64 (RedStone uses 8 decimals, fits in u64)
     let value = u64::from_be_bytes([
         val[24], val[25], val[26], val[27], val[28], val[29], val[30], val[31],
     ]);
 
-    // Signable bytes (everything before signatures)
-    let signable_bytes = payload[..signatures_start].to_vec();
+    // Feed ID (32 bytes)
+    *cursor = cursor
+        .checked_sub(FEED_ID_SIZE)
+        .ok_or(MeridianError::RedStoneMalformedPayload)?;
+    let feed_id_end = cursor
+        .checked_add(FEED_ID_SIZE)
+        .ok_or(MeridianError::MathOverflow)?;
+    let mut feed_id = [0u8; 32];
+    feed_id.copy_from_slice(
+        payload
+            .get(*cursor..feed_id_end)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?,
+    );
 
-    // Build package per signature
-    let mut packages = Vec::with_capacity(sig_count);
-    for i in 0..sig_count {
-        let sig_start = signatures_start + i * SIGNATURE_SIZE;
-        let mut signature = [0u8; 65];
-        signature.copy_from_slice(&payload[sig_start..sig_start + SIGNATURE_SIZE]);
+    let signable_start = *cursor;
 
-        packages.push(RedstonePackage {
-            feed_id,
-            value,
-            timestamp_ms,
-            signature,
-            signable_bytes: signable_bytes.clone(),
-        });
-    }
+    // Signable bytes for THIS package only (independent signing)
+    let signable_bytes = payload[signable_start..signable_end].to_vec();
 
-    Ok(packages)
+    Ok(RedstonePackage {
+        feed_id,
+        value,
+        timestamp_ms,
+        signature,
+        signable_bytes,
+    })
+}
+
+/// Read 3-byte big-endian unsigned integer.
+fn read_u24_be(data: &[u8], offset: usize) -> Result<usize> {
+    let end = offset.checked_add(3).ok_or(MeridianError::MathOverflow)?;
+    require!(end <= data.len(), MeridianError::RedStoneMalformedPayload);
+    let bytes = data
+        .get(offset..end)
+        .ok_or(MeridianError::RedStoneMalformedPayload)?;
+    Ok(((bytes[0] as usize) << 16) | ((bytes[1] as usize) << 8) | (bytes[2] as usize))
 }

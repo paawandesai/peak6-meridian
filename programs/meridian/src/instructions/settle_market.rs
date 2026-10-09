@@ -36,10 +36,18 @@ pub struct SettleMarket<'info> {
     pub feed_twelve_data: UncheckedAccount<'info>,
     /// RedStone verified price for this ticker (M2-15, D-054). Optional: if present, use
     /// RedStone path instead of Switchboard.
-    /// CHECK: validated in `oracle::read_redstone_price`.
+    /// AB-04: PDA seeds constraint ensures this is the price account for market.ticker.
+    #[account(
+        seeds = [RedstonePrice::SEED_PREFIX, &market.ticker],
+        bump,
+    )]
     pub redstone_price: Option<Account<'info, RedstonePrice>>,
     /// Oracle configuration with RedStone signer set. Required when using RedStone path.
-    /// CHECK: PDA validated via seeds; only read if redstone_price is Some.
+    /// AB-04: PDA seeds constraint ensures this is the canonical oracle config.
+    #[account(
+        seeds = [b"oracle_config"],
+        bump,
+    )]
     pub oracle_config: Option<Account<'info, OracleConfig>>,
     /// Anyone: settlement is permissionless (D-030).
     pub payer: Signer<'info>,

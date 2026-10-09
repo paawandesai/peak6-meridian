@@ -100,6 +100,8 @@ pub enum MeridianError {
     RedStonePackageOlderThanStored,
     #[msg("RedStone price account is not the expected PDA for this ticker")]
     RedStoneWrongPricePda,
+    #[msg("RedStone feed_id does not match the canonical feed_id for this ticker")]
+    RedStoneFeedIdMismatch,
 
     // ---- Oracle configuration (M2-15) ---------------------------------------------------------
     #[msg("Signer threshold must be at least 1")]

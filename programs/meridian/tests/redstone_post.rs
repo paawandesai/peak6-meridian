@@ -14,11 +14,10 @@ use anchor_lang::prelude::Pubkey;
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 use common::redstone::{RedstonePayloadBuilder, TestSigner};
 use common::{
-    assert_meridian_error, config_pda, expect_failure, expect_success, symbol, MarketHarness,
-    FUNDING_LAMPORTS,
+    assert_meridian_error, config_pda, expect_success, symbol, MarketHarness, FUNDING_LAMPORTS,
 };
 use meridian::errors::MeridianError;
-use meridian::state::{OracleConfig, RedstonePrice};
+use meridian::state::RedstonePrice;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::{Keypair, Signer};
 use solana_sdk::system_program;
@@ -81,7 +80,7 @@ fn post_redstone_price_success_3_of_5() {
 
     // Build payload with first 3 signers (meets threshold)
     let mut builder = RedstonePayloadBuilder::new("NVDA", value, timestamp_ms);
-    let mut remaining_signers = signers.split_off(3); // Take last 2, keep first 3
+    let remaining_signers = signers.split_off(3); // Take last 2, keep first 3
     for signer in signers {
         builder = builder.add_signer(signer);
     }
@@ -142,7 +141,7 @@ fn post_redstone_price_fails_insufficient_signers() {
 
     // Build payload with only 2 signers (below threshold)
     let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
-    let mut remaining_signers = signers.split_off(2); // Take last 3, keep first 2
+    let remaining_signers = signers.split_off(2); // Take last 3, keep first 2
     for signer in signers {
         builder = builder.add_signer(signer);
     }

@@ -168,15 +168,20 @@ pub fn read_redstone_price(
     );
 
     // Package timestamp must be ≥ close_ts
+    let close_ts_ms = close_ts
+        .checked_mul(1_000)
+        .ok_or(MeridianError::MathOverflow)?;
     require!(
-        redstone_price.package_timestamp_ms >= close_ts * 1_000,
+        redstone_price.package_timestamp_ms >= close_ts_ms,
         MeridianError::OracleBeforeClose
     );
 
     // Package timestamp must be ≤ close_ts + max_package_delay_secs
-    let max_timestamp_ms = close_ts
+    let delay_ms = max_package_delay_secs
         .checked_mul(1_000)
-        .and_then(|ts| ts.checked_add(max_package_delay_secs * 1_000))
+        .ok_or(MeridianError::MathOverflow)?;
+    let max_timestamp_ms = close_ts_ms
+        .checked_add(delay_ms)
         .ok_or(MeridianError::MathOverflow)?;
     require!(
         redstone_price.package_timestamp_ms <= max_timestamp_ms,

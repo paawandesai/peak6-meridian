@@ -14,10 +14,9 @@ use anchor_lang::prelude::Pubkey;
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 use common::redstone::{RedstonePayloadBuilder, TestSigner};
 use common::{
-    assert_meridian_error, config_pda, expect_success, symbol, MarketArgs, MarketHarness,
-    BASE_CLOSE_TS, BASE_TRADING_DATE, FUNDING_LAMPORTS,
+    config_pda, expect_success, symbol, MarketArgs, MarketHarness, BASE_CLOSE_TS,
+    BASE_TRADING_DATE, FUNDING_LAMPORTS,
 };
-use meridian::errors::MeridianError;
 use meridian::state::{Market, MarketStatus, Outcome};
 use solana_sdk::instruction::Instruction;
 use solana_sdk::signature::{Keypair, Signer};
@@ -64,7 +63,7 @@ fn setup_market_with_redstone() -> (MarketHarness, MarketArgs, Pubkey, Vec<TestS
     // Create a market
     let args = MarketArgs {
         ticker: symbol("NVDA"),
-        strike_cents: 2000_00, // $2000 strike
+        strike_cents: 200_000, // $2000 strike
         trading_date: BASE_TRADING_DATE,
         close_ts: BASE_CLOSE_TS,
     };
@@ -94,7 +93,10 @@ fn settle_market_succeeds_after_redstone_post() {
 
     let ticker = args.ticker;
     let value = 2050_0000_0000u64; // $2050 > $2000 strike → YES wins
-    let timestamp_ms = (BASE_CLOSE_TS as i64) * 1000 + 1000; // 1s after close
+    let timestamp_ms = BASE_CLOSE_TS
+        .checked_mul(1000)
+        .and_then(|t| t.checked_add(1000))
+        .unwrap(); // 1s after close
 
     // Post RedStone price
     let mut builder = RedstonePayloadBuilder::new("NVDA", value, timestamp_ms);

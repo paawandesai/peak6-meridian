@@ -45,13 +45,21 @@ pub fn handle_post_redstone_price(
     let oracle_config = &ctx.accounts.oracle_config;
     let clock = Clock::get()?;
 
-    // Verify signatures and collect valid signers
-    let mut valid_values = Vec::new();
-    let mut seen_signers = std::collections::HashSet::new();
-
     // All packages must have same timestamp and feed_id
     let expected_timestamp = packages[0].timestamp_ms;
     let expected_feed_id = packages[0].feed_id;
+
+    // AB-04: Validate feed_id matches the canonical feed_id for this symbol.
+    // Canonical feed_id: symbol bytes right-padded with zeros to 32 bytes.
+    let canonical_feed_id = symbol_to_feed_id(&symbol);
+    require!(
+        expected_feed_id == canonical_feed_id,
+        MeridianError::RedStoneFeedIdMismatch
+    );
+
+    // Verify signatures and collect valid signers
+    let mut valid_values = Vec::new();
+    let mut seen_signers = std::collections::HashSet::new();
 
     for package in &packages {
         // Verify same timestamp and feed_id across all packages
@@ -99,4 +107,12 @@ pub fn handle_post_redstone_price(
     redstone_price.signer_count = seen_signers.len() as u8;
 
     Ok(())
+}
+
+/// Compute canonical feed_id for a symbol (AB-04).
+/// RedStone feed IDs are 32-byte arrays, typically UTF-8 ticker symbols right-padded with zeros.
+fn symbol_to_feed_id(symbol: &[u8; SYMBOL_LEN]) -> [u8; 32] {
+    let mut feed_id = [0u8; 32];
+    feed_id[..SYMBOL_LEN].copy_from_slice(symbol);
+    feed_id
 }
