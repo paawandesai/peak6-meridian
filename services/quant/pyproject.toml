@@ -30,6 +30,7 @@ build-backend = "uv_build"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-p no:anchorpy"
+markers = ["asyncio"]
 
 [tool.mypy]
 strict = true
