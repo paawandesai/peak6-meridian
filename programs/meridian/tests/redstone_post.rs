@@ -22,10 +22,9 @@ use solana_sdk::system_program;
 const THRESHOLD: u8 = 3;
 
 /// Sets up a test with oracle config containing the given signer addresses.
-fn setup_with_signers(signer_addresses: Vec<[u8; 20]>) -> (MarketHarness, Keypair) {
+fn setup_with_signers(signer_addresses: Vec<[u8; 20]>) -> MarketHarness {
     let mut harness = MarketHarness::new();
-    let admin = Keypair::new();
-    harness.harness.svm.airdrop(&admin.pubkey(), FUNDING_LAMPORTS).unwrap();
+    let admin = harness.harness.admin.insecure_clone();
 
     // Set oracle config with test signers
     let (oracle_config_pda, _) = Pubkey::find_program_address(
@@ -58,7 +57,7 @@ fn setup_with_signers(signer_addresses: Vec<[u8; 20]>) -> (MarketHarness, Keypai
     let result = harness.harness.send(instruction, &[&admin]);
     expect_success(&result);
 
-    (harness, admin)
+    harness
 }
 
 #[test]
@@ -67,7 +66,7 @@ fn post_redstone_price_success_3_of_5() {
     let mut signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
     let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
 
-    let (mut harness, _admin) = setup_with_signers(addresses);
+    let mut harness = setup_with_signers(addresses);
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 
@@ -130,7 +129,7 @@ fn post_redstone_price_fails_insufficient_signers() {
     let mut signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
     let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
 
-    let (mut harness, _admin) = setup_with_signers(addresses);
+    let mut harness = setup_with_signers(addresses);
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 
@@ -184,7 +183,7 @@ fn post_redstone_price_unknown_signer_ignored() {
 
     let known_addresses: Vec<[u8; 20]> = known_signers.iter().map(|s| s.ethereum_address()).collect();
 
-    let (mut harness, _admin) = setup_with_signers(known_addresses);
+    let mut harness = setup_with_signers(known_addresses);
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 
@@ -243,7 +242,7 @@ fn post_redstone_price_malformed_payload() {
     let signers: Vec<TestSigner> = (0..3).map(|_| TestSigner::generate()).collect();
     let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
 
-    let (mut harness, _admin) = setup_with_signers(addresses);
+    let mut harness = setup_with_signers(addresses);
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 

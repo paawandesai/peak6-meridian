@@ -896,6 +896,66 @@
       ]
     },
     {
+      "name": "post_redstone_price",
+      "docs": ["Permissionless RedStone package verification and price posting (M2-15, D-054)."],
+      "discriminator": [155, 192, 48, 241, 232, 1, 11, 247],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": ["Payer for the RedstonePrice account if it doesn't exist yet."],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "oracle_config",
+          "docs": ["OracleConfig PDA (read-only, for signer set and threshold)."],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "redstone_price",
+          "docs": [
+            "RedstonePrice PDA for this ticker (created if it doesn't exist, updated if it does)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [114, 101, 100, 115, 116, 111, 110, 101, 95, 112, 114, 105, 99, 101]
+              },
+              {
+                "kind": "arg",
+                "path": "symbol"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "symbol",
+          "type": {
+            "array": ["u8", 8]
+          }
+        },
+        {
+          "name": "payload",
+          "type": "bytes"
+        }
+      ]
+    },
+    {
       "name": "redeem",
       "docs": ["Pair redeem before settlement, winner redeem after (FR-10)."],
       "discriminator": [184, 12, 86, 149, 70, 196, 97, 225],
@@ -1076,6 +1136,58 @@
       ]
     },
     {
+      "name": "set_oracle_config",
+      "docs": ["Admin sets RedStone signer set and thresholds (M2-15, D-054)."],
+      "discriminator": [96, 171, 6, 98, 153, 183, 233, 31],
+      "accounts": [
+        {
+          "name": "admin",
+          "docs": ["Admin signer (checked against Config.admin, payer for OracleConfig)."],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "docs": ["Config account (read-only, for admin check)."],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_config",
+          "docs": ["OracleConfig PDA (created if it doesn't exist, updated if it does)."],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "SetOracleConfigParams"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "settle_funds",
       "docs": ["Withdraws the owner's free balances (FR-12, D-029). Stub until M1-05."],
       "discriminator": [238, 64, 163, 96, 75, 171, 16, 33],
@@ -1160,12 +1272,29 @@
           "name": "feed_tiingo",
           "docs": [
             "Feed for source slot 0 (Tiingo). Owner, address and feed hash are checked against the",
-            "config by the oracle adapter."
+            "config by the oracle adapter. Used for Switchboard path (M2-18 removes)."
           ]
         },
         {
           "name": "feed_twelve_data",
-          "docs": ["Feed for source slot 1 (Twelve Data). Checked like `feed_tiingo`."]
+          "docs": [
+            "Feed for source slot 1 (Twelve Data). Checked like `feed_tiingo`. Switchboard path."
+          ]
+        },
+        {
+          "name": "redstone_price",
+          "docs": [
+            "RedStone verified price for this ticker (M2-15, D-054). Optional: if present, use",
+            "RedStone path instead of Switchboard."
+          ],
+          "optional": true
+        },
+        {
+          "name": "oracle_config",
+          "docs": [
+            "Oracle configuration with RedStone signer set. Required when using RedStone path."
+          ],
+          "optional": true
         },
         {
           "name": "payer",
@@ -1267,6 +1396,14 @@
     {
       "name": "OpenOrders",
       "discriminator": [139, 166, 123, 206, 111, 2, 116, 33]
+    },
+    {
+      "name": "OracleConfig",
+      "discriminator": [133, 196, 152, 50, 27, 21, 145, 254]
+    },
+    {
+      "name": "RedstonePrice",
+      "discriminator": [96, 222, 194, 150, 85, 196, 105, 152]
     }
   ],
   "events": [
@@ -1492,16 +1629,56 @@
     },
     {
       "code": 6034,
+      "name": "RedStoneMalformedPayload",
+      "msg": "RedStone payload is malformed or oversized"
+    },
+    {
+      "code": 6035,
+      "name": "RedStoneInvalidSignature",
+      "msg": "RedStone signature verification failed"
+    },
+    {
+      "code": 6036,
+      "name": "RedStoneInsufficientSigners",
+      "msg": "RedStone signer threshold not met"
+    },
+    {
+      "code": 6037,
+      "name": "RedStonePackageTooLate",
+      "msg": "RedStone package timestamp is after close_ts + max_package_delay_secs"
+    },
+    {
+      "code": 6038,
+      "name": "RedStonePackageOlderThanStored",
+      "msg": "RedStone package timestamp is older than the stored value"
+    },
+    {
+      "code": 6039,
+      "name": "RedStoneWrongPricePda",
+      "msg": "RedStone price account is not the expected PDA for this ticker"
+    },
+    {
+      "code": 6040,
+      "name": "OracleThresholdTooLow",
+      "msg": "Signer threshold must be at least 1"
+    },
+    {
+      "code": 6041,
+      "name": "OracleThresholdTooHigh",
+      "msg": "Signer threshold cannot exceed the signer count"
+    },
+    {
+      "code": 6042,
       "name": "PairQuantityMismatch",
       "msg": "Pair redeem needs equal YES and NO quantities before settlement"
     },
     {
-      "code": 6035,
+      "code": 6043,
       "name": "NothingToRedeem",
       "msg": "Nothing to redeem"
     },
     {
-      "code": 6036,
+      "code": 6044,
       "name": "MathOverflow",
       "msg": "Arithmetic overflow"
     }
@@ -2116,6 +2293,45 @@
       }
     },
     {
+      "name": "OracleConfig",
+      "docs": [
+        "Oracle configuration PDA `[\"oracle_config\"]`: pinned RedStone signer set and thresholds.",
+        "Separate from `Config` so the live Config account layout is unchanged."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "signers",
+            "docs": [
+              "Pinned RedStone signer set: Ethereum addresses (20 bytes each), up to 8.",
+              "A signer not in this set is ignored; an unknown signer does not cause rejection."
+            ],
+            "type": {
+              "vec": {
+                "array": ["u8", 20]
+              }
+            }
+          },
+          {
+            "name": "signer_threshold",
+            "docs": [
+              "Minimum number of valid signers required for a RedStone package to be accepted (≥ 1, ≤ signers.len())."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "max_package_delay_secs",
+            "docs": [
+              "Maximum age in seconds for a RedStone package timestamp (default 600 s = 10 min).",
+              "A package timestamp after `close_ts + max_package_delay_secs` is rejected."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "OrderCancelled",
       "type": {
         "kind": "struct",
@@ -2272,6 +2488,72 @@
           {
             "name": "usdc",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedstonePrice",
+      "docs": [
+        "RedStone verified price PDA `[\"redstone_price\", symbol]`: stores the most recent verified",
+        "RedStone package for a ticker after `post_redstone_price` verifies signatures and threshold."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "symbol",
+            "docs": ["Ticker symbol (8 bytes, zero-padded)."],
+            "type": {
+              "array": ["u8", 8]
+            }
+          },
+          {
+            "name": "value",
+            "docs": ["Price value with 8 decimals (RedStone format)."],
+            "type": "u64"
+          },
+          {
+            "name": "package_timestamp_ms",
+            "docs": ["Package timestamp in milliseconds (RedStone format)."],
+            "type": "i64"
+          },
+          {
+            "name": "posted_slot",
+            "docs": ["Slot when this price was posted."],
+            "type": "u64"
+          },
+          {
+            "name": "signer_count",
+            "docs": ["Number of valid signers in the verified package."],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SetOracleConfigParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "signers",
+            "docs": ["Pinned RedStone signer set: Ethereum addresses (20 bytes each), up to 8."],
+            "type": {
+              "vec": {
+                "array": ["u8", 20]
+              }
+            }
+          },
+          {
+            "name": "signer_threshold",
+            "docs": ["Minimum number of valid signers required (≥ 1, ≤ signers.len())."],
+            "type": "u8"
+          },
+          {
+            "name": "max_package_delay_secs",
+            "docs": ["Maximum age in seconds for a RedStone package timestamp (default 600 s)."],
+            "type": "i64"
           }
         ]
       }

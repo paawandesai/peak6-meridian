@@ -22,12 +22,11 @@ use solana_sdk::system_program;
 const THRESHOLD: u8 = 3;
 
 /// Sets up oracle config and creates a market.
-fn setup_market_with_redstone() -> (MarketHarness, Keypair, MarketArgs, Pubkey) {
+fn setup_market_with_redstone() -> (MarketHarness, MarketArgs, Pubkey) {
     let mut harness = MarketHarness::new();
 
     // Setup RedStone oracle config
-    let admin = Keypair::new();
-    harness.harness.svm.airdrop(&admin.pubkey(), FUNDING_LAMPORTS).unwrap();
+    let admin = harness.harness.admin.insecure_clone();
 
     let signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
     let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
@@ -72,13 +71,13 @@ fn setup_market_with_redstone() -> (MarketHarness, Keypair, MarketArgs, Pubkey) 
     // Advance time to after market close
     harness.harness.set_unix_timestamp(BASE_CLOSE_TS + 300); // 5 min after close
 
-    (harness, admin, args, addresses.market)
+    (harness, args, addresses.market)
 }
 
 #[test]
 fn settle_market_succeeds_after_redstone_post() {
     // AC2: settle_market succeeds after a fresh post_redstone_price
-    let (mut harness, _admin, args, market_pda) = setup_market_with_redstone();
+    let (mut harness, args, market_pda) = setup_market_with_redstone();
 
     let signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
     let mut signing_signers = signers;
