@@ -48,8 +48,8 @@ Initial devnet submission for Gauntlet evaluation.
 
 ### Milestone 4 - Final Polish
 
-- !68 M4-02: Risk assessment documentation
-- !69 M4-03: Architecture and requirements documentation updates
+- !63 M4-02: Risks and limitations documentation
+- !65 M4-03: Dependency justifications (architecture/decisions already current)
 
 ### Code Quality
 
@@ -69,7 +69,10 @@ Initial devnet submission for Gauntlet evaluation.
 - !30 CI: skip Rust build on docs/TS-only changes
 - !31 CI: fresh clone for secrets:gitleaks
 - !51 CI: allow two Meridian heavy jobs in parallel
+- !66 CI: route light jobs to meridian-light runner + path-based rules
+- !70 CI: give test:js-py its own resource group
 - !15 test(automation): explicit timeout for 2026 DST calendar property test
+- !68 test(automation): deterministic staleness tests under coverage
 
 ### Documentation
 
