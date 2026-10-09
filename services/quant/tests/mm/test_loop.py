@@ -236,6 +236,55 @@ async def test_no_pull_when_far_from_close(mm_config: MMConfig) -> None:
 
 
 @pytest.mark.asyncio
+async def test_pull_after_close(mm_config: MMConfig) -> None:
+    """MM pulls quotes after close (negative ttc, AB-11 thread fix)."""
+    # Set fake clock AFTER close (16:05, 5 min after 16:00 close)
+    now = datetime(2026, 10, 8, 16, 5, 0, tzinfo=UTC)
+
+    def fake_clock() -> datetime:
+        return now
+
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource(),
+        fair_value_source=FakeFairValueSource(),
+        order_client=FakeOrderClient(),
+        clock=fake_clock,
+    )
+
+    # Market closed at 16:00 (300 seconds ago, ttc = -300)
+    close_ts = int(datetime(2026, 10, 8, 16, 0, 0, tzinfo=UTC).timestamp())
+
+    markets = [
+        MarketState(
+            market="test_market",
+            ticker="AAPL",
+            strike_cents=68000,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,  # Still Open status (not settled yet)
+            pairs_outstanding=100,
+        )
+    ]
+
+    fair_values = [
+        FairValue(
+            market="test_market",
+            ticker="AAPL",
+            strike_cents=68000,
+            fair_cents=50,
+            sigma=0.2,
+            spot=230.0,
+            as_of=now,
+        )
+    ]
+
+    # ttc = -300 < 120 → should pull (cancel orders even after close per AB-11)
+    should_pull = mm._should_pull_all_quotes(fair_values, markets)
+    assert should_pull is True
+
+
+@pytest.mark.asyncio
 async def test_inventory_cap_respected(mm_config: MMConfig) -> None:
     """MM respects inventory cap of 200 per strike (AC2)."""
     mm = MarketMakerLoop(

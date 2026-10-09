@@ -9,7 +9,6 @@ SECURITY: MARKET_MAKER_KEYPAIR must never be logged (AC5).
 
 import logging
 import struct
-import time
 
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Confirmed
@@ -190,14 +189,10 @@ class ChainMarketSource:
                     status = data[offset]
                     offset += 1
 
-                    # Only include Open markets (status == 0) and not yet closed
-                    # "Closed" is derived from now >= close_ts per IDL docs
+                    # Only include Open markets (status == 0)
+                    # Note: "Closed" is derived from now >= close_ts, but we include
+                    # markets even after close_ts so the pull condition can cancel quotes
                     if status != 0:
-                        continue
-
-                    # Also filter by close time (skip if already closed)
-                    now_ts = int(time.time())
-                    if close_ts > 0 and now_ts >= close_ts:
                         continue
 
                     # Construct market string: ticker_date_strike
