@@ -19,6 +19,7 @@ from solders.message import Message
 from solders.pubkey import Pubkey
 from solders.system_program import ID as SYSTEM_PROGRAM_ID
 from solders.transaction import Transaction
+from spl.token.instructions import create_associated_token_account
 
 from .types import MarketState, RestingOrder
 
@@ -458,6 +459,34 @@ class ChainOrderClient:
         user_yes = get_associated_token_address(yes_mint, owner_pubkey)
         user_no = get_associated_token_address(no_mint, owner_pubkey)
         vault = derive_vault_pda(self.program_id, market_pda)
+
+        # Create YES/NO ATAs idempotently (required for mint_pair)
+        # Check if ATAs exist, create if not
+        try:
+            await self.rpc.get_account_info(user_yes)
+        except Exception:
+            # Create YES ATA
+            create_yes_ix = create_associated_token_account(
+                self.payer.pubkey(), owner_pubkey, yes_mint
+            )
+            blockhash = (await self.rpc.get_latest_blockhash()).value.blockhash
+            msg = Message.new_with_blockhash([create_yes_ix], self.payer.pubkey(), blockhash)
+            tx = Transaction([self.payer], msg, blockhash)
+            sig = await self.rpc.send_transaction(tx)
+            await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
+
+        try:
+            await self.rpc.get_account_info(user_no)
+        except Exception:
+            # Create NO ATA
+            create_no_ix = create_associated_token_account(
+                self.payer.pubkey(), owner_pubkey, no_mint
+            )
+            blockhash = (await self.rpc.get_latest_blockhash()).value.blockhash
+            msg = Message.new_with_blockhash([create_no_ix], self.payer.pubkey(), blockhash)
+            tx = Transaction([self.payer], msg, blockhash)
+            sig = await self.rpc.send_transaction(tx)
+            await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
 
         accounts = [
             AccountMeta(pubkey=config, is_signer=False, is_writable=False),
