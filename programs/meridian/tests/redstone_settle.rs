@@ -21,8 +21,8 @@ use solana_sdk::system_program;
 
 const THRESHOLD: u8 = 3;
 
-/// Sets up oracle config and creates a market.
-fn setup_market_with_redstone() -> (MarketHarness, MarketArgs, Pubkey) {
+/// Sets up oracle config and creates a market. Returns the signers for use in tests.
+fn setup_market_with_redstone() -> (MarketHarness, MarketArgs, Pubkey, Vec<TestSigner>) {
     let mut harness = MarketHarness::new();
 
     // Setup RedStone oracle config
@@ -55,7 +55,7 @@ fn setup_market_with_redstone() -> (MarketHarness, MarketArgs, Pubkey) {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&admin]);
+    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
     // Create a market
@@ -71,18 +71,16 @@ fn setup_market_with_redstone() -> (MarketHarness, MarketArgs, Pubkey) {
     // Advance time to after market close
     harness.harness.set_unix_timestamp(BASE_CLOSE_TS + 300); // 5 min after close
 
-    (harness, args, addresses.market)
+    (harness, args, addresses.market, signers)
 }
 
 #[test]
 fn settle_market_succeeds_after_redstone_post() {
     // AC2: settle_market succeeds after a fresh post_redstone_price
-    let (mut harness, args, market_pda) = setup_market_with_redstone();
+    let (mut harness, args, market_pda, signers) = setup_market_with_redstone();
 
-    let signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
-    let mut signing_signers = signers;
-    let remaining = signing_signers.split_off(3);
-    drop(remaining);
+    // Use first 3 signers (threshold is 3)
+    let signing_signers = &signers[..3];
 
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
@@ -94,7 +92,7 @@ fn settle_market_succeeds_after_redstone_post() {
     // Post RedStone price
     let mut builder = RedstonePayloadBuilder::new("NVDA", value, timestamp_ms);
     for signer in signing_signers {
-        builder = builder.add_signer(signer);
+        builder = builder.add_signer(signer.clone());
     }
     let payload = builder.build();
 
@@ -125,7 +123,7 @@ fn settle_market_succeeds_after_redstone_post() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&payer]);
+    let result = harness.harness.send_with_budget(instruction, &[&payer], 400_000);
     expect_success(&result);
 
     // Now settle the market

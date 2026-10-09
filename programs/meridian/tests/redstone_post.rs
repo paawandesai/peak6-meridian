@@ -54,7 +54,7 @@ fn setup_with_signers(signer_addresses: Vec<[u8; 20]>) -> MarketHarness {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&admin]);
+    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
     harness
@@ -110,7 +110,7 @@ fn post_redstone_price_success_3_of_5() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&payer]);
+    let result = harness.harness.send_with_budget(instruction, &[&payer], 400_000);
     expect_success(&result);
 
     // Verify the posted price
@@ -171,7 +171,7 @@ fn post_redstone_price_fails_insufficient_signers() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&payer]);
+    let result = harness.harness.send_with_budget(instruction, &[&payer], 400_000);
     assert_meridian_error(&result, MeridianError::RedStoneInsufficientSigners);
 }
 
@@ -226,7 +226,7 @@ fn post_redstone_price_unknown_signer_ignored() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&payer]);
+    let result = harness.harness.send_with_budget(instruction, &[&payer], 400_000);
     expect_success(&result);
 
     // Verify only known signers were counted
@@ -278,6 +278,6 @@ fn post_redstone_price_malformed_payload() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&payer]);
+    let result = harness.harness.send_with_budget(instruction, &[&payer], 400_000);
     assert_meridian_error(&result, MeridianError::RedStoneMalformedPayload);
 }

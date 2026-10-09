@@ -55,7 +55,7 @@ fn post_redstone_price_stays_under_cu_limit() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&admin]);
+    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
     // Post price with all 5 signers
@@ -91,7 +91,7 @@ fn post_redstone_price_stays_under_cu_limit() {
         accounts: post_accounts.to_account_metas(None),
         data: post_ix.data(),
     };
-    let post_result = harness.harness.send(post_instruction, &[&payer]);
+    let post_result = harness.harness.send_with_budget(post_instruction, &[&payer], 400_000);
     let meta = expect_success(&post_result);
 
     // Check CU consumption
@@ -141,7 +141,7 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&admin]);
+    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
     // Create market
@@ -213,7 +213,7 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
         accounts: settle_accounts.to_account_metas(None),
         data: settle_ix.data(),
     };
-    let settle_result = harness.harness.send(settle_instruction, &[&settler]);
+    let settle_result = harness.harness.send_with_budget(settle_instruction, &[&settler], 400_000);
     let meta = expect_success(&settle_result);
 
     // Check CU consumption

@@ -9,6 +9,7 @@ use sha3::{Digest, Keccak256};
 const REDSTONE_MARKER: &[u8] = b"\x00\x00\x02\xed\x57\x19\x9a\x00\x00";
 
 /// RedStone test signer: locally generated secp256k1 keypair (dev-only).
+#[derive(Clone)]
 pub struct TestSigner {
     signing_key: SigningKey,
     ethereum_address: [u8; 20],

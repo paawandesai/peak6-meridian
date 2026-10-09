@@ -51,7 +51,7 @@ fn set_oracle_config_rejects_non_admin() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&non_admin]);
+    let result = harness.harness.send_with_budget(instruction, &[&non_admin], 400_000);
     assert_meridian_error(&result, MeridianError::AdminOnly);
 }
 
@@ -87,7 +87,7 @@ fn set_oracle_config_rejects_threshold_zero() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&admin]);
+    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
     assert_meridian_error(&result, MeridianError::OracleThresholdTooLow);
 }
 
@@ -123,7 +123,7 @@ fn set_oracle_config_rejects_threshold_too_high() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&admin]);
+    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
     assert_meridian_error(&result, MeridianError::OracleThresholdTooHigh);
 }
 
@@ -164,7 +164,7 @@ fn post_redstone_price_is_permissionless() {
         accounts: accounts.to_account_metas(None),
         data: ix.data(),
     };
-    let result = harness.harness.send(instruction, &[&admin]);
+    let result = harness.harness.send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
     // Now post price as a random payer (not admin)
