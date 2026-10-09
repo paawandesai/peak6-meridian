@@ -114,14 +114,30 @@ pub fn parse_pyth_price(data: &[u8]) -> Result<PythReading> {
     // Parse PriceFeedMessage (SDK layout, 84 bytes total):
     // feed_id(32) + price(8) + conf(8) + exponent(4) + publish_time(8) +
     // prev_publish_time(8) + ema_price(8) + ema_conf(8)
+    // Use checked_add for all offsets (clippy::arithmetic_side_effects denied)
     let feed_id = read_array::<32>(data, msg_offset)?;
-    let price_i64 = i64::from_le_bytes(read_array(data, msg_offset + 32)?);
-    let conf = u64::from_le_bytes(read_array(data, msg_offset + 40)?);
-    let expo = i32::from_le_bytes(read_array(data, msg_offset + 48)?);
-    let publish_time = i64::from_le_bytes(read_array(data, msg_offset + 52)?);
+    let price_i64 = i64::from_le_bytes(read_array(
+        data,
+        msg_offset.checked_add(32).ok_or(MeridianError::MathOverflow)?,
+    )?);
+    let conf = u64::from_le_bytes(read_array(
+        data,
+        msg_offset.checked_add(40).ok_or(MeridianError::MathOverflow)?,
+    )?);
+    let expo = i32::from_le_bytes(read_array(
+        data,
+        msg_offset.checked_add(48).ok_or(MeridianError::MathOverflow)?,
+    )?);
+    let publish_time = i64::from_le_bytes(read_array(
+        data,
+        msg_offset.checked_add(52).ok_or(MeridianError::MathOverflow)?,
+    )?);
     // Skip: prev_publish_time(8) at +60, ema_price(8) at +68, ema_conf(8) at +76
     // posted_slot is after PriceFeedMessage: msg_offset + 84
-    let posted_slot = u64::from_le_bytes(read_array(data, msg_offset + 84)?);
+    let posted_slot = u64::from_le_bytes(read_array(
+        data,
+        msg_offset.checked_add(84).ok_or(MeridianError::MathOverflow)?,
+    )?);
 
     // Scale to 18 decimals: Pyth price = price_i64 * 10^expo, target = price * 10^18
     // So: value_scaled = price_i64 * 10^(18 + expo)
@@ -136,10 +152,11 @@ pub fn parse_pyth_price(data: &[u8]) -> Result<PythReading> {
             )
             .ok_or(MeridianError::MathOverflow)?
     } else {
+        // scale_power < 0: use unsigned_abs to avoid arithmetic_side_effects lint
         price_128
             .checked_div(
                 10i128
-                    .checked_pow((-scale_power) as u32)
+                    .checked_pow(scale_power.unsigned_abs())
                     .ok_or(MeridianError::MathOverflow)?,
             )
             .ok_or(MeridianError::MathOverflow)?
