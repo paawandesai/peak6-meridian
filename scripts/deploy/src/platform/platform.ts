@@ -82,10 +82,10 @@ export const AUTOMATION_ENV: EnvSpec = {
     "SERVICE_TOKEN",
     "TIINGO_API_KEY",
     "TWELVEDATA_API_KEY",
-    "SWITCHBOARD_QUEUE",
-    "SWITCHBOARD_FEEDS_JSON",
   ],
-  optional: ["ALERT_WEBHOOK_URL", "OPS_AGENT_URL"],
+  // D-054: Switchboard is shut down; RedStone uses the public gateways and the signer set pinned
+  // in code (lib/oracle-config.ts), so it needs no variable. Pyth Pro (M3-10) is optional for now.
+  optional: ["ALERT_WEBHOOK_URL", "OPS_AGENT_URL", "PYTH_API_TOKEN"],
 };
 
 export type CollectedEnv = {

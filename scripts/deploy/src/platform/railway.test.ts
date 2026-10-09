@@ -14,8 +14,6 @@ const env = {
   SERVICE_TOKEN,
   TIINGO_API_KEY: "tiingo-key-xyz",
   TWELVEDATA_API_KEY: "twelve-key-xyz",
-  SWITCHBOARD_QUEUE: "Queue111",
-  SWITCHBOARD_FEEDS_JSON: "{}",
 };
 const options: RailwayOptions = {
   token: TOKEN,
