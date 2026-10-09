@@ -236,17 +236,6 @@ class ChainOrderClient:
         self.payer = payer_keypair  # MARKET_MAKER_KEYPAIR - NEVER LOGGED
         self.usdc_mint = usdc_mint
 
-    def _parse_market_key(self, market_str: str) -> tuple[str, int, int]:
-        """Parse market string 'TICKER_YYYYMMDD_STRIKE' into components."""
-        parts = market_str.split("_")
-        expected_parts = 3  # ticker, date, strike
-        if len(parts) != expected_parts:
-            raise ValueError(f"Invalid market format: {market_str}")
-        ticker = parts[0]
-        trading_date = int(parts[1])
-        strike_cents = int(parts[2])
-        return ticker, trading_date, strike_cents
-
     async def place_order(self, market: str, side: str, price: int, qty: int, owner: str) -> int:
         """Place order via place_order instruction.
 
@@ -255,9 +244,11 @@ class ChainOrderClient:
         - price: u8
         - qty: u64
         - kind: enum { Limit = 0, Ioc = 1 }
+
+        Args:
+            market: Market PDA (base58 pubkey string)
         """
-        ticker, trading_date, strike_cents = self._parse_market_key(market)
-        market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+        market_pda = Pubkey.from_string(market)
         owner_pubkey = Pubkey.from_string(owner)
 
         # Build instruction data
@@ -337,9 +328,11 @@ class ChainOrderClient:
 
         Instruction args (Borsh):
         - order_id: u64 (per IDL)
+
+        Args:
+            market: Market PDA (base58 pubkey string)
         """
-        ticker, trading_date, strike_cents = self._parse_market_key(market)
-        market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+        market_pda = Pubkey.from_string(market)
         owner_pubkey = Pubkey.from_string(owner)
 
         # Build instruction data
@@ -371,10 +364,12 @@ class ChainOrderClient:
         """Fetch resting orders from book account.
 
         Deserializes Book account to read bids and asks arrays.
+
+        Args:
+            market: Market PDA (base58 pubkey string)
         """
         try:
-            ticker, trading_date, strike_cents = self._parse_market_key(market)
-            market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+            market_pda = Pubkey.from_string(market)
             book_pda = derive_book_pda(self.program_id, market_pda)
 
             # Fetch book account
@@ -462,9 +457,11 @@ class ChainOrderClient:
 
         Instruction args (Borsh):
         - qty: u64
+
+        Args:
+            market: Market PDA (base58 pubkey string)
         """
-        ticker, trading_date, strike_cents = self._parse_market_key(market)
-        market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+        market_pda = Pubkey.from_string(market)
         owner_pubkey = Pubkey.from_string(owner)
 
         # Build instruction data
@@ -531,9 +528,12 @@ class ChainOrderClient:
         await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
 
     async def settle_funds(self, market: str, owner: str) -> None:
-        """Settle funds via settle_funds instruction (no args)."""
-        ticker, trading_date, strike_cents = self._parse_market_key(market)
-        market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+        """Settle funds via settle_funds instruction (no args).
+
+        Args:
+            market: Market PDA (base58 pubkey string)
+        """
+        market_pda = Pubkey.from_string(market)
         owner_pubkey = Pubkey.from_string(owner)
 
         # Build instruction data (no args beyond discriminator)
@@ -576,8 +576,7 @@ class ChainOrderClient:
         Propagates RPC errors (timeouts, 429, connection errors) to caller.
         getTokenAccountBalance raises when account doesn't exist, so check first.
         """
-        ticker, trading_date, strike_cents = self._parse_market_key(market)
-        market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+        market_pda = Pubkey.from_string(market)
         owner_pubkey = Pubkey.from_string(owner)
         yes_mint = derive_yes_mint_pda(self.program_id, market_pda)
         user_yes = get_associated_token_address(yes_mint, owner_pubkey)
@@ -598,8 +597,7 @@ class ChainOrderClient:
         Propagates RPC errors (timeouts, 429, connection errors) to caller.
         getTokenAccountBalance raises when account doesn't exist, so check first.
         """
-        ticker, trading_date, strike_cents = self._parse_market_key(market)
-        market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+        market_pda = Pubkey.from_string(market)
         owner_pubkey = Pubkey.from_string(owner)
         no_mint = derive_no_mint_pda(self.program_id, market_pda)
         user_no = get_associated_token_address(no_mint, owner_pubkey)

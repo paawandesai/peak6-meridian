@@ -13,6 +13,11 @@ from meridian_quant.mm.chain import ChainOrderClient
 from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.loop import MarketMakerLoop
+
+# Test market: AAPL 2026-10-08 strike $230.00
+# Derived from program 5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi
+# PDA seeds: b"market" + b"AAPL" + 20261008.to_bytes(4, 'little') + 23000.to_bytes(8, 'little')
+TEST_MARKET_PUBKEY = "DyAQwhVQNpAhWMUhd83YShjS244PoU2QotChDStexM7Z"
 from meridian_quant.mm.quoter import generate_quote
 from meridian_quant.mm.types import (
     FairValue,
@@ -352,7 +357,7 @@ async def test_inventory_cap_enforced_in_run_once(mm_config: MMConfig) -> None:
     close_ts = int((now + timedelta(hours=1)).timestamp())
 
     market = MarketState(
-        market="AAPL_20261008_23000",
+        market=TEST_MARKET_PUBKEY,
         ticker="AAPL",
         strike_cents=23000,
         trading_date=20261008,
@@ -421,7 +426,7 @@ async def test_prior_day_markets_dont_block_today_quoting(mm_config: MMConfig) -
     # Yesterday's market: trading_date=20261008, already past close
     yesterday_close_ts = int((now - timedelta(hours=20)).timestamp())  # Closed 20h ago
     yesterday_market = MarketState(
-        market="AAPL_20261008_23000",
+        market=TEST_MARKET_PUBKEY,
         ticker="AAPL",
         strike_cents=23000,
         trading_date=20261008,  # Yesterday
@@ -525,7 +530,7 @@ async def test_pull_condition_zeros_coverage(mm_config: MMConfig) -> None:
 
     markets = [
         MarketState(
-            market="AAPL_20261008_23000",
+            market=TEST_MARKET_PUBKEY,
             ticker="AAPL",
             strike_cents=23000,
             trading_date=20261008,
@@ -539,7 +544,7 @@ async def test_pull_condition_zeros_coverage(mm_config: MMConfig) -> None:
     stale_time = now - timedelta(seconds=15)
     fair_values = [
         FairValue(
-            market="AAPL_20261008_23000",
+            market=TEST_MARKET_PUBKEY,
             ticker="AAPL",
             strike_cents=23000,
             fair_cents=50,
@@ -597,7 +602,7 @@ async def test_empty_fair_values_pulls_all_quotes(mm_config: MMConfig) -> None:
 
     markets = [
         MarketState(
-            market="AAPL_20261008_23000",
+            market=TEST_MARKET_PUBKEY,
             ticker="AAPL",
             strike_cents=23000,
             trading_date=20261008,
@@ -610,7 +615,7 @@ async def test_empty_fair_values_pulls_all_quotes(mm_config: MMConfig) -> None:
     # Start with valid fair values
     fair_values = [
         FairValue(
-            market="AAPL_20261008_23000",
+            market=TEST_MARKET_PUBKEY,
             ticker="AAPL",
             strike_cents=23000,
             fair_cents=50,
@@ -684,14 +689,14 @@ async def test_missing_ata_vs_rpc_timeout(mm_config: MMConfig) -> None:
     account_info_response.value = None
     mock_rpc.get_account_info.return_value = account_info_response
 
-    balance = await client.get_yes_token_balance("AAPL_20261008_23000", str(payer.pubkey()))
+    balance = await client.get_yes_token_balance(TEST_MARKET_PUBKEY, str(payer.pubkey()))
     assert balance == 0, "Missing ATA should return 0"
 
     # Test 1b: RPC timeout (exception raised)
     mock_rpc.get_account_info.side_effect = Exception("RPC timeout")
 
     with pytest.raises(Exception, match="RPC timeout"):
-        await client.get_yes_token_balance("AAPL_20261008_23000", str(payer.pubkey()))
+        await client.get_yes_token_balance(TEST_MARKET_PUBKEY, str(payer.pubkey()))
 
     # Part 2: Test full MM loop behavior with missing ATA vs RPC error
     # Use FakeOrderClient that tracks mints and quotes, but inject balance errors
@@ -814,7 +819,7 @@ async def test_fetch_resting_orders_failure_skips_quoting(
 
     # Setup two markets
     market_a = MarketState(
-        market="AAPL_20261008_23000",
+        market=TEST_MARKET_PUBKEY,
         ticker="AAPL",
         trading_date=trading_date,
         strike_cents=23_000,
@@ -835,7 +840,7 @@ async def test_fetch_resting_orders_failure_skips_quoting(
     market_source = FakeMarketSource([market_a, market_b])
 
     fv_a = FairValue(
-        market="AAPL_20261008_23000",
+        market=TEST_MARKET_PUBKEY,
         ticker="AAPL",
         strike_cents=23_000,
         fair_cents=50,
@@ -862,10 +867,10 @@ async def test_fetch_resting_orders_failure_skips_quoting(
             self.place_calls: list[str] = []
             # Seed 7 leftovers on market A (invisible due to fetch failure)
             for i in range(7):
-                self._orders["AAPL_20261008_23000"].append(
+                self._orders[TEST_MARKET_PUBKEY].append(
                     RestingOrder(
                         order_id=i + 1,
-                        market="AAPL_20261008_23000",
+                        market=TEST_MARKET_PUBKEY,
                         owner=str(test_keypair.pubkey()),
                         side="Bid",
                         price=45,
@@ -875,7 +880,7 @@ async def test_fetch_resting_orders_failure_skips_quoting(
 
         async def fetch_resting_orders(self, market: str) -> list[RestingOrder]:
             self.fetch_calls[market] = self.fetch_calls.get(market, 0) + 1
-            if market == "AAPL_20261008_23000":
+            if market == TEST_MARKET_PUBKEY:
                 # Simulate RPC error - 7 leftovers exist but are invisible
                 raise Exception("Simulated RPC error on market A")
             return await super().fetch_resting_orders(market)
@@ -893,12 +898,12 @@ async def test_fetch_resting_orders_failure_skips_quoting(
     await mm._run_once()
 
     # Assert: both markets fetched
-    assert "AAPL_20261008_23000" in order_client.fetch_calls
+    assert TEST_MARKET_PUBKEY in order_client.fetch_calls
     assert "AAPL_20261008_24000" in order_client.fetch_calls
 
     # Assert: market A NOT quoted (fail closed - 7 leftovers + 2 new would exceed cap)
     # market B WAS quoted (fetch succeeded, no stacking on A's invisible leftovers)
-    a_quoted = "AAPL_20261008_23000" in order_client.place_calls
+    a_quoted = TEST_MARKET_PUBKEY in order_client.place_calls
     b_quoted = "AAPL_20261008_24000" in order_client.place_calls
 
     assert not a_quoted, "Should NOT quote market A (fetch failed, 7 leftovers invisible)"
@@ -924,7 +929,7 @@ async def test_cancel_fetch_failure_per_market_isolation(
 
     # Setup three markets
     market_a = MarketState(
-        market="AAPL_20261008_23000",
+        market=TEST_MARKET_PUBKEY,
         ticker="AAPL",
         trading_date=trading_date,
         strike_cents=23_000,
@@ -954,7 +959,7 @@ async def test_cancel_fetch_failure_per_market_isolation(
     market_source = FakeMarketSource([market_a, market_b, market_c])
 
     fv_a = FairValue(
-        market="AAPL_20261008_23000",
+        market=TEST_MARKET_PUBKEY,
         ticker="AAPL",
         strike_cents=23_000,
         fair_cents=50,
@@ -1004,7 +1009,7 @@ async def test_cancel_fetch_failure_per_market_isolation(
 
         async def fetch_resting_orders(self, market: str) -> list[RestingOrder]:
             self.fetch_calls.append(market)
-            if market == "AAPL_20261008_23000":
+            if market == TEST_MARKET_PUBKEY:
                 raise Exception("Simulated RPC error on market A")
             return await super().fetch_resting_orders(market)
 
@@ -1026,7 +1031,7 @@ async def test_cancel_fetch_failure_per_market_isolation(
 
     # Assert: fetch was attempted for all three markets
     assert len(order_client.fetch_calls) >= 3, "Should attempt fetch for all markets"
-    assert "AAPL_20261008_23000" in order_client.fetch_calls
+    assert TEST_MARKET_PUBKEY in order_client.fetch_calls
     assert "AAPL_20261008_24000" in order_client.fetch_calls
     assert "AAPL_20261008_25000" in order_client.fetch_calls
 
@@ -1035,12 +1040,12 @@ async def test_cancel_fetch_failure_per_market_isolation(
     assert b_cancel_count == 7, f"Should cancel 7 leftovers on B, got {b_cancel_count}"
 
     # Assert: cancel was NOT called for A (fetch failed) or C (no leftovers)
-    assert "AAPL_20261008_23000" not in order_client.cancel_calls
+    assert TEST_MARKET_PUBKEY not in order_client.cancel_calls
     # C might appear 0 times (no leftovers to cancel)
 
     # Assert: quote was NOT placed for A (cancel listing failed)
     # but WAS placed for B (7 cancelled, 2 new) and C (0 + 2 new)
-    a_quoted = "AAPL_20261008_23000" in order_client.place_calls
+    a_quoted = TEST_MARKET_PUBKEY in order_client.place_calls
     b_quote_count = order_client.place_calls.count("AAPL_20261008_24000")
     c_quote_count = order_client.place_calls.count("AAPL_20261008_25000")
 

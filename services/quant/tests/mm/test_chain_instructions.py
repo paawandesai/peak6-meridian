@@ -5,6 +5,11 @@ intercepting Instruction creation and verifying AccountMeta flags before
 Message compilation. Regressions in chain.py account order/flags would fail.
 """
 
+# Test market: AAPL 2026-10-08 strike $230.00
+# Derived from program 5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi
+# PDA seeds: b"market" + b"AAPL" + 20261008.to_bytes(4, 'little') + 23000.to_bytes(8, 'little')
+TEST_MARKET_PUBKEY = "DyAQwhVQNpAhWMUhd83YShjS244PoU2QotChDStexM7Z"
+
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -96,7 +101,7 @@ async def test_place_order_builds_correct_instruction_accounts() -> None:
     # Capture instructions created during place_order
     with InstructionCapture() as capture:
         await client.place_order(
-            market="AAPL_20261008_23000",
+            market=TEST_MARKET_PUBKEY,
             side="Bid",
             price=50,
             qty=10,
@@ -173,7 +178,7 @@ async def test_place_order_includes_same_side_owners_in_remaining_accounts() -> 
     # Capture instruction
     with InstructionCapture() as capture:
         await client.place_order(
-            market="AAPL_20261008_23000",
+            market=TEST_MARKET_PUBKEY,
             side="Bid",  # Same side as the first resting order
             price=50,
             qty=10,
@@ -189,8 +194,7 @@ async def test_place_order_includes_same_side_owners_in_remaining_accounts() -> 
     # Verify remaining_accounts contains both owners' OpenOrders PDAs
     remaining = instruction.accounts[11:]  # After the 11 base accounts
 
-    ticker, trading_date, strike_cents = ("AAPL", 20261008, 23000)
-    market_pda = derive_market_pda(program_id, ticker, trading_date, strike_cents)
+    market_pda = Pubkey.from_string(TEST_MARKET_PUBKEY)
 
     expected_same_side_oo = derive_open_orders_pda(program_id, market_pda, same_side_owner.pubkey())
     expected_contra_side_oo = derive_open_orders_pda(
@@ -226,7 +230,7 @@ async def test_cancel_order_builds_correct_instruction_accounts() -> None:
     # Capture instruction creation
     with InstructionCapture() as capture:
         await client.cancel_order(
-            market="AAPL_20261008_23000",
+            market=TEST_MARKET_PUBKEY,
             order_id=42,
             owner=str(payer.pubkey()),
         )
@@ -266,7 +270,7 @@ async def test_mint_pair_builds_correct_instruction_accounts() -> None:
     # Capture all instructions (might include ATA creation + mint_pair)
     with InstructionCapture() as capture:
         await client.mint_pair(
-            market="AAPL_20261008_23000",
+            market=TEST_MARKET_PUBKEY,
             qty=100,
             owner=str(payer.pubkey()),
         )
@@ -307,7 +311,7 @@ async def test_settle_funds_builds_correct_instruction_accounts() -> None:
     # Capture instruction creation
     with InstructionCapture() as capture:
         await client.settle_funds(
-            market="AAPL_20261008_23000",
+            market=TEST_MARKET_PUBKEY,
             owner=str(payer.pubkey()),
         )
 
