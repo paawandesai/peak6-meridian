@@ -1,3 +1,5 @@
+"use client";
+
 import { AppShell } from "@/components/app-shell";
 import { MarketsView } from "@/components/markets-view";
 import { tradeHref } from "@/app/trade/_lib/href";
