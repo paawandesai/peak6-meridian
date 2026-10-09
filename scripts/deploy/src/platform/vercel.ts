@@ -86,7 +86,15 @@ export async function ensureVercelProject(
   });
   const id = asRecord(created.body).id;
   if (created.status >= 300 || typeof id !== "string") {
-    throw new Error(`vercel: creating project failed (status ${created.status})`);
+    const err = asRecord(asRecord(created.body).error);
+    const code = typeof err.code === "string" ? `, ${err.code}` : "";
+    const message = typeof err.message === "string" ? `: ${err.message}` : "";
+    throw new Error(
+      redactSecrets(
+        `vercel: creating project ${options.projectName} failed (status ${created.status}${code})${message}`,
+        secrets,
+      ),
+    );
   }
   deps.log(`vercel: created project ${options.projectName}`);
   return { id, orgId, created: true };
