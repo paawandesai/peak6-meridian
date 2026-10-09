@@ -123,9 +123,10 @@ pub fn parse_pyth_price(data: &[u8]) -> Result<PythReading> {
     let publish_time = i64::from_le_bytes(read_array(data, msg_offset + 52)?);
     let posted_slot = u64::from_le_bytes(read_array(data, msg_offset + 60)?);
 
-    // Scale to 18 decimals: price_i64 * 10^expo → value * 10^18
+    // Scale to 18 decimals: Pyth price = price_i64 * 10^expo, target = price * 10^18
+    // So: value_scaled = price_i64 * 10^(18 + expo)
     let price_128 = i128::from(price_i64);
-    let scale_power = 18i32.checked_sub(expo).ok_or(MeridianError::MathOverflow)?;
+    let scale_power = 18i32.checked_add(expo).ok_or(MeridianError::MathOverflow)?;
     let value_scaled = if scale_power >= 0 {
         price_128
             .checked_mul(
@@ -521,8 +522,8 @@ mod tests {
         let (owner, data) = fixture();
         assert_eq!(owner, PYTH_RECEIVER_PID);
         let reading = parse_pyth_price(&data).unwrap();
-        // Expected: 15000 * 10^(18-(-2)) = 15000 * 10^20 = 1.5e24
-        assert_eq!(reading.value_scaled, 1_500_000_000_000_000_000_000_000);
+        // Expected: 15000 * 10^(18+(-2)) = 15000 * 10^16 = $150 * 10^18
+        assert_eq!(reading.value_scaled, 150_000_000_000_000_000_000);
         assert_eq!(reading.publish_time, 1791316801);
         assert_eq!(reading.confidence, 5);
         assert_eq!(reading.posted_slot, 412345678);
