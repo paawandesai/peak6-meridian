@@ -11,6 +11,7 @@
   "dependencies": {
     "@coral-xyz/anchor": "0.31.1",
     "@meridian/client": "workspace:*",
+    "@solana/spl-token": "0.4.9",
     "@solana/web3.js": "1.99.0",
     "automation": "workspace:*"
   },

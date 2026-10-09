@@ -3,7 +3,14 @@
 // pair-redeem with YES/NO from different markets. Expected: loser pays 0; tokens are burned before
 // transfer; winner mode requires `Settled`; pair redeem checks both tokens are from the same market.
 import { BN } from "@meridian/client";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import {
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  TransactionInstruction,
+} from "@solana/web3.js";
+import { getMint, mintTo } from "@solana/spl-token";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -13,6 +20,7 @@ import {
   setLocalFeed,
   SKIP_REASON,
   trySettle,
+  type Validator,
   validatorSession,
   waitUntil,
 } from "./validator";
@@ -22,6 +30,50 @@ const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ
 
 // Associated Token Program ID
 const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+
+/** Create an associated token account */
+async function createAta(
+  v: Validator,
+  user: Keypair,
+  ata: PublicKey,
+  mint: PublicKey,
+): Promise<void> {
+  const info = await v.connection.getAccountInfo(ata);
+  if (info !== null) return; // already exists
+
+  const createAtaIx = new TransactionInstruction({
+    programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+    keys: [
+      { pubkey: user.publicKey, isSigner: true, isWritable: true },
+      { pubkey: ata, isSigner: false, isWritable: true },
+      { pubkey: user.publicKey, isSigner: false, isWritable: false },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.from([]),
+  });
+  const tx = new Transaction().add(createAtaIx);
+  tx.recentBlockhash = (await v.connection.getLatestBlockhash()).blockhash;
+  tx.feePayer = user.publicKey;
+  tx.sign(user);
+  await v.connection.sendRawTransaction(tx.serialize());
+  await new Promise((r) => setTimeout(r, 1000));
+}
+
+/** Fund a user's USDC ATA by minting USDC (validator environment only) */
+async function fundUsdc(
+  v: Validator,
+  owner: PublicKey,
+  ata: PublicKey,
+  amount: number,
+): Promise<void> {
+  const config = await v.program.account.config.fetch(v.config);
+  const mint = await getMint(v.connection, config.usdcMint);
+  const mintAmount = BigInt(amount) * 10n ** BigInt(mint.decimals);
+  await mintTo(v.connection, v.admin, config.usdcMint, ata, v.admin, mintAmount);
+  await new Promise((r) => setTimeout(r, 500));
+}
 
 /** Derive ATA address for a given mint and wallet */
 function getAta(mint: PublicKey, wallet: PublicKey): PublicKey {
@@ -151,9 +203,41 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
     await new Promise((r) => setTimeout(r, 1000));
 
     const { market, closeTs } = await createMarket(v, 10);
+
+    const marketAccount = await v.program.account.market.fetch(market);
+    const config = await v.program.account.config.fetch(v.config);
+
+    const userUsdc = getAta(config.usdcMint, user.publicKey);
+    const userYes = getAta(marketAccount.yesMint, user.publicKey);
+    const userNo = getAta(marketAccount.noMint, user.publicKey);
+
+    // Create ATAs and mint 10 pairs (deposit 10 USDC, mint 10 YES + 10 NO)
+    await createAta(v, user, userUsdc, config.usdcMint);
+    await createAta(v, user, userYes, marketAccount.yesMint);
+    await createAta(v, user, userNo, marketAccount.noMint);
+
+    // Fund user with USDC and mint pairs
+    await fundUsdc(v, user.publicKey, userUsdc, 10);
+    await v.program.methods
+      .mintPair(new BN(10))
+      .accountsStrict({
+        config: v.config,
+        market,
+        user: user.publicKey,
+        userUsdc,
+        userYes,
+        userNo,
+        yesMint: marketAccount.yesMint,
+        noMint: marketAccount.noMint,
+        vault: marketAccount.vault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([user])
+      .rpc();
+
     await waitUntil(v, closeTs);
 
-    // Settle the market
+    // Settle the market (YES wins at 50)
     const slot = await v.connection.getSlot("confirmed");
     await setLocalFeed(v, "META", 0, 50_000n, slot);
     await setLocalFeed(v, "META", 1, 50_000n, slot);
@@ -163,40 +247,24 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
     ] as const;
     expect(await trySettle(v, market, feeds)).toBe("settled");
 
-    const marketAccount = await v.program.account.market.fetch(market);
-    const config = await v.program.account.config.fetch(v.config);
+    // First redeem: should succeed (burn 10 YES, receive 10 USDC)
+    await v.program.methods
+      .redeem(new BN(10), new BN(0)) // winner redeem (YES won)
+      .accountsStrict({
+        market,
+        user: user.publicKey,
+        userUsdc,
+        userYes,
+        userNo,
+        yesMint: marketAccount.yesMint,
+        noMint: marketAccount.noMint,
+        vault: marketAccount.vault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([user])
+      .rpc();
 
-    const userUsdc = getAta(config.usdcMint, user.publicKey);
-    const userYes = getAta(marketAccount.yesMint, user.publicKey);
-    const userNo = getAta(marketAccount.noMint, user.publicKey);
-
-    // Attempt: first redeem (will fail - user has no tokens)
-    // In a real attack after minting, this would burn tokens and pay USDC
-    try {
-      await v.program.methods
-        .redeem(new BN(1), new BN(0)) // winner redeem (YES won)
-        .accountsStrict({
-          market,
-          user: user.publicKey,
-          userUsdc,
-          userYes,
-          userNo,
-          yesMint: marketAccount.yesMint,
-          noMint: marketAccount.noMint,
-          vault: marketAccount.vault,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .signers([user])
-        .rpc();
-      throw new Error("Expected first redeem to fail (no tokens)");
-    } catch (error) {
-      // First redeem fails (user has no tokens to burn)
-      const err = programError(error);
-      expect(err.length).toBeGreaterThan(0);
-    }
-
-    // Attempt: second redeem (would also fail - no tokens)
-    // In a real attack after first redeem burned tokens, second attempt has no tokens left
+    // Second redeem: should fail (tokens were burned, balance is now 0)
     try {
       await v.program.methods
         .redeem(new BN(1), new BN(0))
@@ -213,11 +281,11 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
         })
         .signers([user])
         .rpc();
-      throw new Error("Expected second redeem to fail (no tokens)");
+      throw new Error("Expected second redeem to fail (tokens already burned)");
     } catch (error) {
-      // Second redeem also fails (no tokens)
+      // Second redeem fails: insufficient YES tokens (all were burned in first redeem)
       const err = programError(error);
-      expect(err.length).toBeGreaterThan(0);
+      expect(err).toContain("insufficient");
     }
   });
 
