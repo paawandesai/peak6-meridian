@@ -64,6 +64,7 @@ export function TickerLadder({
             <th className="py-mer-1 pr-mer-3 font-medium">Strike</th>
             <th className="py-mer-1 pr-mer-3 font-medium">YES</th>
             <th className="py-mer-1 pr-mer-3 font-medium">NO</th>
+            <th className="py-mer-1 pr-mer-3 font-medium">Fair · Edge</th>
             <th className="hidden py-mer-1 pr-mer-3 font-medium sm:table-cell">Probability</th>
             <th className="py-mer-1 pr-mer-3 font-medium">State</th>
             <th className="hidden py-mer-1 pr-mer-3 font-medium sm:table-cell">Opened · closes</th>
