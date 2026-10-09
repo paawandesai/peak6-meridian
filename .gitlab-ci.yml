@@ -39,6 +39,7 @@ stages:
   - build
   - test
   - e2e
+  - deploy
 
 # Merge-request pipelines (manual, gated by ci:run), pushes to main and schedules; no duplicate
 # branch pipelines.
@@ -473,3 +474,53 @@ heartbeat:
     GIT_DEPTH: "0"
   script:
     - scripts/ci/heartbeat.sh
+
+# ---- deploy (M2-11) -----------------------------------------------------------------------
+# REVIEWED BY THE HUMAN ONLY (Paawan); the merge gate never merges changes to this file.
+# Runs on main pushes only, after every earlier stage is green. VERCEL_TOKEN and RAILWAY_TOKEN are
+# protected, masked CI variables, so only protected refs see them; the projects/services are found
+# or created by name (no VERCEL_ORG_ID / VERCEL_PROJECT_ID). Server-only app/automation settings
+# (docs/environment.md) are also CI variables; a missing required one fails the job before any
+# network call, naming the variable. No retries: a failed deploy is re-run by hand.
+.deploy:
+  stage: deploy
+  rules:
+    # Docs-only pushes to main skip the deploy: only deploy inputs trigger it.
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        paths:
+          - app/**/*
+          - services/**/*
+          - packages/**/*
+          - programs/**/*
+          - scripts/deploy/**/*
+          - package.json
+          - pnpm-lock.yaml
+          - pnpm-workspace.yaml
+          - Makefile
+          - app/vercel.json
+          - services/automation/railway.json
+          - .gitlab-ci.yml
+  interruptible: false
+  retry: 0
+  timeout: 20 minutes
+  resource_group: deploy
+  variables:
+    TOOLCHAIN: apt node
+  cache:
+    - *cache-pnpm
+  script:
+    - make install-js
+    - make $DEPLOY_TARGET
+
+deploy:vercel:
+  extends: .deploy
+  variables:
+    TOOLCHAIN: apt node
+    DEPLOY_TARGET: deploy-vercel
+
+deploy:railway:
+  extends: .deploy
+  variables:
+    TOOLCHAIN: apt node
+    DEPLOY_TARGET: deploy-railway
