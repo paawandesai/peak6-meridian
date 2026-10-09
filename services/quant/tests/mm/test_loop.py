@@ -337,7 +337,8 @@ async def test_inventory_cap_enforced_in_run_once(mm_config: MMConfig) -> None:
     Drive _run_once with FakeOrderClient balances set to cap. Verify loop
     doesn't place quotes when |YES - NO| >= 200.
     """
-    now = datetime.now(UTC)
+    # Use a fixed date to ensure market is "today" (Finding #3: prior-day markets skipped)
+    now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)  # 2026-10-08 14:00 ET
     close_ts = int((now + timedelta(hours=1)).timestamp())
 
     market = MarketState(
@@ -392,3 +393,90 @@ async def test_inventory_cap_enforced_in_run_once(mm_config: MMConfig) -> None:
     orders = await order_client.fetch_resting_orders(market.market)
     mm_orders = [o for o in orders if o.owner == mm_owner]
     assert len(mm_orders) == 2, f"Expected 2 orders below cap, got {len(mm_orders)}"
+
+
+@pytest.mark.asyncio
+async def test_prior_day_markets_dont_block_today_quoting(mm_config: MMConfig) -> None:
+    """Prior-day markets past close don't prevent quoting today (Finding #3, AB-11).
+
+    ChainMarketSource keeps post-close Open markets for settlement. Verify one
+    unsettled market from yesterday doesn't disable quoting on today's strikes.
+    """
+    # Clock at 2026-10-09 14:00 ET (18:00 UTC)
+    now = datetime(2026, 10, 9, 18, 0, tzinfo=UTC)
+
+    def fake_clock() -> datetime:
+        return now
+
+    # Yesterday's market: trading_date=20261008, already past close
+    yesterday_close_ts = int((now - timedelta(hours=20)).timestamp())  # Closed 20h ago
+    yesterday_market = MarketState(
+        market="AAPL_20261008_23000",
+        ticker="AAPL",
+        strike_cents=23000,
+        trading_date=20261008,  # Yesterday
+        close_ts=yesterday_close_ts,
+        is_open=True,  # Still Open for settlement (AB-11)
+        pairs_outstanding=100,
+    )
+
+    # Today's market: trading_date=20261009, closes in 2 hours
+    today_close_ts = int((now + timedelta(hours=2)).timestamp())
+    today_market = MarketState(
+        market="AAPL_20261009_23000",
+        ticker="AAPL",
+        strike_cents=23000,
+        trading_date=20261009,  # Today
+        close_ts=today_close_ts,
+        is_open=True,
+        pairs_outstanding=100,
+    )
+
+    markets = [yesterday_market, today_market]
+    market_source = FakeMarketSource(markets)
+
+    # Fair value only for today's market (M3-01 doesn't quote prior days)
+    fair_values = [
+        FairValue(
+            market=today_market.market,
+            ticker="AAPL",
+            strike_cents=23000,
+            fair_cents=50,
+            sigma=0.2,
+            spot=230.0,
+            as_of=now,
+        )
+    ]
+    fv_source = FakeFairValueSource(fair_values)
+    order_client = FakeOrderClient()
+
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=market_source,
+        fair_value_source=fv_source,
+        order_client=order_client,
+        clock=fake_clock,
+    )
+
+    # Seed inventory for both markets (MM has positions from yesterday)
+    order_client.set_yes_balance(yesterday_market.market, str(mm.keypair.pubkey()), 50)
+    order_client.set_no_balance(yesterday_market.market, str(mm.keypair.pubkey()), 50)
+    order_client.set_yes_balance(today_market.market, str(mm.keypair.pubkey()), 50)
+    order_client.set_no_balance(today_market.market, str(mm.keypair.pubkey()), 50)
+
+    await mm._run_once()
+
+    # Verify: today's market gets quotes, yesterday's doesn't
+    mm_owner = str(mm.keypair.pubkey())
+    today_orders = await order_client.fetch_resting_orders(today_market.market)
+    today_mm_orders = [o for o in today_orders if o.owner == mm_owner]
+    assert len(today_mm_orders) == 2, (
+        f"Expected 2 quotes on today's market, got {len(today_mm_orders)}"
+    )
+
+    yesterday_orders = await order_client.fetch_resting_orders(yesterday_market.market)
+    yesterday_mm_orders = [o for o in yesterday_orders if o.owner == mm_owner]
+    # Yesterday's market has no new quotes (no fair value provided anyway)
+    assert len(yesterday_mm_orders) == 0, (
+        f"Expected 0 quotes on yesterday's market, got {len(yesterday_mm_orders)}"
+    )

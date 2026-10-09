@@ -43,7 +43,8 @@ async def test_ab10_order_cap_per_owner() -> None:
     Seed 7 existing MM orders in one market, then run loop. MM should skip that
     market (placing 2 more would exceed 8) but still quote other markets.
     """
-    now = datetime.now(UTC)
+    # Fixed date to match market trading_date (Finding #3)
+    now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)  # 2026-10-08 14:00 ET
     close_ts = int((now + timedelta(hours=1)).timestamp())
 
     markets = [

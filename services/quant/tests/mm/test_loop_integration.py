@@ -36,7 +36,8 @@ def mm_config(test_keypair: Keypair) -> MMConfig:
 @pytest.mark.asyncio
 async def test_ac1_every_open_strike_has_two_sided_quotes(mm_config: MMConfig) -> None:
     """AC1: After _run_once, every open strike has bid + ask quotes."""
-    now = datetime.now(UTC)
+    # Fixed date to match market trading_date (Finding #3)
+    now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)  # 2026-10-08 14:00 ET
     close_ts = int((now + timedelta(hours=1)).timestamp())
 
     # Three open markets
@@ -203,7 +204,8 @@ async def test_ac2_quotes_cancelled_within_2_min_of_close(mm_config: MMConfig) -
 @pytest.mark.asyncio
 async def test_ac3_respects_8_order_cap_per_owner_per_market(mm_config: MMConfig) -> None:
     """AC3: MM never exceeds 8 resting orders per owner per market."""
-    now = datetime.now(UTC)
+    # Fixed date to match market trading_date (Finding #3)
+    now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)  # 2026-10-08 14:00 ET
     close_ts = int((now + timedelta(hours=1)).timestamp())
 
     # One market
@@ -258,7 +260,8 @@ async def test_ac3_respects_8_order_cap_per_owner_per_market(mm_config: MMConfig
 @pytest.mark.asyncio
 async def test_coverage_metric_computed_correctly(mm_config: MMConfig) -> None:
     """AC4: Coverage metric reflects actual two-sided quoting."""
-    now = datetime.now(UTC)
+    # Fixed date to match market trading_date (Finding #3)
+    now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)  # 2026-10-08 14:00 ET
     close_ts = int((now + timedelta(hours=1)).timestamp())
 
     # Three markets

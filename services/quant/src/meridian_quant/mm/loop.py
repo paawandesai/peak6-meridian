@@ -5,6 +5,7 @@ import json
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair
@@ -153,6 +154,8 @@ class MarketMakerLoop:
         """Check if we should pull all quotes (stale spot or near close).
 
         Finding #2: Now uses injected clock and checks close_ts.
+        Finding #3: Only check close_ts for today's trading session to avoid
+        prior-day unsettled markets blocking today's quotes (AB-11).
         """
         now = self._clock()
 
@@ -163,9 +166,16 @@ class MarketMakerLoop:
                 logger.warning(f"Stale spot data for {fv.ticker}: {age_secs:.1f}s old")
                 return True
 
+        # Get today's trading date (YYYYMMDD in ET)
+        # Markets use ET for trading_date, so convert UTC now to ET date
+        et_now = now.astimezone(ZoneInfo("America/New_York"))
+        today_trading_date = int(et_now.strftime("%Y%m%d"))
+
         # Check for time to close: pull at close, within 2min, or after close
+        # Only check markets from today's session; prior-day markets remain Open
+        # for settlement (AB-11) but shouldn't block today's quoting
         for market in markets:
-            if market.is_open:
+            if market.is_open and market.trading_date == today_trading_date:
                 time_to_close_secs = market.close_ts - int(now.timestamp())
                 # Pull if at/within close window OR after close (negative ttc)
                 if time_to_close_secs < self.config.min_time_to_close_secs:
@@ -264,7 +274,16 @@ class MarketMakerLoop:
         fair_values: list[FairValue],
         markets: list[MarketState],
     ) -> None:
-        """Generate and place quotes for all open strikes."""
+        """Generate and place quotes for all open strikes.
+
+        Finding #3: Only quote today's markets; prior-day markets remain Open for
+        settlement (AB-11) but don't get new quotes.
+        """
+        # Get today's trading date (YYYYMMDD in ET)
+        now = self._clock()
+        et_now = now.astimezone(ZoneInfo("America/New_York"))
+        today_trading_date = int(et_now.strftime("%Y%m%d"))
+
         # Count current resting orders PER MARKET (domain.md: 8 per owner per market)
         orders_per_market: dict[str, int] = {}
         for market in markets:
@@ -278,11 +297,23 @@ class MarketMakerLoop:
                     orders_per_market[market.market] = 0
 
         for fv in fair_values:
+            # Match by market string (includes trading_date) to handle multiple
+            # days with same ticker/strike (Finding #3)
             fv_market: MarketState | None = next(
-                (m for m in markets if m.strike_cents == fv.strike_cents and m.ticker == fv.ticker),
+                (m for m in markets if m.market == fv.market),
                 None,
             )
             if not fv_market or not fv_market.is_open:
+                continue
+
+            # Skip prior-day markets: they remain Open for settlement (AB-11)
+            # but don't get new quotes. (This is belt-and-suspenders since M3-01
+            # shouldn't provide fair values for prior days.)
+            if fv_market.trading_date != today_trading_date:
+                logger.debug(
+                    f"Skipping prior-day market {fv_market.market} "
+                    f"(date={fv_market.trading_date}, today={today_trading_date})"
+                )
                 continue
 
             # Get current inventory using MarketKey (Finding #5)
