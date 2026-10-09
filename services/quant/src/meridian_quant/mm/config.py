@@ -17,7 +17,7 @@ class MMConfig(BaseSettings):
     market_maker_keypair: str = Field(..., alias="MARKET_MAKER_KEYPAIR")
 
     # Program and config
-    program_id: str = Field(...)
+    program_id: str = Field(..., alias="MERIDIAN_PROGRAM_ID")
 
     # Trading parameters (domain.md § Market maker defaults)
     spread_cents: int = Field(default=2, description="Quote fair ± spread")
@@ -29,9 +29,9 @@ class MMConfig(BaseSettings):
     max_spot_age_secs: int = Field(default=10, description="Pull if spot > 10s old")
     min_time_to_close_secs: int = Field(default=120, description="Pull if < 2 min to close")
 
-    # Service endpoints
-    fair_values_url: str = Field(default="http://localhost:8080/fair-values")
-    service_token: str = Field(...)
+    # Service endpoints (base URL, no path - onchain.py appends /fair-values)
+    fair_values_url: str = Field(default="http://localhost:8080", alias="FAIR_VALUES_URL")
+    service_token: str = Field(..., alias="SERVICE_TOKEN")
 
     # Operation
     loop_interval_secs: float = Field(default=5.0, description="Main loop interval")
