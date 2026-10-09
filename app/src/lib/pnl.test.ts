@@ -167,6 +167,14 @@ describe("tradesFromEvents", () => {
     expect(yes(lost)?.realized).toBe(-(10n * 50n * CENT));
   });
 
+  it("settled equal-qty redeem books at 100¢/0¢ per outcome, not 50¢/50¢ (M2-07 AC1)", () => {
+    // Mint at 50c/50c, redeem winner at 100c → realized = 50c profit (not 0 from pair-redeem)
+    const events = [mint("m", 10n), redeem("r", 10n, 10n, 10n * CENT)];
+    const won = tradesFromEvents(events, W, { [M]: "Yes" }).trades;
+    expect(yes(won)).toMatchObject({ qty: 0n, realized: 10n * 50n * CENT }); // 50c profit
+    expect(no(won)).toMatchObject({ qty: 0n, realized: -(10n * 50n * CENT) }); // 50c loss
+  });
+
   it("an unequal redeem on an unsettled market is skipped and counted", () => {
     const result = tradesFromEvents([redeem("x", 3n, 1n, 0n)], W, {});
     expect(result.skipped).toBe(1);

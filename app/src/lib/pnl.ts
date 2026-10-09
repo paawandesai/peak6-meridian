@@ -186,7 +186,15 @@ export function tradesFromEvents(
         }
       } else if (event.kind === "Redeemed" && event.user === wallet) {
         const q = queue(event.market);
-        if (event.yesQty === event.noQty) {
+        const outcome = outcomes[event.market] ?? "None";
+
+        // Post-settlement: book at 100c/0c per outcome, even when yesQty === noQty
+        if (outcome !== "None") {
+          const yesUnit = outcome === "Yes" ? BASE_UNITS_PER_USDC : 0n;
+          add(event.market, "YES", "sell", event.yesQty, yesUnit);
+          add(event.market, "NO", "sell", event.noQty, BASE_UNITS_PER_USDC - yesUnit);
+        } else if (event.yesQty === event.noQty) {
+          // Pre-settlement pair redeem: book at average cost (50c fallback)
           let rest = event.yesQty;
           for (const chunk of takeFrom(q.bid, event.yesQty)) {
             // Sell NO: the YES bought at p nets out, leaving NO sold at 100 − p.
@@ -198,14 +206,9 @@ export function tradesFromEvents(
             add(event.market, "NO", "sell", rest, cents(PAIR_PRICE_CENTS / 2));
           }
         } else {
-          const outcome = outcomes[event.market] ?? "None";
-          if (outcome === "None") {
-            skipped += 1;
-            continue;
-          }
-          const yesUnit = outcome === "Yes" ? BASE_UNITS_PER_USDC : 0n;
-          add(event.market, "YES", "sell", event.yesQty, yesUnit);
-          add(event.market, "NO", "sell", event.noQty, BASE_UNITS_PER_USDC - yesUnit);
+          // Unequal-qty redeem before settlement: skip (need outcome)
+          skipped += 1;
+          continue;
         }
       }
     }
