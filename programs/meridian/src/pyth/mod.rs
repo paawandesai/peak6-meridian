@@ -100,16 +100,15 @@ pub fn parse_pyth_price(data: &[u8]) -> Result<PythReading> {
         MeridianError::OracleInvalidValue
     );
 
-    // Parse VerificationLevel to find message offset and expected total length
-    // Borsh encoding: Partial=0 (2 bytes: tag + num_signatures), Full=1 (1 byte: tag only)
+    // Parse VerificationLevel: ONLY accept Full verification for settlement (AB-04)
+    // Partial verification (tag 0, including 0 signatures) is unsafe per Pyth SDK docs
     let level_tag = *data.get(40).ok_or(MeridianError::OracleInvalidValue)?;
-    let (msg_offset, expected_len) = match level_tag {
-        0 => (42, 134), // Partial: 2 bytes, total = 8+32+2+84+8 = 134
-        1 => (41, 133), // Full: 1 byte, total = 8+32+1+84+8 = 133
-        _ => return Err(MeridianError::OracleInvalidValue.into()),
-    };
+    require!(level_tag == 1, MeridianError::OracleInvalidValue); // Fail if not Full
 
-    // Exact length check (fail closed like oracle::parse_pull_feed)
+    let msg_offset = 41; // Full: 1 byte
+    let expected_len = 133; // 8 + 32 + 1 + 84 + 8
+
+    // Exact length check (fail closed)
     require!(data.len() == expected_len, MeridianError::OracleInvalidValue);
 
     // Parse PriceFeedMessage (SDK layout, 84 bytes total):
@@ -602,5 +601,17 @@ mod tests {
 
         // Empty
         assert!(parse_pyth_price(&[]).is_err());
+    }
+
+    #[test]
+    fn partial_verification_is_rejected() {
+        // Partial verification (tag 0) is unsafe for settlement (AB-04)
+        let (_, mut data) = fixture();
+
+        // Change VerificationLevel from Full (1) to Partial (0) at offset 40
+        data[40] = 0;
+
+        // Should reject Partial verification
+        assert!(parse_pyth_price(&data).is_err());
     }
 }
