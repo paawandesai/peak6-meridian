@@ -288,27 +288,35 @@ async function attemptSettlement(
   // In the real demo, we would call settle_market which would fail
   // For now, we'll skip the actual settlement attempt and just post the incident
 
-  // POST /incidents to ops-agent
-  const response = await fetch(`${ctx.env.OPS_AGENT_URL}/incidents`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${ctx.env.SERVICE_TOKEN}`,
-    },
-    body: JSON.stringify({
-      trading_date: new Date(marketKey.closeTs * 1000).toISOString().split("T")[0],
-      ticker: marketKey.symbol,
-      markets: [marketKey.symbol],
-      failure: `Spread check failed: ${FAULT_INJECT_BPS} bps >> 5 bps threshold`,
-    }),
-  });
+  // POST /incidents to ops-agent (with timeout per AC3)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-  if (!response.ok) {
-    throw new Error(`Failed to post incident: ${response.status} ${await response.text()}`);
+  try {
+    const response = await fetch(`${ctx.env.OPS_AGENT_URL}/incidents`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ctx.env.SERVICE_TOKEN}`,
+      },
+      body: JSON.stringify({
+        trading_date: new Date(marketKey.closeTs * 1000).toISOString().split("T")[0],
+        ticker: marketKey.symbol,
+        markets: [marketKey.symbol],
+        failure: `Spread check failed: ${FAULT_INJECT_BPS} bps >> 5 bps threshold`,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to post incident: ${response.status} ${await response.text()}`);
+    }
+
+    const result = z.object({ incident_id: z.string() }).parse(await response.json());
+    return { incidentId: result.incident_id };
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const result = (await response.json()) as { incident_id: string };
-  return { incidentId: result.incident_id };
 }
 
 const DraftSchema = z.object({
@@ -322,35 +330,45 @@ async function getDraft(
   ctx: DemoContext,
   incidentId: string,
 ): Promise<{ proposedPriceCents: number; note: string }> {
-  // AC3: Control live LLM via environment variable passed to ops-agent
-  // The ops-agent respects OPS_AGENT_LLM env var; we log our intent here
+  // AC3: ops-agent uses deterministic fallback unless OPS_AGENT_LLM=anthropic is set
+  // ENABLE_LIVE_LLM controls whether the ops-agent service was started with that var
   if (ctx.env.ENABLE_LIVE_LLM !== "1") {
     console.log(`  Using deterministic fallback (AC3: no live API calls)`);
+    console.log(`  (ops-agent started without OPS_AGENT_LLM=anthropic)`);
   }
 
-  const response = await fetch(`${ctx.env.OPS_AGENT_URL}/drafts`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${ctx.env.SERVICE_TOKEN}`,
-    },
-  });
+  // GET /drafts with timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-  if (!response.ok) {
-    throw new Error(`Failed to fetch drafts: ${response.status} ${await response.text()}`);
+  try {
+    const response = await fetch(`${ctx.env.OPS_AGENT_URL}/drafts`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${ctx.env.SERVICE_TOKEN}`,
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch drafts: ${response.status} ${await response.text()}`);
+    }
+
+    const drafts = z.array(DraftSchema).parse(await response.json());
+
+    // Find the draft for our incident (not ignored)
+    const draft = drafts.find((d) => d.incident_id === incidentId);
+    if (!draft) {
+      throw new Error(`No draft found for incident ${incidentId}`);
+    }
+
+    return {
+      proposedPriceCents: draft.proposed_price_cents,
+      note: draft.note,
+    };
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  const drafts = z.array(DraftSchema).parse(await response.json());
-
-  // Find the draft for our incident
-  const draft = drafts.find((d) => d.incident_id === incidentId);
-  if (!draft) {
-    throw new Error(`No draft found for incident ${incidentId}`);
-  }
-
-  return {
-    proposedPriceCents: draft.proposed_price_cents,
-    note: draft.note,
-  };
 }
 
 async function waitForOverrideDelay(ctx: DemoContext, marketKey: MarketKey): Promise<void> {
