@@ -25,7 +25,9 @@ export async function runPlatformCli(
   if (target === "vercel") {
     const options = {
       token: env.VERCEL_TOKEN ?? "",
-      projectName: env.VERCEL_PROJECT_NAME ?? projectName,
+      // The live project is peak6-meridian (https://peak6-meridian.vercel.app); "meridian" would miss it
+      // and attempt a create, which Vercel rejects.
+      projectName: env.VERCEL_PROJECT_NAME ?? env.DEPLOY_PROJECT_NAME ?? "peak6-meridian",
       ...(env.VERCEL_TEAM_ID === undefined || env.VERCEL_TEAM_ID === ""
         ? {}
         : { teamId: env.VERCEL_TEAM_ID }),
