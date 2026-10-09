@@ -153,7 +153,10 @@ async function loadFeeds(options: Options, connection: Connection): Promise<Feed
 }
 
 /** Loads and validates `--oracle-config` before anything is sent (M2-15 AC6). */
-async function loadOracleConfig(path: string, log: (msg: string) => void): Promise<OracleConfigParams> {
+async function loadOracleConfig(
+  path: string,
+  log: (msg: string) => void,
+): Promise<OracleConfigParams> {
   const config = readOracleConfigFile(path);
   log(
     `oracle config: ${config.signers.length} signers, threshold ${config.signerThreshold}, ` +
@@ -495,9 +498,7 @@ async function deploy(
       .accounts({ admin: admin.publicKey })
       .rpc({ commitment: "confirmed" });
     ctx.actions.push("set-oracle-config");
-    log(
-      `set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`,
-    );
+    log(`set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`);
   }
 
   const finalRecord = buildRecord(cluster, ctx, mint, config, upgradeAuthority);
