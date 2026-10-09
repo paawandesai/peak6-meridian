@@ -82,7 +82,8 @@ describe("MarketsView", () => {
     const aapl = await screen.findByRole("region", { name: "AAPL" });
     // Query the market table specifically (has "Strike" header); TickerInsight adds a distribution table.
     const tables = within(aapl).getAllByRole("table");
-    const rows = within(tables[0]!).getAllByRole("row").slice(1);
+    expect(tables.length).toBeGreaterThan(0);
+    const rows = within(tables[0]).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(3);
     expect(rows[0]).toHaveTextContent("$220");
     expect(rows[0]).toHaveTextContent("Open");
