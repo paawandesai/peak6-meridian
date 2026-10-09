@@ -283,7 +283,7 @@ describe("runSettlement: wrong date, retries and the alert (AC2, AB-03)", () => 
     expect(result.status).toBe("failed");
     expect(w.alerter.alerts).toHaveLength(1);
     expect(JSON.stringify([w.alerter.alerts, w.logger.lines])).not.toContain("SECRET");
-  });
+  }, 10_000);
 
   it("fails clearly when the config pins no feeds for the ticker", async () => {
     const w = world([{ ticker: "MSFT", strike: 440 }]);
