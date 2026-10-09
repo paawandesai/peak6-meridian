@@ -3,6 +3,7 @@
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useMemo } from "react";
 
+import { AdminOverride } from "./admin-override/admin-override";
 import { AdminView } from "./admin-view";
 import { AppHeader } from "./app-header";
 import { FaucetButton } from "./faucet-button";
@@ -50,6 +51,7 @@ function Page() {
       </AppHeader>
       <main className="mx-auto max-w-3xl px-mer-4 py-mer-6">
         <h2 className="mb-mer-4 text-mer-xl font-semibold">Admin</h2>
+        <AdminOverride nowSecs={nowSecs} />
         <AdminView
           actions={actions}
           nowSecs={nowSecs}
