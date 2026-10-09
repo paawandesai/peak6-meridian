@@ -1,89 +1,58 @@
 /**
  * M3-07 AC3: Default demo-ops makes no live API calls.
  *
- * The demo must use recorded fixtures + deterministic fallback, never calling
- * Anthropic/Tiingo/TwelveData APIs by default. ENABLE_LIVE_LLM=1 is opt-in only.
+ * Verifies that demo-ops.ts source code does not construct Anthropic/Tiingo/TwelveData
+ * clients. The demo calls ops-agent (which is started externally with or without
+ * OPS_AGENT_LLM), but demo-ops itself must not make live API calls.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, it, expect } from "vitest";
 
-describe("demo-ops AC3: no live API calls by default", () => {
-  const originalFetch = global.fetch;
-  const originalEnv = process.env;
+const DEMO_OPS_PATH = join(__dirname, "../../../scripts/demo-ops.ts");
 
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-    delete process.env.ENABLE_LIVE_LLM;
+describe("demo-ops AC3: no live API client construction", () => {
+  const demoOpsSource = readFileSync(DEMO_OPS_PATH, "utf-8");
+
+  it("does not import or construct Anthropic client", () => {
+    // Fail if the demo script directly imports or constructs an Anthropic client
+    expect(demoOpsSource).not.toContain('from "@anthropic-ai/sdk"');
+    expect(demoOpsSource).not.toContain('from "anthropic"');
+    expect(demoOpsSource).not.toContain("new Anthropic(");
+    expect(demoOpsSource).not.toContain("anthropic.Anthropic(");
   });
 
-  afterEach(() => {
-    global.fetch = originalFetch;
-    process.env = originalEnv;
+  it("does not call api.tiingo.com directly", () => {
+    // Demo-ops should never call Tiingo API directly
+    // It only calls the ops-agent API, which handles data providers
+    expect(demoOpsSource).not.toContain("api.tiingo.com");
   });
 
-  it("refuses to call Anthropic API by default", () => {
-    const fetchSpy = vi.fn();
-    global.fetch = fetchSpy as unknown as typeof fetch;
-
-    // Simulate demo-ops calling ops-agent which would call Anthropic if enabled
-    // The test is that ops-agent should NOT be started with OPS_AGENT_LLM=anthropic
-    // when ENABLE_LIVE_LLM is not set
-
-    expect(process.env.ENABLE_LIVE_LLM).toBeUndefined();
-
-    // If demo-ops were to make Anthropic calls, it would fail this test
-    // The actual control is: ops-agent must be started without OPS_AGENT_LLM
-    // to use the deterministic fallback instead of live Claude API
-
-    expect(fetchSpy).not.toHaveBeenCalledWith(
-      expect.stringContaining("api.anthropic.com"),
-      expect.anything(),
-    );
+  it("does not call api.twelvedata.com directly", () => {
+    // Demo-ops should never call TwelveData API directly
+    expect(demoOpsSource).not.toContain("api.twelvedata.com");
   });
 
-  it("refuses to call Tiingo API directly from demo", () => {
-    const fetchSpy = vi.fn();
-    global.fetch = fetchSpy as unknown as typeof fetch;
+  it("only makes HTTP fetch calls to OPS_AGENT_URL", () => {
+    // Find all global fetch() calls (not .fetch() which is Anchor account fetch)
+    const fetchCalls = demoOpsSource.match(/[^.]fetch\([^)]+\)/g) || [];
 
-    // Demo-ops should never call data provider APIs directly
-    // It only calls the ops-agent API, which uses fixtures by default
+    // Filter out false positives like "await fetch" matching ".fetch"
+    const httpFetchCalls = fetchCalls.filter((call) => !call.startsWith("."));
 
-    expect(fetchSpy).not.toHaveBeenCalledWith(
-      expect.stringContaining("api.tiingo.com"),
-      expect.anything(),
-    );
+    // All HTTP fetch calls should be to OPS_AGENT_URL (the ops-agent service)
+    expect(httpFetchCalls.length).toBeGreaterThan(0); // Ensure we found some
+    for (const call of httpFetchCalls) {
+      expect(call).toContain("OPS_AGENT_URL");
+      // Should not contain hardcoded API URLs
+      expect(call).not.toMatch(/https?:\/\/api\.(tiingo|twelvedata|anthropic)\.com/);
+    }
   });
 
-  it("refuses to call TwelveData API directly from demo", () => {
-    const fetchSpy = vi.fn();
-    global.fetch = fetchSpy as unknown as typeof fetch;
-
-    expect(fetchSpy).not.toHaveBeenCalledWith(
-      expect.stringContaining("api.twelvedata.com"),
-      expect.anything(),
-    );
-  });
-
-  it("allows live calls only when ENABLE_LIVE_LLM=1 is explicitly set", () => {
-    process.env.ENABLE_LIVE_LLM = "1";
-
-    // With ENABLE_LIVE_LLM=1, the ops-agent service should be started with
-    // OPS_AGENT_LLM=anthropic, enabling live Claude API calls
-    // This is opt-in behavior, documented in the demo script
-
-    expect(process.env.ENABLE_LIVE_LLM).toBe("1");
-  });
-
-  it("documents that ops-agent controls live API behavior", () => {
-    // AC3: Default demo-ops makes no live API calls
-    // Implementation: ops-agent service uses deterministic fallback unless
-    // started with OPS_AGENT_LLM=anthropic
-    //
-    // The demo script respects this by:
-    // 1. Not setting OPS_AGENT_LLM by default
-    // 2. Only enabling it when ENABLE_LIVE_LLM=1 is set
-    // 3. Using recorded fixtures for data providers
-    // 4. Logging when deterministic fallback is active
-
-    expect(true).toBe(true); // Documentation test passes
+  it("documents ENABLE_LIVE_LLM as controlling ops-agent startup", () => {
+    // AC3: ENABLE_LIVE_LLM controls how ops-agent is started (with or without OPS_AGENT_LLM)
+    // Demo-ops logs this but doesn't start ops-agent itself
+    expect(demoOpsSource).toContain("ENABLE_LIVE_LLM");
+    expect(demoOpsSource).toContain("deterministic fallback");
   });
 });
