@@ -36,7 +36,7 @@ pub fn verify_signature(package: &RedstonePackage) -> Result<[u8; 20]> {
     .map_err(|_| MeridianError::RedStoneInvalidSignature)?;
 
     // Ethereum address = last 20 bytes of keccak256(pubkey)
-    let pubkey_hash = keccak::hash(pubkey.as_ref());
+    let pubkey_hash = keccak::hash(&pubkey.0);
     let mut eth_address = [0u8; 20];
     eth_address.copy_from_slice(&pubkey_hash.as_ref()[12..32]);
 

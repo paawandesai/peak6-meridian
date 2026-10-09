@@ -14,7 +14,7 @@ pub struct PostRedstonePrice<'info> {
 
     /// OracleConfig PDA (read-only, for signer set and threshold).
     #[account(
-        seeds = OracleConfig::SEEDS,
+        seeds = [b"oracle_config"],
         bump,
     )]
     pub oracle_config: Account<'info, OracleConfig>,

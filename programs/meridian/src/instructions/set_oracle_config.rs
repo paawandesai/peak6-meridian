@@ -3,7 +3,7 @@
 use anchor_lang::prelude::*;
 
 use crate::errors::MeridianError;
-use crate::state::{Config, OracleConfig};
+use crate::state::{Config, OracleConfig, CONFIG_SEED};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SetOracleConfigParams {
@@ -17,12 +17,13 @@ pub struct SetOracleConfigParams {
 
 #[derive(Accounts)]
 pub struct SetOracleConfig<'info> {
-    /// Admin signer (checked against Config.admin).
+    /// Admin signer (checked against Config.admin, payer for OracleConfig).
+    #[account(mut)]
     pub admin: Signer<'info>,
 
     /// Config account (read-only, for admin check).
     #[account(
-        seeds = [Config::SEED_PREFIX],
+        seeds = [CONFIG_SEED],
         bump,
     )]
     pub config: Account<'info, Config>,
@@ -32,7 +33,7 @@ pub struct SetOracleConfig<'info> {
         init_if_needed,
         payer = admin,
         space = OracleConfig::SPACE,
-        seeds = OracleConfig::SEEDS,
+        seeds = [b"oracle_config"],
         bump,
     )]
     pub oracle_config: Account<'info, OracleConfig>,
