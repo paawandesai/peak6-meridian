@@ -41,9 +41,9 @@ pub struct RedstonePackage {
     pub signable_bytes: Vec<u8>,
 }
 
-/// Parse RedStone payload and extract data packages.
+/// Parse RedStone payload and extract data packages for a specific feed_id.
 /// Official RedStone Base/standard layout: each package is independently signed.
-pub fn parse_payload(payload: &[u8]) -> Result<Vec<RedstonePackage>> {
+pub fn parse_payload(payload: &[u8], target_feed_id: &[u8; 32]) -> Result<Vec<RedstonePackage>> {
     require!(
         payload.len() <= MAX_PAYLOAD_SIZE && payload.len() >= REDSTONE_MARKER.len(),
         MeridianError::RedStoneMalformedPayload
@@ -91,7 +91,7 @@ pub fn parse_payload(payload: &[u8]) -> Result<Vec<RedstonePackage>> {
     // Parse each data package (independently signed)
     let mut packages = Vec::with_capacity(packages_count);
     for _ in 0..packages_count {
-        let package = parse_data_package(payload, &mut cursor)?;
+        let package = parse_data_package(payload, &mut cursor, target_feed_id)?;
         packages.push(package);
     }
 
@@ -100,7 +100,12 @@ pub fn parse_payload(payload: &[u8]) -> Result<Vec<RedstonePackage>> {
 
 /// Parse a single data package (signature + data points + timestamp).
 /// Each package is independently signed: signable_bytes = everything before the signature.
-fn parse_data_package(payload: &[u8], cursor: &mut usize) -> Result<RedstonePackage> {
+/// Searches for and extracts only the data point matching target_feed_id.
+fn parse_data_package(
+    payload: &[u8],
+    cursor: &mut usize,
+    target_feed_id: &[u8; 32],
+) -> Result<RedstonePackage> {
     // Signature (65 bytes)
     *cursor = cursor
         .checked_sub(SIGNATURE_SIZE)
@@ -172,9 +177,8 @@ fn parse_data_package(payload: &[u8], cursor: &mut usize) -> Result<RedstonePack
 
     let signable_start = *cursor;
 
-    // Find the data point matching target feed_id
+    // Search for the data point matching target_feed_id
     // Real RedStone packages contain multiple feeds (BTC, ETH, SOL, etc.) under one signature
-    let mut feed_id = [0u8; 32];
     let mut value = 0u128;
     let mut found = false;
 
@@ -197,11 +201,8 @@ fn parse_data_package(payload: &[u8], cursor: &mut usize) -> Result<RedstonePack
             .get(val_start..val_end)
             .ok_or(MeridianError::RedStoneMalformedPayload)?;
 
-        // Check if this is the target feed_id (will be verified in post_redstone_price)
-        // For now, just take the first valid point; caller validates feed_id match
-        if !found {
-            feed_id.copy_from_slice(fid);
-
+        // Check if this is the target feed_id
+        if fid == target_feed_id && !found {
             // RedStone u256: validate high 16 bytes are zero (fail-closed per domain.md: stored as u128)
             if val[0..16].iter().any(|&b| b != 0) {
                 return Err(MeridianError::RedStoneMalformedPayload.into());
@@ -217,11 +218,14 @@ fn parse_data_package(payload: &[u8], cursor: &mut usize) -> Result<RedstonePack
         dp_cursor = val_end;
     }
 
+    // Require matching data point found
+    require!(found, MeridianError::RedStoneFeedIdMismatch);
+
     // Signable bytes for THIS package only (independent signing)
     let signable_bytes = payload[signable_start..signable_end].to_vec();
 
     Ok(RedstonePackage {
-        feed_id,
+        feed_id: *target_feed_id,
         value,
         timestamp_ms,
         signature,

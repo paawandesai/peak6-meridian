@@ -19,8 +19,12 @@ fn native_verify_single_signer() {
         .add_signer(signer)
         .build();
 
+    // Compute feed_id for NVDA (symbol padded to 32 bytes)
+    let mut feed_id = [0u8; 32];
+    feed_id[0..4].copy_from_slice(b"NVDA");
+
     // Parse the payload using the program's parser
-    let packages = parse_payload(&payload).expect("parse failed");
+    let packages = parse_payload(&payload, &feed_id).expect("parse failed");
     assert_eq!(packages.len(), 1, "Expected 1 package");
 
     // Print same diagnostic info as BPF logs
@@ -70,8 +74,12 @@ fn native_verify_three_of_five_signers() {
     }
     let payload = builder.build();
 
+    // Compute feed_id for NVDA (symbol padded to 32 bytes)
+    let mut feed_id = [0u8; 32];
+    feed_id[0..4].copy_from_slice(b"NVDA");
+
     // Parse - official RedStone format: each signer creates a separate package
-    let packages = parse_payload(&payload).expect("parse failed");
+    let packages = parse_payload(&payload, &feed_id).expect("parse failed");
     assert_eq!(packages.len(), 3, "Expected 3 packages (one per signer)");
 
     // Verify all 3 signatures

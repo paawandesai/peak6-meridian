@@ -801,21 +801,21 @@ fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
 
     let mut harness = setup_with_signers(addresses);
 
-    // Create market for window validation
+    // Market already created by setup_with_signers with these args
     let ticker = symbol("NVDA");
     let close_ts = 1700000000i64; // Unix seconds
     let close_ts_ms = close_ts * 1000;
 
-    // Set time before close_ts so market creation succeeds
-    harness.harness.set_unix_timestamp(close_ts - 3600); // 1 hour before close
-
-    let args = MarketArgs {
-        ticker,
-        strike_cents: 200_000,
-        trading_date: BASE_TRADING_DATE,
-        close_ts,
-    };
-    let addresses_market = harness.create_market(&args);
+    // Compute market PDA (setup_with_signers already created it)
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &ticker,
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
 
     let payer = Keypair::new();
     harness
@@ -846,7 +846,7 @@ fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: addresses_market.market,
+        market: market_pda,
     };
 
     let instruction = Instruction {

@@ -52,32 +52,27 @@ pub fn handle_post_redstone_price(
 ) -> Result<()> {
     use crate::redstone::{compute_median, parse_payload, verify_signature};
 
-    // Parse RedStone payload
-    let packages = parse_payload(&payload)?;
+    // AB-04: Compute canonical feed_id for this symbol.
+    // Canonical feed_id: symbol bytes right-padded with zeros to 32 bytes.
+    let canonical_feed_id = symbol_to_feed_id(&symbol);
+
+    // Parse RedStone payload, extracting only data points matching canonical_feed_id
+    let packages = parse_payload(&payload, &canonical_feed_id)?;
 
     let oracle_config = &ctx.accounts.oracle_config;
     let clock = Clock::get()?;
 
-    // All packages must have same timestamp and feed_id
+    // All packages must have same timestamp (feed_id already validated by parser)
     let expected_timestamp = packages[0].timestamp_ms;
-    let expected_feed_id = packages[0].feed_id;
-
-    // AB-04: Validate feed_id matches the canonical feed_id for this symbol.
-    // Canonical feed_id: symbol bytes right-padded with zeros to 32 bytes.
-    let canonical_feed_id = symbol_to_feed_id(&symbol);
-    require!(
-        expected_feed_id == canonical_feed_id,
-        MeridianError::RedStoneFeedIdMismatch
-    );
 
     // Verify signatures and collect valid signers
     let mut valid_values = Vec::new();
     let mut seen_signers = std::collections::HashSet::new();
 
     for package in &packages {
-        // Verify same timestamp and feed_id across all packages
+        // Verify same timestamp across all packages (feed_id already validated by parser)
         require!(
-            package.timestamp_ms == expected_timestamp && package.feed_id == expected_feed_id,
+            package.timestamp_ms == expected_timestamp,
             MeridianError::RedStoneMalformedPayload
         );
 
