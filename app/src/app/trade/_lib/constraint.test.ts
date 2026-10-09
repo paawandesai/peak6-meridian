@@ -41,8 +41,8 @@ describe("gateFor (US-07)", () => {
     expect(gateFor("BUY_NO", { ...none, no: 5n }).blocked).toBe(false);
   });
 
-  it("explains a resting limit Buy NO (YES escrowed, NO not yet held) instead of offering an exit", () => {
-    expect(gateFor("BUY_YES", { yes: 0n, no: 0n, hasRestingAsk: true })).toEqual({
+  it("explains a resting limit Buy NO (YES escrowed, NO held) instead of offering an exit", () => {
+    expect(gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: true })).toEqual({
       blocked: true,
       kind: "resting-buy-no",
       text: RESTING_BUY_NO_TEXT,
@@ -55,9 +55,8 @@ describe("gateFor (US-07)", () => {
     );
   });
 
-  it("treats a YES Ask while holding NO as Sell YES, not the Buy-NO exception", () => {
-    // If you hold NO and have a YES Ask, the Ask must be from Sell YES (Buy NO would be blocked by the constraint).
-    // The UI now sets hasRestingAsk=false in this case, so this behaves as normal hold-NO.
+  it("does not apply the Buy-NO exception when holding NO without a resting Ask", () => {
+    // Holding NO without a resting Ask triggers normal hold-NO constraint.
     expect(gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: false })).toEqual({
       blocked: true,
       kind: "hold-no",
