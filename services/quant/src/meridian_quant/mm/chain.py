@@ -582,3 +582,23 @@ class ChainOrderClient:
         except Exception:
             # ATA doesn't exist yet
             return 0
+
+    async def get_no_token_balance(self, market: str, owner: str) -> int:
+        """Get NO token balance for owner in market.
+
+        Returns NO token balance (u64) from getTokenAccountBalance.
+        Returns 0 if ATA doesn't exist.
+        """
+        ticker, trading_date, strike_cents = self._parse_market_key(market)
+        market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+        owner_pubkey = Pubkey.from_string(owner)
+        no_mint = derive_no_mint_pda(self.program_id, market_pda)
+        user_no = get_associated_token_address(no_mint, owner_pubkey)
+
+        try:
+            response = await self.rpc.get_token_account_balance(user_no)
+            if response.value is None:
+                return 0
+            return int(response.value.amount)
+        except Exception:
+            return 0

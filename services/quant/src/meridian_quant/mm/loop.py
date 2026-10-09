@@ -200,29 +200,41 @@ class MarketMakerLoop:
                 strike_cents=market.strike_cents,
             )
 
-            # Read actual YES token balance from wallet (net of resting asks)
+            # Read YES and NO balances to compute signed position
             try:
                 yes_balance = await self._order_client.get_yes_token_balance(
                     market=market.market, owner=self._mm_owner
                 )
-                # Sync wallet balance into InventoryTracker (overwrites in-memory value)
-                self.inventory.set(market_key, yes_balance)
+                no_balance = await self._order_client.get_no_token_balance(
+                    market=market.market, owner=self._mm_owner
+                )
+                # Signed position = YES - NO (can be negative)
+                signed_position = yes_balance - no_balance
+                self.inventory.set(market_key, signed_position)
             except Exception:
-                logger.exception(f"Failed to read YES balance for {market.market}")
+                logger.exception(f"Failed to read token balances for {market.market}")
                 continue
 
-            # Only mint if we don't have enough for this iteration's ask
-            # Don't top up to a fixed target - let inventory accumulate from bid fills
+            # Mint only if we need YES for asks AND position isn't at cap
+            # Don't replenish sold inventory - let position move with fills
             if yes_balance < self.config.size_per_side:
+                # Check if we're at the inventory cap
+                if abs(signed_position) >= self.config.max_inventory:
+                    logger.debug(
+                        f"At inventory cap for {market.market}, "
+                        f"position={signed_position}, skipping mint"
+                    )
+                    continue
+
+                # Mint only what we need (minting pairs doesn't change position)
                 mint_qty = self.config.size_per_side - yes_balance
                 try:
                     await self._order_client.mint_pair(
                         market=market.market, qty=mint_qty, owner=self._mm_owner
                     )
-                    # Inventory will be re-synced from wallet on next loop iteration
                     logger.debug(
                         f"Minted {mint_qty} pairs for {market.market} "
-                        f"(wallet: {yes_balance}, need: {self.config.size_per_side})"
+                        f"(YES: {yes_balance}, NO: {no_balance}, position: {signed_position})"
                     )
                 except Exception:
                     logger.exception(f"Failed to mint pairs for {market.market}")

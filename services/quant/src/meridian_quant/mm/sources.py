@@ -47,3 +47,7 @@ class OrderClient(Protocol):
     async def get_yes_token_balance(self, market: str, owner: str) -> int:
         """Get YES token balance for owner in market."""
         ...
+
+    async def get_no_token_balance(self, market: str, owner: str) -> int:
+        """Get NO token balance for owner in market."""
+        ...

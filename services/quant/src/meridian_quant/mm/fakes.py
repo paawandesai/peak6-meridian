@@ -32,8 +32,9 @@ class FakeOrderClient:
         # market -> list of orders
         self._orders: dict[str, list[RestingOrder]] = defaultdict(list)
         self._next_order_id = 1
-        # (market, owner) -> YES token balance
+        # (market, owner) -> YES/NO token balances
         self._yes_balances: dict[tuple[str, str], int] = defaultdict(int)
+        self._no_balances: dict[tuple[str, str], int] = defaultdict(int)
 
     async def place_order(self, market: str, side: str, price: int, qty: int, owner: str) -> int:
         """Place an order and return its ID."""
@@ -66,9 +67,10 @@ class FakeOrderClient:
         return self._orders[market].copy()
 
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
-        """Mint a YES+NO pair - increases YES balance."""
+        """Mint a YES+NO pair - increases both YES and NO balances."""
         key = (market, owner)
         self._yes_balances[key] = self._yes_balances[key] + qty
+        self._no_balances[key] = self._no_balances[key] + qty
 
     async def settle_funds(self, market: str, owner: str) -> None:
         """Settle funds to withdraw fill proceeds (no-op in fake)."""
@@ -78,9 +80,17 @@ class FakeOrderClient:
         """Get YES token balance for owner in market."""
         return self._yes_balances[(market, owner)]
 
+    async def get_no_token_balance(self, market: str, owner: str) -> int:
+        """Get NO token balance for owner in market."""
+        return self._no_balances[(market, owner)]
+
     def set_yes_balance(self, market: str, owner: str, balance: int) -> None:
         """Set YES balance (test helper)."""
         self._yes_balances[(market, owner)] = balance
+
+    def set_no_balance(self, market: str, owner: str, balance: int) -> None:
+        """Set NO balance (test helper)."""
+        self._no_balances[(market, owner)] = balance
 
     def count_orders_by_owner(self, market: str, owner: str) -> int:
         """Count orders by owner for a market (test helper)."""
