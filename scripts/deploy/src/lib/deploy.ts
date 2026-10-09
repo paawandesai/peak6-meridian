@@ -516,7 +516,30 @@ async function deploy(
     log(`set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`);
   }
 
-  const finalRecord = buildRecord(cluster, ctx, mint, config, upgradeAuthority, oracleConfig);
+  // Fetch on-chain oracle config to preserve in record, even if --oracle-config not passed this run
+  let oracleConfigForRecord = oracleConfig;
+  if (oracleConfigForRecord === undefined) {
+    try {
+      const oracleConfigPda = PublicKey.findProgramAddressSync(
+        [Buffer.from("oracle_config")],
+        ctx.programId,
+      )[0];
+      const onChainOracleConfig = await program.account.oracleConfig.fetch(oracleConfigPda);
+      // Convert on-chain format to OracleConfigParams
+      oracleConfigForRecord = {
+        signers: onChainOracleConfig.signers.map((signerBytes: number[]) => {
+          const hex = Buffer.from(signerBytes).toString("hex");
+          return `0x${hex}`;
+        }),
+        signerThreshold: onChainOracleConfig.signerThreshold,
+        maxPackageDelaySecs: onChainOracleConfig.maxPackageDelaySecs.toNumber(),
+      };
+    } catch {
+      // OracleConfig not set yet, that's fine
+    }
+  }
+
+  const finalRecord = buildRecord(cluster, ctx, mint, config, upgradeAuthority, oracleConfigForRecord);
   const written = writeRecord(options.outPath, finalRecord);
   log(`${written ? "wrote" : "unchanged:"} ${options.outPath}`);
   return { actions: ctx.actions, record: finalRecord };
