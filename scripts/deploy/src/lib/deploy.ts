@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { assertCluster, findConfigPda, redactRpcUrl } from "@meridian/client";
-import { Connection, Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { computeFeedHash, loadFeedDefinitions } from "switchboard-scripts";
 
 import { assertNoLocalOracle, sha256Hex } from "./artifacts";
@@ -487,7 +487,11 @@ async function deploy(
       return Array.from(bytes);
     });
     await program.methods
-      .setOracleConfig(signers, oracleConfig.signerThreshold, oracleConfig.maxPackageDelaySecs)
+      .setOracleConfig({
+        signers,
+        signerThreshold: oracleConfig.signerThreshold,
+        maxPackageDelaySecs: oracleConfig.maxPackageDelaySecs,
+      })
       .accounts({ admin: admin.publicKey })
       .rpc({ commitment: "confirmed" });
     ctx.actions.push("set-oracle-config");
