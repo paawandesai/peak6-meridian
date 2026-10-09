@@ -109,3 +109,25 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 | ID | Severity | Status | Ticket |
 |---|---|---|---|
 | _none_ | | | M1-01 AB-16/17/22; M1-02 LiteSVM audit ignores accepted (D-047 / OQ-10); M1-03 AB-09/10; M1-11 AB-14/15/20 — no open findings |
+
+## Final Summary (M4-06)
+
+_To be completed when M4-01/02/03/05 merge._
+
+**Deliverables:**
+- **Program ID:** `[TBD - from M4-01/deployed program]`
+- **App URL:** `[TBD - from M4-03 deployment]`
+- **Demo video:** `[TBD - from M4-05]`
+- **Version tag:** `v1.0.0-devnet-submission` (pushed when all M4 deps merged)
+
+**Exit criteria status:**
+- [ ] M1: Core lifecycle local - `[status TBD]`
+- [ ] M2: Devnet deployment - `[status TBD]`
+- [ ] M3: Automation services - `[status TBD]`
+- [ ] M4: Polish and docs - `[status TBD - see M4 ticket completion]`
+
+**Known limitations:**
+- `[TBD - consolidate from docs/risks.md when M4-02 merges]`
+
+**Outstanding work:**
+- `[TBD - from TODO/FIXME sweep and final test run]`
