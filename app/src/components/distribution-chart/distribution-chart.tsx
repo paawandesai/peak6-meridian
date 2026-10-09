@@ -37,9 +37,10 @@ export function DistributionChart({
     market: point.yesCents,
     fair: point.fairCents,
   }));
+  const titleId = `dist-title-${ticker}`;
   return (
-    <figure className="grid gap-mer-3" aria-labelledby="dist-title">
-      <figcaption id="dist-title" className="text-mer-lg font-semibold">
+    <figure className="grid gap-mer-3" aria-labelledby={titleId}>
+      <figcaption id={titleId} className="text-mer-lg font-semibold">
         Implied distribution: {ticker}
       </figcaption>
       <p className="text-mer-sm text-mer-ink-muted">
