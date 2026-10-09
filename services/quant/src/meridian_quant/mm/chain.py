@@ -545,3 +545,25 @@ class ChainOrderClient:
 
         sig = await self.rpc.send_transaction(transaction)
         await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
+
+    async def get_yes_token_balance(self, market: str, owner: str) -> int:
+        """Get YES token balance for owner in market.
+
+        Returns YES token balance (u64) from getTokenAccountBalance.
+        Returns 0 if ATA doesn't exist.
+        """
+        ticker, trading_date, strike_cents = self._parse_market_key(market)
+        market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
+        owner_pubkey = Pubkey.from_string(owner)
+        yes_mint = derive_yes_mint_pda(self.program_id, market_pda)
+        user_yes = get_associated_token_address(yes_mint, owner_pubkey)
+
+        try:
+            response = await self.rpc.get_token_account_balance(user_yes)
+            if response.value is None:
+                return 0
+            # response.value.amount is a string, convert to int
+            return int(response.value.amount)
+        except Exception:
+            # ATA doesn't exist yet
+            return 0

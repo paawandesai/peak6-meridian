@@ -43,3 +43,7 @@ class OrderClient(Protocol):
     async def settle_funds(self, market: str, owner: str) -> None:
         """Settle funds to withdraw fill proceeds."""
         ...
+
+    async def get_yes_token_balance(self, market: str, owner: str) -> int:
+        """Get YES token balance for owner in market."""
+        ...

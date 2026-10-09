@@ -181,13 +181,12 @@ class MarketMakerLoop:
             return []
 
     async def _sync_inventory(self, markets: list[MarketState]) -> None:
-        """Sync inventory from on-chain positions (AC1: mint inventory via mint_pair).
+        """Sync inventory from on-chain YES token balances (AC1/AC2).
 
-        Reads YES token balances, updates InventoryTracker, and mints pairs only
-        when inventory is low. Prevents USDC drain by not minting every loop.
+        Reads wallet YES token balance via getTokenAccountBalance, syncs to
+        InventoryTracker, then mints pairs if inventory is low. This ensures
+        skew reflects actual fills and the 200-lot cap binds correctly.
         """
-        # For each market, check if we need to mint more inventory
-        # Only mint if current inventory < size_per_side
         for market in markets:
             if not market.is_open:
                 continue
@@ -198,25 +197,30 @@ class MarketMakerLoop:
                 strike_cents=market.strike_cents,
             )
 
-            # Get current inventory position (YES tokens)
-            # In production: read YES token account balance via getTokenAccountBalance
-            # For now: use tracked inventory (updated on order fills)
-            current_position = self.inventory.get(market_key).position
+            # Read actual YES token balance from wallet (net of resting asks)
+            try:
+                yes_balance = await self._order_client.get_yes_token_balance(
+                    market=market.market, owner=self._mm_owner
+                )
+                # Sync wallet balance into InventoryTracker (overwrites in-memory value)
+                self.inventory.set(market_key, yes_balance)
+            except Exception:
+                logger.exception(f"Failed to read YES balance for {market.market}")
+                continue
 
             # Only mint if we need more inventory for asks
             # Mint enough to have at least 2x quote size in inventory
             target_inventory = 2 * self.config.size_per_side
-            if current_position < target_inventory:
-                mint_qty = target_inventory - current_position
+            if yes_balance < target_inventory:
+                mint_qty = target_inventory - yes_balance
                 try:
                     await self._order_client.mint_pair(
                         market=market.market, qty=mint_qty, owner=self._mm_owner
                     )
-                    # Update inventory tracker with minted amount
-                    self.inventory.update(market_key, mint_qty)
+                    # Inventory will be re-synced from wallet on next loop iteration
                     logger.debug(
                         f"Minted {mint_qty} pairs for {market.market} "
-                        f"(position: {current_position} -> {current_position + mint_qty})"
+                        f"(wallet: {yes_balance} -> target: {target_inventory})"
                     )
                 except Exception:
                     logger.exception(f"Failed to mint pairs for {market.market}")
