@@ -498,10 +498,11 @@ class ChainOrderClient:
             sig = await self.rpc.send_transaction(tx)
             await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
 
+        # IDL: user is signer but not writable
         accounts = [
             AccountMeta(pubkey=config, is_signer=False, is_writable=False),
             AccountMeta(pubkey=market_pda, is_signer=False, is_writable=True),
-            AccountMeta(pubkey=owner_pubkey, is_signer=True, is_writable=True),
+            AccountMeta(pubkey=owner_pubkey, is_signer=True, is_writable=False),
             AccountMeta(pubkey=user_usdc, is_signer=False, is_writable=True),
             AccountMeta(pubkey=user_yes, is_signer=False, is_writable=True),
             AccountMeta(pubkey=user_no, is_signer=False, is_writable=True),

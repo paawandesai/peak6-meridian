@@ -14,7 +14,7 @@ from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from solders.signature import Signature
 
-from meridian_quant.mm.chain import TOKEN_PROGRAM_ID, ChainOrderClient
+from meridian_quant.mm.chain import TOKEN_PROGRAM_ID, ChainOrderClient, derive_market_pda
 
 
 class InstructionCapture:
@@ -231,3 +231,21 @@ async def test_settle_funds_builds_correct_instruction_accounts() -> None:
     assert not accounts[6].is_signer and accounts[6].is_writable  # owner_yes
     assert not accounts[7].is_signer and not accounts[7].is_writable  # token_program
     assert accounts[7].pubkey == TOKEN_PROGRAM_ID
+
+
+def test_known_pda_meta_market() -> None:
+    """Verify derive_market_pda matches published fixture from pda.test.ts.
+
+    Fixture: META/20261006/68000 with program 3Rovid...HDZq
+    Expected: BGd5Y6qA5uT2zzgUzsZ3Mmw8m3Y8vJJLRWEybtDuU8im
+    """
+    # Program ID from packages/client/src/idl/meridian.json
+    program_id = Pubkey.from_string("3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq")
+
+    # Fixture from packages/client/src/pda.test.ts
+    market_pda = derive_market_pda(program_id, "META", 20261006, 68000)
+
+    # Expected address from pda.test.ts EXPECTED.market
+    expected = Pubkey.from_string("BGd5Y6qA5uT2zzgUzsZ3Mmw8m3Y8vJJLRWEybtDuU8im")
+
+    assert market_pda == expected, f"Expected {expected}, got {market_pda}"
