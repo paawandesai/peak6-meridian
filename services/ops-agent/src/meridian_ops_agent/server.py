@@ -64,6 +64,10 @@ class OpsApp:
     def handle(self, method: str, path: str, headers: Mapping[str, str], body: bytes) -> Response:
         if not self._authorized(headers.get("Authorization", "")):
             return 401, {"error": "missing or invalid bearer token"}
+        if path == "/health":
+            if method != "GET":
+                return 405, {"error": "use GET"}
+            return 200, {"status": "healthy"}
         if path == "/incidents":
             return self._post_incident(body) if method == "POST" else (405, {"error": "use POST"})
         if path == "/drafts":

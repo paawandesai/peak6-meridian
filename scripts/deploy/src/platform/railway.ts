@@ -28,6 +28,9 @@ export type RailwayOptions = {
   readonly repoRoot: string;
   readonly healthAttempts?: number;
   readonly healthIntervalMs?: number;
+  readonly configFile?: string;
+  readonly envSpec?: import("./platform").EnvSpec;
+  readonly healthPath?: string;
 };
 
 export type RailwayRun = (
@@ -45,7 +48,7 @@ const edges = (value: unknown): Json[] => {
 };
 
 export function planRailway(options: RailwayOptions): CollectedEnv {
-  return collectEnv(AUTOMATION_ENV, options.env);
+  return collectEnv(options.envSpec ?? AUTOMATION_ENV, options.env);
 }
 
 type Gql = (label: string, query: string, variables: Json) => Promise<Json>;
@@ -177,18 +180,19 @@ export async function checkHealth(
   serviceToken: string,
   attempts: number,
   intervalMs: number,
+  healthPath: string = "/health",
 ): Promise<void> {
   let lastStatus = 0;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await deps.fetch(`${url}/health`, {
+      const response = await deps.fetch(`${url}${healthPath}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${serviceToken}` },
         signal: AbortSignal.timeout(30_000),
       });
       lastStatus = response.status;
       if (response.status === 200) {
-        deps.log(`railway: ${url}/health reachable with bearer (200)`);
+        deps.log(`railway: ${url}${healthPath} reachable with bearer (200)`);
         return;
       }
     } catch {
@@ -197,7 +201,7 @@ export async function checkHealth(
     if (attempt < attempts) await deps.sleep(intervalMs);
   }
   throw new Error(
-    `railway: ${url}/health not healthy after ${attempts} attempts (last status ${lastStatus})`,
+    `railway: ${url}${healthPath} not healthy after ${attempts} attempts (last status ${lastStatus})`,
   );
 }
 
@@ -227,12 +231,13 @@ export async function deployRailway(
   deps.log(
     `railway: set ${Object.keys(collected.values).length} variables: ${Object.keys(collected.values).join(", ")}`,
   );
+  const configFile = options.configFile ?? CONFIG_FILE;
   await gql(
     "serviceInstanceUpdate",
     `mutation($serviceId: String!, $environmentId: String!, $input: ServiceInstanceUpdateInput!) {
        serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input)
      }`,
-    { serviceId, environmentId: target.environmentId, input: { railwayConfigFile: CONFIG_FILE } },
+    { serviceId, environmentId: target.environmentId, input: { railwayConfigFile: configFile } },
   );
   const domain = await ensureDomain(gql, target, serviceId);
 
@@ -267,6 +272,7 @@ export async function deployRailway(
     collected.values.SERVICE_TOKEN ?? "",
     options.healthAttempts ?? 3,
     options.healthIntervalMs ?? 120_000,
+    options.healthPath ?? "/health",
   );
   return { url };
 }

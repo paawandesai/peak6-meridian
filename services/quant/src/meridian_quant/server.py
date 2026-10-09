@@ -116,6 +116,12 @@ def handle_request(
     service: Service, method: str, path: str, authorization: str | None
 ) -> tuple[int, bytes]:
     """Returns (status, JSON body)."""
+    if path == "/health":
+        if method != "GET":
+            return 405, b'{"error":"method not allowed"}'
+        if not _authorized(authorization, service.token):
+            return 401, b'{"error":"unauthorized"}'
+        return 200, b'{"status":"healthy"}'
     if path != "/fair-values":
         return 404, b'{"error":"not found"}'
     if method != "GET":
@@ -142,3 +148,44 @@ def make_server(service: Service, host: str, port: int) -> ThreadingHTTPServer:
             return  # no access log: request lines and headers can carry secrets
 
     return ThreadingHTTPServer((host, port), Handler)
+
+
+def health() -> dict[str, str]:
+    """Helper for tests; the HTTP route is GET /health with SERVICE_TOKEN bearer."""
+    return {"status": "healthy"}
+
+
+if __name__ == "__main__":
+    import os
+    import sys
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+    from meridian_quant.prices import LiveSources
+
+    token = os.getenv("SERVICE_TOKEN", "")
+    if not token:
+        log.error("SERVICE_TOKEN environment variable must be set")
+        sys.exit(1)
+
+    sources = LiveSources(
+        rpc_url=os.getenv("SOLANA_RPC_URL", ""),
+        program_id=os.getenv("MERIDIAN_PROGRAM_ID", ""),
+        tiingo_key=os.getenv("TIINGO_API_KEY", ""),
+        twelvedata_key=os.getenv("TWELVEDATA_API_KEY", ""),
+        finnhub_key=os.getenv("FINNHUB_API_KEY", ""),
+    )
+    service = Service(sources=sources, token=token)
+
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8080"))
+
+    server = make_server(service, host, port)
+    log.info(f"Starting quant server on {host}:{port}")
+    log.info("Routes: GET /health, GET /fair-values (both require SERVICE_TOKEN bearer)")
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        log.info("Shutting down")
+        server.shutdown()
