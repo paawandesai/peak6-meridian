@@ -29,6 +29,7 @@ Initial devnet submission for Gauntlet evaluation.
 ### Milestone 2 - Devnet Deployment
 
 - !29 M2-01: Devnet deploy script (program, test-USDC mint, config)
+- !45 M2-01: Live rekey and deployment updates
 - !35 M2-02: Switchboard feeds live on devnet and pinned in config
 - !26 M2-03: Automation morning job (scheduler, idempotent, alerts, health)
 - !27 M2-04: Automation settlement job
@@ -40,8 +41,19 @@ Initial devnet submission for Gauntlet evaluation.
 
 ### Milestone 3 - Production Readiness
 
+- !47 M3-01: Fair value service (quant, Black-Scholes, liveness)
 - !48 M3-04: /status page (invariants and liveness)
+- !52 M3-05: Ops-agent live integration and monitoring
 - !54 M3-06: Admin override review and approval
+
+### Milestone 4 - Final Polish
+
+- !68 M4-02: Risk assessment documentation
+- !69 M4-03: Architecture and requirements documentation updates
+
+### Code Quality
+
+- **TODO/FIXME sweep**: Zero TODO or FIXME comments found in codebase (verified 2026-10-09)
 
 ### UI Improvements
 
