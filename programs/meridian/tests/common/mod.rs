@@ -13,6 +13,7 @@
 )]
 
 pub mod orders;
+pub mod redstone;
 
 use std::path::PathBuf;
 
