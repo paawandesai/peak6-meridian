@@ -2,32 +2,32 @@
 
 from collections import defaultdict
 
-from .types import Inventory
+from .types import Inventory, MarketKey
 
 
 class InventoryTracker:
-    """Track inventory per strike."""
+    """Track inventory per market (ticker + trading_date + strike)."""
 
     def __init__(self) -> None:
-        self._positions: dict[int, int] = defaultdict(int)
+        self._positions: dict[MarketKey, int] = defaultdict(int)
 
-    def get(self, strike_cents: int) -> Inventory:
-        """Get inventory for a strike."""
-        return Inventory(strike_cents=strike_cents, position=self._positions[strike_cents])
+    def get(self, market_key: MarketKey) -> Inventory:
+        """Get inventory for a market."""
+        return Inventory(market_key=market_key, position=self._positions[market_key])
 
-    def update(self, strike_cents: int, delta: int) -> None:
-        """Update inventory for a strike (delta = signed change in YES contracts)."""
-        self._positions[strike_cents] += delta
+    def update(self, market_key: MarketKey, delta: int) -> None:
+        """Update inventory for a market (delta = signed change in YES contracts)."""
+        self._positions[market_key] += delta
 
-    def set(self, strike_cents: int, position: int) -> None:
-        """Set absolute position for a strike."""
-        self._positions[strike_cents] = position
+    def set(self, market_key: MarketKey, position: int) -> None:
+        """Set absolute position for a market."""
+        self._positions[market_key] = position
 
-    def within_limits(self, strike_cents: int, max_inventory: int) -> bool:
+    def within_limits(self, market_key: MarketKey, max_inventory: int) -> bool:
         """Check if current inventory is within limits."""
-        return abs(self._positions[strike_cents]) <= max_inventory
+        return abs(self._positions[market_key]) <= max_inventory
 
-    def can_add(self, strike_cents: int, delta: int, max_inventory: int) -> bool:
+    def can_add(self, market_key: MarketKey, delta: int, max_inventory: int) -> bool:
         """Check if adding delta to inventory would stay within limits."""
-        new_position = self._positions[strike_cents] + delta
+        new_position = self._positions[market_key] + delta
         return abs(new_position) <= max_inventory
