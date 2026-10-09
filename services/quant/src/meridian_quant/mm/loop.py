@@ -304,20 +304,11 @@ class MarketMakerLoop:
                 orders_per_market[market.market] = 0
 
         for fv in fair_values:
-            # Match FV to market: exact market ID match, or ticker+strike+trading_date match.
-            # ChainMarketSource uses TICKER_YYYYMMDD_STRIKE format; M3-01 may use opaque IDs.
+            # Match FV to market by exact market ID (both use TICKER_YYYYMMDD_STRIKE).
             # Prior-day FVs must not match today's markets (0DTE reuses ticker+strike across days).
+            # Exact match ensures trading_date matches.
             fv_market: MarketState | None = next(
-                (
-                    m
-                    for m in today_markets
-                    if m.market == fv.market  # Exact market ID match
-                    or (
-                        m.ticker == fv.ticker
-                        and m.strike_cents == fv.strike_cents
-                        and str(m.trading_date) in fv.market  # Date must be in FV market ID
-                    )
-                ),
+                (m for m in today_markets if m.market == fv.market),
                 None,
             )
             if not fv_market:
