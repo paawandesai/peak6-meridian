@@ -96,18 +96,19 @@ export interface PythClientConfig {
  * Pyth Pro (Lazer) API client.
  */
 export class PythClient {
-  private readonly apiToken: string;
+  // Use # private field (runtime private, not enumerable) to prevent token leakage
+  readonly #apiToken: string;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
 
   constructor(config: PythClientConfig) {
-    this.apiToken = config.apiToken;
+    this.#apiToken = config.apiToken;
     this.baseUrl =
       config.baseUrl ?? "https://api.lazer.pyth.network"; // Placeholder URL
     this.timeoutMs = config.timeoutMs ?? 5000;
 
     // Never log the API token (AB-17, AC3)
-    if (this.apiToken.length === 0) {
+    if (this.#apiToken.length === 0) {
       throw new Error("PYTH_API_TOKEN is required");
     }
   }
@@ -165,7 +166,7 @@ export class PythClient {
     try {
       // TODO: Implement health check endpoint call
       // For now, just check that token exists
-      return this.apiToken.length > 0;
+      return this.#apiToken.length > 0;
     } catch {
       return false;
     }
