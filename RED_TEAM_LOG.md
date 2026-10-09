@@ -2,11 +2,22 @@
 
 **Date:** 2026-10-09  
 **Build:** Final build against origin/main (merged)  
-**Test tool:** `make test-security` (executes Rust program tests, TS tests via vitest, Python tests via pytest)
+**Test tool:** `E2E_REQUIRE_VALIDATOR=1 E2E_PREBUILT=1 make e2e` (validator e2e) + `make test-security` (comprehensive test suite)
 
 ## Methodology
 
-Executed all AB-01 through AB-22 abuse-case tests against the codebase using `make test-security`. Each AB is tested via dedicated test files in `tests/security/{program,ts,py}/`. Tests run against LiteSVM (program tests), Node.js runtime (TS tests), and Python runtime (Python tests).
+Red-team verification performed via two complementary approaches:
+
+1. **Validator E2E Testing** (`E2E_REQUIRE_VALIDATOR=1 E2E_PREBUILT=1 make e2e`):
+   - Runs full lifecycle test (27 steps) against local solana-test-validator
+   - Executes on-chain AB security tests (AB-03/04/05 vitest files) against actual validator
+   - Demonstrates program deployment, market creation, trading, settlement on live validator
+   - Full transcript: [`VALIDATOR_AB_TEST_LOG.txt`](./VALIDATOR_AB_TEST_LOG.txt) (165s run, 103 lines)
+
+2. **Regression Test Suite** (`make test-security`):
+   - Program ABs (01-13, 22): LiteSVM tests (program logic identical to validator)
+   - Off-chain ABs (14-21): pytest/vitest service tests
+   - See [`AB_TESTING_RESULTS.md`](./AB_TESTING_RESULTS.md) for comprehensive coverage summary
 
 ## AB-01 through AB-22: Test Results
 
