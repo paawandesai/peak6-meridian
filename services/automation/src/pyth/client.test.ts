@@ -118,7 +118,7 @@ describe("PythClient", () => {
 
   describe("security (AC3, AB-17)", () => {
     it("does not log API token in error messages", () => {
-      const sensitiveToken = "sk-pyth-secret-12345";
+      const sensitiveToken = "test-pyth-token-fixture";
       const client = new PythClient({ apiToken: sensitiveToken });
 
       // Verify that the client exists but the token isn't exposed
