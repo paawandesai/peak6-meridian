@@ -18,6 +18,8 @@ import pytest
 from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
+from spl.token.async_client import AsyncToken
+from spl.token.constants import TOKEN_PROGRAM_ID
 
 from meridian_quant.mm.chain import ChainMarketSource, ChainOrderClient
 from meridian_quant.mm.config import MMConfig
@@ -158,6 +160,21 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
         mm_keypair = Keypair()
         airdrop_sig = await rpc_client.request_airdrop(mm_keypair.pubkey(), 5_000_000_000)
         await rpc_client.confirm_transaction(airdrop_sig.value)
+
+        # Create and fund USDC ATA for MM (required for mint_pair/place_order)
+        usdc_token = AsyncToken(rpc_client, usdc_mint, TOKEN_PROGRAM_ID, mm_keypair)
+        mm_usdc_ata = await usdc_token.create_associated_token_account(mm_keypair.pubkey())
+
+        # Mint test USDC to MM (need this to mint pairs)
+        # Load payer keypair to mint USDC
+        payer_bytes = json.loads(payer_path.read_text())
+        payer_keypair = Keypair.from_bytes(bytes(payer_bytes))
+        usdc_as_payer = AsyncToken(rpc_client, usdc_mint, TOKEN_PROGRAM_ID, payer_keypair)
+        await usdc_as_payer.mint_to(
+            mm_usdc_ata,
+            payer_keypair,
+            100_000_000_000,  # 100k USDC (6 decimals)
+        )
 
         # Create MM config
         keypair_json = json.dumps(list(bytes(mm_keypair)))

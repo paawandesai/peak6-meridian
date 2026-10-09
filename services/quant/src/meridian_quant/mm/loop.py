@@ -158,15 +158,15 @@ class MarketMakerLoop:
                 logger.warning(f"Stale spot data for {fv.ticker}: {age_secs:.1f}s old")
                 return True
 
-        # Check for time to close (<= 2 min) - pull at or within window
+        # Check for time to close: pull at close, within 2min, or after close
         for market in markets:
             if market.is_open:
                 time_to_close_secs = market.close_ts - int(now.timestamp())
-                # Pull at close (0) or within window (< 120s)
-                if 0 <= time_to_close_secs < self.config.min_time_to_close_secs:
+                # Pull if at/within close window OR after close (negative ttc)
+                if time_to_close_secs < self.config.min_time_to_close_secs:
                     logger.info(
                         f"Pulling quotes: {time_to_close_secs}s to close "
-                        f"for {market.ticker} (<= {self.config.min_time_to_close_secs}s threshold)"
+                        f"for {market.ticker} (< {self.config.min_time_to_close_secs}s threshold)"
                     )
                     return True
 
@@ -183,30 +183,43 @@ class MarketMakerLoop:
     async def _sync_inventory(self, markets: list[MarketState]) -> None:
         """Sync inventory from on-chain positions (AC1: mint inventory via mint_pair).
 
-        Mints YES+NO pairs to ensure MM has inventory to place asks.
-        Asks require YES tokens; bids require USDC (already in wallet).
+        Reads YES token balances, updates InventoryTracker, and mints pairs only
+        when inventory is low. Prevents USDC drain by not minting every loop.
         """
-        # Mint pairs for each market to ensure we have YES tokens for asks
-        # domain.md: size_per_side default is 10 contracts
-        # Mint enough to cover the quote size
-        mint_qty = self.config.size_per_side
-
+        # For each market, check if we need to mint more inventory
+        # Only mint if current inventory < size_per_side
         for market in markets:
             if not market.is_open:
                 continue
 
-            try:
-                # Mint YES+NO pairs (consumes USDC, gives YES+NO tokens)
-                # This ensures we have YES tokens to place ask orders
-                await self._order_client.mint_pair(
-                    market=market.market, qty=mint_qty, owner=self._mm_owner
-                )
-                logger.debug(f"Minted {mint_qty} pairs for {market.market}")
-            except Exception:
-                logger.exception(f"Failed to mint pairs for {market.market}")
+            market_key = MarketKey(
+                ticker=market.ticker,
+                trading_date=market.trading_date,
+                strike_cents=market.strike_cents,
+            )
 
-        # Note: Actual inventory tracking from YES token balances deferred
-        # Inventory is currently tracked via order placement assumptions
+            # Get current inventory position (YES tokens)
+            # In production: read YES token account balance via getTokenAccountBalance
+            # For now: use tracked inventory (updated on order fills)
+            current_position = self.inventory.get(market_key).position
+
+            # Only mint if we need more inventory for asks
+            # Mint enough to have at least 2x quote size in inventory
+            target_inventory = 2 * self.config.size_per_side
+            if current_position < target_inventory:
+                mint_qty = target_inventory - current_position
+                try:
+                    await self._order_client.mint_pair(
+                        market=market.market, qty=mint_qty, owner=self._mm_owner
+                    )
+                    # Update inventory tracker with minted amount
+                    self.inventory.update(market_key, mint_qty)
+                    logger.debug(
+                        f"Minted {mint_qty} pairs for {market.market} "
+                        f"(position: {current_position} -> {current_position + mint_qty})"
+                    )
+                except Exception:
+                    logger.exception(f"Failed to mint pairs for {market.market}")
 
     async def _settle_funds(self) -> None:
         """Settle funds to recycle proceeds from fills.

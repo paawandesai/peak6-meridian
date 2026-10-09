@@ -138,8 +138,9 @@ class ChainMarketSource:
         - pairs_outstanding: u64 (8 bytes, offset ~233)
         """
         try:
-            # Fetch all Market accounts (discriminator filters would go here in production)
-            # For minimal implementation, fetch all program accounts
+            # Fetch all program accounts (filter by Market discriminator in Python)
+            # Market discriminator from IDL: [219, 190, 213, 55, 0, 227, 198, 154]
+            market_discriminator = bytes([219, 190, 213, 55, 0, 227, 198, 154])
             response = await self.rpc.get_program_accounts(
                 self.program_id,
                 encoding="base64",
@@ -153,6 +154,10 @@ class ChainMarketSource:
                     # Skip if too small to be a Market (min size ~250 bytes)
                     min_market_size = 250
                     if len(data) < min_market_size:
+                        continue
+
+                    # Check Market discriminator (filter empty Books / other accounts)
+                    if data[:8] != market_discriminator:
                         continue
 
                     # Deserialize Market (simplified: read key fields only)
@@ -297,8 +302,9 @@ class ChainOrderClient:
         message = Message.new_with_blockhash([instruction], self.payer.pubkey(), recent_blockhash)
         transaction = Transaction([self.payer], message, recent_blockhash)
 
-        # Send transaction
-        await self.rpc.send_transaction(transaction)
+        # Send and confirm transaction
+        sig = await self.rpc.send_transaction(transaction)
+        await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
         # Return a mock order ID (in production, parse from events/logs)
         return 1
 
@@ -334,7 +340,8 @@ class ChainOrderClient:
         message = Message.new_with_blockhash([instruction], self.payer.pubkey(), recent_blockhash)
         transaction = Transaction([self.payer], message, recent_blockhash)
 
-        await self.rpc.send_transaction(transaction)
+        sig = await self.rpc.send_transaction(transaction)
+        await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
 
     async def fetch_resting_orders(self, market: str) -> list[RestingOrder]:
         """Fetch resting orders from book account.
@@ -467,7 +474,8 @@ class ChainOrderClient:
         message = Message.new_with_blockhash([instruction], self.payer.pubkey(), recent_blockhash)
         transaction = Transaction([self.payer], message, recent_blockhash)
 
-        await self.rpc.send_transaction(transaction)
+        sig = await self.rpc.send_transaction(transaction)
+        await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
 
     async def settle_funds(self, market: str, owner: str) -> None:
         """Settle funds via settle_funds instruction (no args)."""
@@ -505,4 +513,5 @@ class ChainOrderClient:
         message = Message.new_with_blockhash([instruction], self.payer.pubkey(), recent_blockhash)
         transaction = Transaction([self.payer], message, recent_blockhash)
 
-        await self.rpc.send_transaction(transaction)
+        sig = await self.rpc.send_transaction(transaction)
+        await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
