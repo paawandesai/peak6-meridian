@@ -23,12 +23,17 @@
 #     dependency no longer means a cold 60–90 min rebuild. Bump CARGO_CACHE_VERSION to reset.
 #
 # Runners and path rules (Paawan 2026-10-08):
-#   - Light MR jobs (guard:human-files, lint:js-py, typecheck, test:js-py) carry the runner tag
-#     $LIGHT_RUNNER_TAG = `meridian-light` in MR pipelines only. That tag is on both Vultr runners
-#     (#291, #235) and on the box runner #296 (shell executor), so they run on whichever is free.
-#     On main the variable is empty and those jobs stay untagged (Vultr #291 only): main pipelines
+#   - Light MR jobs (ci:run, guard:human-files, lint:js-py, typecheck, secrets:gitleaks,
+#     audit:deps, test:js-py) carry the runner tag $LIGHT_RUNNER_TAG = `meridian-light` in MR
+#     pipelines only. That tag is on both Vultr runners (#291, #235) and on the box runner #296
+#     (shell executor), so they run on whichever is free. On main the variable is empty and those
+#     jobs stay untagged (Vultr #291/#235, both run_untagged; never the box): main pipelines
 #     receive the protected CI variables (keypairs, deploy tokens), which must never reach the box.
-#     Nothing that needs a secret, Docker, Rust or the validator gets the tag.
+#     Nothing that needs a secret, Docker, the Solana/Anchor toolchain or the validator gets the tag.
+#   - The box runner ignores `image:`: secrets:gitleaks installs the pinned gitleaks release under
+#     ~/.local/share/gitleaks when it is missing (checksum-verified, no sudo), and audit:deps installs its
+#     tools through scripts/toolchain.sh like on Vultr, holding /tmp/box-heavy.lock on the box
+#     (a cold `cargo install cargo-audit` is a heavy compile).
 #   - MR pipelines run Rust jobs only for Rust/program inputs (.rust-paths), test:js-py only for
 #     app/package inputs (.app-paths), e2e and manual coverage only for code inputs (.e2e-paths).
 #     Main runs every job. Docs-only MRs run only the gate, guard, lint, typecheck, secrets, audit.
@@ -80,7 +85,7 @@ default:
   interruptible: true
   # Warm paths finish in minutes; only `build` (cold cargo cache) gets a long timeout.
   timeout: 30 minutes
-  before_script:
+  before_script: &default-before-script
     - "export CI_JOBS=$(( $(nproc) < CI_MAX_JOBS ? $(nproc) : CI_MAX_JOBS ))"
     - export CARGO_BUILD_JOBS=$CI_JOBS RUST_TEST_THREADS=$CI_JOBS VITEST_FLAGS="--maxWorkers=$CI_JOBS"
     - scripts/ci/link-cache.sh
@@ -240,6 +245,7 @@ default:
 # `timeout 30 glab api -X POST projects/2084/jobs/<job-id>/play`.
 ci:run:
   stage: .pre
+  tags: [$LIGHT_RUNNER_TAG]
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
@@ -310,15 +316,37 @@ typecheck:
 secrets:gitleaks:
   stage: check
   extends: .on-mr-and-main
+  tags: [$LIGHT_RUNNER_TAG]
   image:
     name: zricethezav/gitleaks:v8.30.1
     entrypoint: [""]
   variables:
+    # Keep in sync with the image tag above (used by the box runner's install).
+    GITLEAKS_VERSION: "8.30.1"
     GIT_DEPTH: "0"
     # Fresh clone every run: a reused build dir keeps refs from old pipelines, and
     # `gitleaks git` scans all of them, so rewritten MR commits kept failing the scan.
     GIT_STRATEGY: clone
-  before_script: []
+  # The image ships gitleaks. The box runner (shell executor, no image) has none: it installs the
+  # same pinned release once into a versioned directory under ~/.local/share, verified against the
+  # release checksums, no sudo. POSIX sh (the image is alpine).
+  before_script:
+    - |
+      if ! command -v gitleaks > /dev/null 2>&1; then
+        gl_dir="$HOME/.local/share/gitleaks/$GITLEAKS_VERSION"
+        if [ ! -x "$gl_dir/gitleaks" ]; then
+          echo "installing gitleaks $GITLEAKS_VERSION into $gl_dir"
+          gl_tmp="$(mktemp -d)" && gl_tar="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          gl_url="https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION"
+          curl -sSfL -o "$gl_tmp/$gl_tar" "$gl_url/$gl_tar"
+          curl -sSfL -o "$gl_tmp/sums.txt" "$gl_url/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          (cd "$gl_tmp" && grep "  $gl_tar\$" sums.txt | sha256sum -c -)
+          mkdir -p "$gl_dir" && tar -xzf "$gl_tmp/$gl_tar" -C "$gl_dir" gitleaks
+          rm -rf "$gl_tmp"
+        fi
+        export PATH="$gl_dir:$PATH"
+      fi
+      gitleaks version
   script:
     - scripts/ci/gitleaks-selftest.sh
     - gitleaks git --redact --config .gitleaks.toml .
@@ -327,11 +355,21 @@ secrets:gitleaks:
 audit:deps:
   stage: check
   extends: .on-mr-and-main
+  tags: [$LIGHT_RUNNER_TAG]
   # Cold toolchain cache: `cargo install cargo-audit` alone took ~27 min on this host (OQ-8).
   timeout: 45 minutes
   variables:
     TOOLCHAIN: apt rust cargo-audit node uv
     CACHE_GROUP: audit
+  # On the box runner (/tmp/box-heavy.lock exists only there) the job, including a cold
+  # `cargo install cargo-audit`, holds the box-wide heavy-run lock (box rule; operator-rules §12).
+  before_script:
+    - |
+      if [ -e /tmp/box-heavy.lock ]; then
+        exec 9< /tmp/box-heavy.lock
+        flock -w 1800 9 || { echo 'box-heavy.lock busy for 30 min'; exit 1; }
+      fi
+    - *default-before-script
   cache:
     - *cache-toolchain
   script:
@@ -437,7 +475,7 @@ coverage:
 # ---- e2e ----------------------------------------------------------------------------------
 # Tagged `heavy` (unchanged): end-to-end jobs run one at a time on the shared runner; the light
 # jobs carry $LIGHT_RUNNER_TAG (see the header); every other job is untagged and runs on the
-# dedicated Meridian runner. When `build` produced artifacts,
+# Vultr runners (#291/#235, run_untagged), never on the box. When `build` produced artifacts,
 # scripts/e2e.sh loads the prebuilt .so at genesis (E2E_PREBUILT=1). Otherwise it builds and
 # deploys as before (app/services-only MRs). Cargo cache kept for that fallback path.
 e2e:
@@ -492,6 +530,9 @@ heartbeat:
 # network call, naming the variable. No retries: a failed deploy is re-run by hand.
 .deploy:
   stage: deploy
+  # Demo push (Paawan 2026-10-09 18:35 CT): deploy as soon as the main pipeline starts, without
+  # waiting for earlier stages. Revert after the demo to restore test-gated deploys.
+  needs: []
   rules:
     # Docs-only pushes to main skip the deploy: only deploy inputs trigger it.
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -523,12 +564,14 @@ heartbeat:
 
 deploy:vercel:
   extends: .deploy
+  interruptible: false
   variables:
     TOOLCHAIN: apt node
     DEPLOY_TARGET: deploy-vercel
 
 deploy:railway:
   extends: .deploy
+  interruptible: false
   variables:
     TOOLCHAIN: apt node
     DEPLOY_TARGET: deploy-railway
