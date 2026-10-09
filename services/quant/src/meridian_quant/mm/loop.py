@@ -105,8 +105,8 @@ class MarketMakerLoop:
             fair_values = await self._fetch_fair_values()
             if not fair_values:
                 logger.warning("No fair values available, pulling all quotes")
-                await self._cancel_all_quotes()
-                await self._settle_funds()
+                await self._cancel_all_quotes()  # Will fetch markets internally
+                await self._settle_funds()  # Will fetch markets internally
                 self._coverage = 0.0
                 return
 
@@ -114,25 +114,25 @@ class MarketMakerLoop:
             open_markets = await self._fetch_open_markets()
             if not open_markets:
                 logger.warning("No open markets (RPC error or truly empty), pulling all quotes")
-                await self._cancel_all_quotes()
-                await self._settle_funds()
+                await self._cancel_all_quotes()  # Will fetch markets internally
+                await self._settle_funds()  # Will fetch markets internally
                 self._coverage = 0.0
                 return
 
             # Check pull conditions (stale spot data or near close)
             if self._should_pull_all_quotes(fair_values, open_markets):
                 logger.info("Pull condition met, canceling all quotes")
-                await self._cancel_all_quotes()
+                await self._cancel_all_quotes(open_markets)
                 # Settle funds to recycle proceeds (AB-11: settle still works after close)
-                await self._settle_funds()
+                await self._settle_funds(open_markets)
                 self._coverage = 0.0
                 return
 
             # Cancel all old quotes first (frees escrowed YES to OpenOrders.free_yes)
-            await self._cancel_all_quotes()
+            await self._cancel_all_quotes(open_markets)
 
             # Settle funds to move free_yes to wallet
-            await self._settle_funds()
+            await self._settle_funds(open_markets)
 
             # Sync inventory from wallet (now all YES is in wallet, not escrowed)
             # Returns only markets with successful balance reads (RPC errors skip quoting)
@@ -269,14 +269,19 @@ class MarketMakerLoop:
 
         return synced_markets
 
-    async def _settle_funds(self) -> None:
+    async def _settle_funds(self, markets: list[MarketState] | None = None) -> None:
         """Settle funds to recycle proceeds from fills.
 
         Calls settle_funds for each market to withdraw fill proceeds and cancel
         refunds from open orders balance back to wallet.
+
+        Args:
+            markets: Already-fetched open markets. If None, fetches them.
+                Passing the already-fetched list avoids refetching.
         """
         try:
-            markets = await self._fetch_open_markets()
+            if markets is None:
+                markets = await self._fetch_open_markets()
             for market in markets:
                 try:
                     await self._order_client.settle_funds(
@@ -408,14 +413,20 @@ class MarketMakerLoop:
         except Exception:
             logger.exception(f"Failed to place quote for {market.ticker}")
 
-    async def _cancel_all_quotes(self) -> None:
+    async def _cancel_all_quotes(self, markets: list[MarketState] | None = None) -> None:
         """Cancel all resting MM orders (AC2: actually cancels orders).
 
         Catches per-order to avoid one failed cancel skipping remaining orders
         (which would leave leftovers and hit the per-market order cap).
+
+        Args:
+            markets: Already-fetched open markets. If None, fetches them.
+                Passing the already-fetched list avoids refetching, which can
+                return [] on RPC error and leave stale orders undetected.
         """
         try:
-            markets = await self._fetch_open_markets()
+            if markets is None:
+                markets = await self._fetch_open_markets()
             for market in markets:
                 orders = await self._order_client.fetch_resting_orders(market.market)
                 mm_orders = [o for o in orders if o.owner == self._mm_owner]
