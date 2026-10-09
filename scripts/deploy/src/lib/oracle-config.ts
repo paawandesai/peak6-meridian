@@ -44,7 +44,9 @@ export function readOracleConfigFile(path: string): OracleConfigParams {
   }
   const result = oracleConfigSchema.safeParse(parsed);
   if (!result.success) {
-    const problems = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`);
+    const problems = result.error.issues.map(
+      (issue) => `${issue.path.join(".")}: ${issue.message}`,
+    );
     throw new Error(`oracle config ${path}: ${problems.join("; ")}`);
   }
   const config = result.data;

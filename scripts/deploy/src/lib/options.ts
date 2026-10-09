@@ -142,7 +142,9 @@ export function parseOptions(
     outPath: resolvePath(root, values.out ?? "deployments/devnet.json"),
     feedsPath: values.feeds === undefined ? undefined : resolvePath(root, values.feeds),
     oracleConfigPath:
-      values["oracle-config"] === undefined ? undefined : resolvePath(root, values["oracle-config"]),
+      values["oracle-config"] === undefined
+        ? undefined
+        : resolvePath(root, values["oracle-config"]),
     skipBuild: values["skip-build"] === true,
     allowUpgrade: values["allow-upgrade"] === true,
   };

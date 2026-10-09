@@ -409,6 +409,14 @@ async function deploy(
   });
   log(`cluster: ${cluster}`);
 
+  // Fail closed: --oracle-config is not yet wired (depends on !75 for set_oracle_config instruction).
+  if (options.oracleConfigPath !== undefined) {
+    throw new Error(
+      "--oracle-config is not yet implemented: set_oracle_config instruction not available " +
+        "(depends on !75 RedStone program + IDL). Remove the flag or wait for !75 to merge.",
+    );
+  }
+
   const feeds = options.feedsPath === undefined ? undefined : await loadFeeds(options, connection);
 
   const ctx: Context = { options, connection, admin, programId, log, actions: [], runSolana };
