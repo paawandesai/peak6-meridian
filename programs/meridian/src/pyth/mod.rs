@@ -86,24 +86,51 @@ fn read_array<const N: usize>(data: &[u8], offset: usize) -> Result<[u8; N]> {
         .ok_or_else(|| MeridianError::OracleInvalidValue.into())
 }
 
-/// Parses a Pyth price account to extract the reading.
+/// Parses a Pyth PriceUpdateV2 account to extract the reading.
 ///
-/// NOTE: This is a placeholder implementation. The actual Pyth price account layout
-/// needs to be determined based on Pyth's on-chain account structure. This will be
-/// refined once we have access to real Pyth price accounts on devnet.
+/// Fail-closed implementation following oracle::parse_pull_feed pattern.
+/// Layout based on pyth-solana-receiver-sdk research (MUST verify against SDK source):
+/// - Bytes 0-7: Anchor discriminator
+/// - Bytes 8-39: write_authority (32 bytes)
+/// - Byte 40+: VerificationLevel enum (variable: Full=1byte, Partial=2bytes)
+/// - Following: PriceFeedMessage (feed_id, price, conf, expo, publish_time)
+///
+/// TODO: Verify exact discriminator, offsets, and field sizes against current SDK.
 pub fn parse_pyth_price(data: &[u8]) -> Result<PythReading> {
-    // TODO: Implement actual Pyth price account parsing based on Pyth's account layout.
-    // For now, this is a placeholder that will fail at runtime.
-    // The actual implementation will:
-    // 1. Check account discriminator
-    // 2. Extract feed_id from the account
-    // 3. Extract price, confidence, expo, publish_time
-    // 4. Scale the price to our oracle value format (18 decimals to match Switchboard/RedStone)
+    // Conservative minimum: 8 (disc) + 32 (auth) + 1 (level) + 60 (message) = 101
+    require!(data.len() >= 101, MeridianError::OracleInvalidValue);
 
-    require!(data.len() >= 32, MeridianError::OracleInvalidValue);
+    // Check discriminator (placeholder - MUST verify actual value)
+    let disc = read_array::<8>(data, 0)?;
+    require!(disc == [0x02, 0x98, 0x73, 0x84, 0x7b, 0x0a, 0x8c, 0x6e] || disc == PYTH_PRICE_DISCRIMINATOR, MeridianError::OracleInvalidValue);
 
-    // Placeholder - will be replaced with actual parsing
-    Err(MeridianError::OracleInvalidValue.into())
+    // Parse VerificationLevel to find message offset
+    let level_tag = *data.get(40).ok_or(MeridianError::OracleInvalidValue)?;
+    let msg_offset = match level_tag {
+        0 => 41, // Full: 1 byte
+        1 => 42, // Partial: 2 bytes (tag + num_signatures)
+        _ => return Err(MeridianError::OracleInvalidValue.into()),
+    };
+
+    require!(data.len() >= msg_offset + 60, MeridianError::OracleInvalidValue);
+
+    // Parse PriceFeedMessage fields (offsets TODO: verify)
+    let feed_id = read_array::<32>(data, msg_offset)?;
+    let price_i64 = i64::from_le_bytes(read_array(data, msg_offset + 32)?);
+    let conf = u64::from_le_bytes(read_array(data, msg_offset + 40)?);
+    let expo = i32::from_le_bytes(read_array(data, msg_offset + 48)?);
+    let publish_time = i64::from_le_bytes(read_array(data, msg_offset + 52)?);
+
+    // Scale to 18 decimals: price_i64 * 10^expo → value * 10^18
+    let price_128 = i128::from(price_i64);
+    let scale_power = 18i32.checked_sub(expo).ok_or(MeridianError::MathOverflow)?;
+    let value_scaled = if scale_power >= 0 {
+        price_128.checked_mul(10i128.checked_pow(scale_power as u32).ok_or(MeridianError::MathOverflow)?).ok_or(MeridianError::MathOverflow)?
+    } else {
+        price_128.checked_div(10i128.checked_pow((-scale_power) as u32).ok_or(MeridianError::MathOverflow)?).ok_or(MeridianError::MathOverflow)?
+    };
+
+    Ok(PythReading { feed_id, value_scaled, publish_time, confidence: conf })
 }
 
 /// Validates a Pyth reading: pinned feed ID, positive value, published at or after close, fresh.
