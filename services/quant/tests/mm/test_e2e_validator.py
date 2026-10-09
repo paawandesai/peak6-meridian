@@ -28,7 +28,8 @@ async def test_mm_quotes_all_open_strikes_local_validator() -> None:
     directive ("fake source is fine in tests"). Production uses OnChainMarketSource
     and OnChainOrderClient for real on-chain operations.
     """
-    now = datetime.now(UTC)
+    # Fixed date to match market trading_date (Finding #3)
+    now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)  # 2026-10-08 14:00 ET
     close_ts = int((now + timedelta(hours=1)).timestamp())
 
     # 3 open markets (strikes)
