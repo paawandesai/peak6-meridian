@@ -8,7 +8,7 @@
 # AC2: Validator :8899 and app :3000 both listening within 15 minutes (900s).
 #
 # Usage (MR verification - test this specific commit):
-#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=ed50019 .
+#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=d8d0ef6 .
 #
 # Usage (CI - verify MR HEAD automatically):
 #   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=$CI_COMMIT_SHA .
@@ -66,7 +66,7 @@ RUN timeout 900 bash -c ' \
     echo "Starting make dev..."; \
     make dev &>/tmp/dev.log & \
     DEV_PID=$!; \
-    trap "kill -TERM -$DEV_PID 2>/dev/null || true; wait" EXIT; \
+    trap "kill -TERM -$DEV_PID 2>/dev/null || true; wait || true" EXIT; \
     echo "Waiting for validator :8899 and app :3000..."; \
     VALIDATOR_UP=false; \
     APP_UP=false; \
