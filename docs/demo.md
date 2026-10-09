@@ -28,13 +28,9 @@ Each market displays:
 
 ## 2. Trade View
 
-Clicking a market opens the trade interface where you can buy or sell YES/NO contracts.
+> **Note:** The dedicated `/trade/[market]` route will be available once M2-06 (!49) merges. Screenshots will be added at that time.
 
-**Mobile:**
-![Trade Mobile](demo/02-trade-mobile.png)
-
-**Desktop:**
-![Trade Desktop](demo/02-trade-desktop.png)
+Clicking a market will open the trade interface where you can buy or sell YES/NO contracts.
 
 ### Trade Intent 1: Buy YES
 1. Select YES side
@@ -72,13 +68,9 @@ Clicking a market opens the trade interface where you can buy or sell YES/NO con
 
 ## 3. Portfolio View
 
+> **Note:** Portfolio page screenshots pending M2-07 (!51) merge.
+
 Shows your current holdings across all markets.
-
-**Mobile:**
-![Portfolio Mobile](demo/03-portfolio-mobile.png)
-
-**Desktop:**
-![Portfolio Desktop](demo/03-portfolio-desktop.png)
 
 Displays:
 - YES/NO token balances per market

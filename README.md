@@ -87,7 +87,7 @@ Here's how to trade "Will AAPL close ≥ $230.00 today?" on devnet:
 5. Click "Place Order"
 6. Sign transaction in wallet
 
-![Trade Page](docs/demo/02-trade-desktop.png)
+> _Trade page screenshot pending M2-06 (!49) merge._
 
 Your position appears in the Portfolio page.
 
