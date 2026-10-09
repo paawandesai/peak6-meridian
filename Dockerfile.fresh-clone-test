@@ -22,11 +22,19 @@ RUN apt-get update && apt-get install -y git build-essential && rm -rf /var/lib/
 # Clone repo preserving .git and checkout specific commit for verification.
 # In CI, GIT_COMMIT defaults to $CI_COMMIT_SHA (the MR HEAD).
 # For local testing after merge, pass --build-arg GIT_COMMIT=<sha> or GIT_BRANCH=main.
+# For private repos, pass --build-arg GIT_TOKEN=$CI_JOB_TOKEN in CI.
 ARG GIT_REPO=https://labs.gauntletai.com/paawandesai/peak6-meridian.git
+ARG GIT_TOKEN
 ARG GIT_COMMIT
 ARG GIT_BRANCH=main
 WORKDIR /workspace
-RUN git clone ${GIT_REPO} meridian
+RUN if [ -n "${GIT_TOKEN}" ]; then \
+      echo "Cloning with credentials (private repo)"; \
+      git clone https://gitlab-ci-token:${GIT_TOKEN}@labs.gauntletai.com/paawandesai/peak6-meridian.git meridian; \
+    else \
+      echo "Cloning without credentials (public repo or COPY)"; \
+      git clone ${GIT_REPO} meridian; \
+    fi
 WORKDIR /workspace/meridian
 RUN if [ -n "${GIT_COMMIT}" ]; then \
       echo "Checking out commit ${GIT_COMMIT} for verification"; \
