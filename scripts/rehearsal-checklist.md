@@ -1,13 +1,13 @@
 # M2-12 Live Devnet Rehearsal Checklist
 
-**Blocked on:** MR !45 (M2-01 live re-key) must be merged first for devnet program ID and keypairs.
+**Prerequisites:** Devnet program deployed (!45 merged), RedStone oracle integration (#46/#47) for settlement.
 
 This checklist guides the live devnet rehearsal run per issue #28 and `docs/runbook.md#rehearsal`. Run on a Thursday; markets settle at 16:05 ET.
 
 ## Pre-requisites (verify before starting)
 
-- [ ] MR !45 merged (provides devnet program ID and keypairs)
-- [ ] M2-02/M2-03/M2-04 deployed (Switchboard feeds, automation service)
+- [ ] Devnet program deployed with RedStone oracle support (#46/#47)
+- [ ] Automation service deployed (M2-03/M2-04)
 - [ ] Devnet keypairs available:
   - `ADMIN_KEYPAIR_PATH`: admin key (pays fees, funds SOL)
   - `AUTOMATION_KEYPAIR` or `ANCHOR_WALLET`: automation key (for Fallback B if needed)
@@ -66,10 +66,10 @@ Alternative funding:
 - [ ] Automation service settles markets (automated)
 - [ ] If Fallback A: check automation process still alive at 15:55 ET
 
-### ≤16:15 ET — Verify settlement (AC2)
-- [ ] Check every market settled from Switchboard within 10 min of close
+### ≤16:15 ET — Verify settlement
+- [ ] Check every market settled from RedStone oracle within 10 min of close
 - [ ] If settlement failed or delayed:
-  - Diagnose: check automation logs, runbook, alerts
+  - Diagnose: check automation logs, runbook, alerts, RedStone data availability
   - Open a fix ticket before Friday
 - [ ] Record settlement verification in `docs/log.md`
 
@@ -123,7 +123,7 @@ M2-12 live devnet rehearsal: <phase>
 
 **Settlement delayed/failed:**
 - Check automation logs (Railway or local process)
-- Verify Switchboard feeds updated
+- Verify RedStone oracle data available for settlement time
 - Check RPC connectivity
 - Open fix ticket before Friday if unresolved
 
