@@ -9,7 +9,7 @@ from solders.keypair import Keypair  # type: ignore[import-untyped]
 from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.loop import MarketMakerLoop
 from meridian_quant.mm.quoter import generate_quote
-from meridian_quant.mm.types import FairValue, Inventory
+from meridian_quant.mm.types import FairValue, Inventory, MarketKey, MarketState
 
 
 @pytest.fixture
@@ -34,10 +34,12 @@ def mm_config(test_keypair: Keypair) -> MMConfig:
 @pytest.mark.asyncio
 async def test_pull_on_stale_spot_data(mm_config: MMConfig) -> None:
     """MM pulls all quotes when spot data is > 10s old (AC2)."""
-    mm = MarketMakerLoop(mm_config)
+    # Inject a fake clock
+    now = datetime.now(UTC)
+    fake_clock = lambda: now
+    mm = MarketMakerLoop(mm_config, clock=fake_clock)
 
     # Create fair value with stale timestamp
-    now = datetime.now(UTC)
     stale_time = now - timedelta(seconds=15)
 
     fair_values = [
@@ -52,18 +54,17 @@ async def test_pull_on_stale_spot_data(mm_config: MMConfig) -> None:
         )
     ]
 
-    # Check pull condition
-    should_pull = mm._should_pull_all_quotes(fair_values)
+    # Check pull condition (no markets needed for stale check)
+    should_pull = mm._should_pull_all_quotes(fair_values, [])
     assert should_pull is True
 
 
 @pytest.mark.asyncio
 async def test_no_pull_on_fresh_spot_data(mm_config: MMConfig) -> None:
     """MM does not pull quotes when spot data is fresh (AC2)."""
-    mm = MarketMakerLoop(mm_config)
-
-    # Create fair value with recent timestamp
     now = datetime.now(UTC)
+    fake_clock = lambda: now
+    mm = MarketMakerLoop(mm_config, clock=fake_clock)
 
     fair_values = [
         FairValue(
@@ -77,14 +78,17 @@ async def test_no_pull_on_fresh_spot_data(mm_config: MMConfig) -> None:
         )
     ]
 
-    should_pull = mm._should_pull_all_quotes(fair_values)
+    # No markets, fresh spot → no pull
+    should_pull = mm._should_pull_all_quotes(fair_values, [])
     assert should_pull is False
 
 
 @pytest.mark.asyncio
 async def test_pull_on_stale_flag(mm_config: MMConfig) -> None:
     """MM pulls all quotes when fair value has stale=True flag (AC2)."""
-    mm = MarketMakerLoop(mm_config)
+    now = datetime.now(UTC)
+    fake_clock = lambda: now
+    mm = MarketMakerLoop(mm_config, clock=fake_clock)
 
     fair_values = [
         FairValue(
@@ -94,13 +98,93 @@ async def test_pull_on_stale_flag(mm_config: MMConfig) -> None:
             fair_cents=50,
             sigma=0.2,
             spot=230.0,
-            as_of=datetime.now(UTC),
+            as_of=now,
             stale=True,  # Marked as stale
         )
     ]
 
-    should_pull = mm._should_pull_all_quotes(fair_values)
+    should_pull = mm._should_pull_all_quotes(fair_values, [])
     assert should_pull is True
+
+
+@pytest.mark.asyncio
+async def test_pull_within_2_min_of_close(mm_config: MMConfig) -> None:
+    """MM pulls quotes when < 2 min to close (AC2, Finding #2)."""
+    # Set fake clock at 15:58:30 (90 seconds before close at 16:00)
+    now = datetime(2026, 10, 8, 15, 58, 30, tzinfo=UTC)
+    fake_clock = lambda: now
+    mm = MarketMakerLoop(mm_config, clock=fake_clock)
+
+    # Market closes at 16:00 (90 seconds away)
+    close_ts = int(datetime(2026, 10, 8, 16, 0, 0, tzinfo=UTC).timestamp())
+
+    markets = [
+        MarketState(
+            market="test_market",
+            ticker="AAPL",
+            strike_cents=68000,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        )
+    ]
+
+    fair_values = [
+        FairValue(
+            market="test_market",
+            ticker="AAPL",
+            strike_cents=68000,
+            fair_cents=50,
+            sigma=0.2,
+            spot=230.0,
+            as_of=now,
+        )
+    ]
+
+    # 90 seconds < 120 seconds (min_time_to_close_secs) → should pull
+    should_pull = mm._should_pull_all_quotes(fair_values, markets)
+    assert should_pull is True
+
+
+@pytest.mark.asyncio
+async def test_no_pull_when_far_from_close(mm_config: MMConfig) -> None:
+    """MM does not pull when > 2 min to close (AC2, Finding #2)."""
+    # Set fake clock at 15:00 (1 hour before close)
+    now = datetime(2026, 10, 8, 15, 0, 0, tzinfo=UTC)
+    fake_clock = lambda: now
+    mm = MarketMakerLoop(mm_config, clock=fake_clock)
+
+    # Market closes at 16:00 (3600 seconds away)
+    close_ts = int(datetime(2026, 10, 8, 16, 0, 0, tzinfo=UTC).timestamp())
+
+    markets = [
+        MarketState(
+            market="test_market",
+            ticker="AAPL",
+            strike_cents=68000,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        )
+    ]
+
+    fair_values = [
+        FairValue(
+            market="test_market",
+            ticker="AAPL",
+            strike_cents=68000,
+            fair_cents=50,
+            sigma=0.2,
+            spot=230.0,
+            as_of=now,
+        )
+    ]
+
+    # 3600 seconds > 120 seconds → should not pull
+    should_pull = mm._should_pull_all_quotes(fair_values, markets)
+    assert should_pull is False
 
 
 @pytest.mark.asyncio
@@ -109,20 +193,22 @@ async def test_inventory_cap_respected(mm_config: MMConfig) -> None:
     mm = MarketMakerLoop(mm_config)
 
     # Set inventory to limit
-    mm.inventory.set(68000, 200)
+    key = MarketKey(ticker="AAPL", trading_date=20261008, strike_cents=68000)
+    mm.inventory.set(key, 200)
 
     # Check limits
-    assert mm.inventory.within_limits(68000, mm_config.max_inventory)
-    assert not mm.inventory.can_add(68000, 10, mm_config.max_inventory)
+    assert mm.inventory.within_limits(key, mm_config.max_inventory)
+    assert not mm.inventory.can_add(key, 10, mm_config.max_inventory)
 
     # Set inventory beyond limit
-    mm.inventory.set(68000, 250)
-    assert not mm.inventory.within_limits(68000, mm_config.max_inventory)
+    mm.inventory.set(key, 250)
+    assert not mm.inventory.within_limits(key, mm_config.max_inventory)
 
 
 @pytest.mark.asyncio
 async def test_skew_applied_correctly(mm_config: MMConfig) -> None:  # noqa: ARG001
     """MM applies 1¢ skew per 50 contracts of inventory (AC2)."""
+    key = MarketKey(ticker="AAPL", trading_date=20261008, strike_cents=68000)
     fv = FairValue(
         market="test_market",
         ticker="AAPL",
@@ -134,7 +220,7 @@ async def test_skew_applied_correctly(mm_config: MMConfig) -> None:  # noqa: ARG
     )
 
     # +100 inventory → +2¢ skew → prices down 2¢
-    inv = Inventory(strike_cents=68000, position=100)
+    inv = Inventory(market_key=key, position=100)
     quote = generate_quote(fv, inv, spread_cents=2, size=10, skew_per_50=1)
 
     # fair=50, spread=2, skew=+2 → bid=50-2-2=46, ask=50+2-2=50
