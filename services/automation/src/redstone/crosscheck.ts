@@ -3,7 +3,7 @@
  * Verify RedStone value within 5 bps of both Tiingo and Twelve Data
  */
 
-import type { OfficialClose, CrossCheckResult } from './types.js';
+import type { OfficialClose, CrossCheckResult } from "./types.js";
 
 const MAX_DEVIATION_BPS = 5;
 
@@ -24,17 +24,15 @@ export function crossCheckOfficialClose(
   redstoneValueCents: number,
   tiingoClose: OfficialClose,
   twelveDataClose: OfficialClose,
-  tradingDate: number
+  tradingDate: number,
 ): CrossCheckResult {
   // Verify bar dates match trading date
   if (tiingoClose.tradingDate !== tradingDate) {
-    throw new Error(
-      `Tiingo bar date ${tiingoClose.tradingDate} !== trading date ${tradingDate}`
-    );
+    throw new Error(`Tiingo bar date ${tiingoClose.tradingDate} !== trading date ${tradingDate}`);
   }
   if (twelveDataClose.tradingDate !== tradingDate) {
     throw new Error(
-      `Twelve Data bar date ${twelveDataClose.tradingDate} !== trading date ${tradingDate}`
+      `Twelve Data bar date ${twelveDataClose.tradingDate} !== trading date ${tradingDate}`,
     );
   }
 

@@ -61,8 +61,6 @@ describe("runPlatformCli", () => {
       SERVICE_TOKEN: "s",
       TIINGO_API_KEY: "t",
       TWELVEDATA_API_KEY: "t",
-      SWITCHBOARD_QUEUE: "q",
-      SWITCHBOARD_FEEDS_JSON: "{}",
     };
     expect(await runPlatformCli(["railway", "--dry-run"], env, d.deps)).toBe(0);
   });

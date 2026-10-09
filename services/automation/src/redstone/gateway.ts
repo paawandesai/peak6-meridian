@@ -3,7 +3,7 @@
  * Fetches packages from >=2 gateways, validates byte-identical responses
  */
 
-import type { RedstoneGatewayConfig, RedstoneDataPackage } from './types.js';
+import type { RedstoneGatewayConfig, RedstoneDataPackage } from "./types.js";
 
 /**
  * Fetch RedStone package from gateway with timeout
@@ -13,7 +13,7 @@ async function fetchFromGateway(
   dataServiceId: string,
   symbol: string,
   timestampMs: number,
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<RedstoneDataPackage> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -37,10 +37,10 @@ async function fetchFromGateway(
 export async function fetchRedstonePackages(
   config: RedstoneGatewayConfig,
   symbol: string,
-  closeTimestampMs: number
+  closeTimestampMs: number,
 ): Promise<{ packages: RedstoneDataPackage[]; payload: Uint8Array }> {
   if (config.gateways.length < 2) {
-    throw new Error('RedStone requires at least 2 gateways');
+    throw new Error("RedStone requires at least 2 gateways");
   }
 
   const packages: RedstoneDataPackage[] = [];
@@ -52,7 +52,7 @@ export async function fetchRedstonePackages(
         config.dataServiceId,
         symbol,
         closeTimestampMs,
-        config.timeoutMs
+        config.timeoutMs,
       );
       packages.push(pkg);
     } catch (err) {

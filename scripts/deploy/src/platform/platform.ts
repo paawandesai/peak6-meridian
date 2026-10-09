@@ -82,10 +82,14 @@ export const AUTOMATION_ENV: EnvSpec = {
     "SERVICE_TOKEN",
     "TIINGO_API_KEY",
     "TWELVEDATA_API_KEY",
+  ],
+  optional: [
+    "ALERT_WEBHOOK_URL",
+    "OPS_AGENT_URL",
+    "REDSTONE_GATEWAYS",
     "SWITCHBOARD_QUEUE",
     "SWITCHBOARD_FEEDS_JSON",
   ],
-  optional: ["ALERT_WEBHOOK_URL", "OPS_AGENT_URL"],
 };
 
 export type CollectedEnv = {

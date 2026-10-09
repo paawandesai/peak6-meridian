@@ -24,7 +24,7 @@ export interface RedstoneGatewayConfig {
 
 /** Official close from external source (Tiingo/Twelve Data) */
 export interface OfficialClose {
-  source: 'tiingo' | 'twelve-data';
+  source: "tiingo" | "twelve-data";
   symbol: string;
   tradingDate: number; // YYYYMMDD
   closeCents: number;

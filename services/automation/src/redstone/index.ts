@@ -4,9 +4,9 @@
  * Small interface for chain-facing calls to be wired after M2-15 merges
  */
 
-export * from './types.js';
-export * from './gateway.js';
-export * from './crosscheck.js';
+export * from "./types.js";
+export * from "./gateway.js";
+export * from "./crosscheck.js";
 
 /**
  * Chain interface (to be implemented after M2-15)
