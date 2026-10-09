@@ -104,6 +104,8 @@ pub enum MeridianError {
     RedStoneFeedIdMismatch,
 
     // ---- Oracle configuration (M2-15) ---------------------------------------------------------
+    #[msg("Too many signers: maximum is 8")]
+    OracleTooManySigners,
     #[msg("Signer threshold must be at least 1")]
     OracleThresholdTooLow,
     #[msg("Signer threshold cannot exceed the signer count")]

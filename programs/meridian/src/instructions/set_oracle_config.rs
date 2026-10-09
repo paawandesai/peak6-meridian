@@ -3,7 +3,7 @@
 use anchor_lang::prelude::*;
 
 use crate::errors::MeridianError;
-use crate::state::{Config, OracleConfig, CONFIG_SEED};
+use crate::state::{Config, OracleConfig, CONFIG_SEED, MAX_SIGNERS};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SetOracleConfigParams {
@@ -50,6 +50,12 @@ pub fn handle_set_oracle_config(
         ctx.accounts.admin.key(),
         ctx.accounts.config.admin,
         MeridianError::AdminOnly
+    );
+
+    // Signer count validation (ticket cap: ≤ 8)
+    require!(
+        params.signers.len() <= MAX_SIGNERS,
+        MeridianError::OracleTooManySigners
     );
 
     // Threshold validation

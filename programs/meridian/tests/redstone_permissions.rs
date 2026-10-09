@@ -134,6 +134,41 @@ fn set_oracle_config_rejects_threshold_too_high() {
 }
 
 #[test]
+fn set_oracle_config_rejects_too_many_signers() {
+    // AC3 extension: set_oracle_config rejects > MAX_SIGNERS (8)
+    let mut harness = MarketHarness::new();
+    let admin = harness.harness.admin.insecure_clone();
+
+    let signers: Vec<[u8; 20]> = (0..9).map(|_| [0u8; 20]).collect(); // 9 > MAX_SIGNERS
+
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let params = meridian::SetOracleConfigParams {
+        signers,
+        signer_threshold: 3,
+        max_package_delay_secs: 600,
+    };
+
+    let ix = meridian::instruction::SetOracleConfig { params };
+    let accounts = meridian::accounts::SetOracleConfig {
+        config: config_pda(),
+        oracle_config: oracle_config_pda,
+        admin: admin.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
+    assert_meridian_error_with_budget(&result, MeridianError::OracleTooManySigners);
+}
+
+#[test]
 fn post_redstone_price_is_permissionless() {
     // AC3: post_redstone_price succeeds for any payer (permissionless)
     let mut harness = MarketHarness::new();
