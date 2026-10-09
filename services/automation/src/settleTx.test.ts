@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { Keypair, PublicKey, TransactionInstruction } from "@solana/web3.js";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { switchboardAdapter } from "./switchboard";
 import {
@@ -192,14 +192,23 @@ async function splitPlan(markets = 40) {
   return { w, plan };
 }
 
-// Tests use 40/80 markets (original working values) but without explicit timeouts. The FakeExecutor
-// is fully synchronous with no real timer waits; transaction building is CPU-bound but deterministic.
-// Removed 30s/10s timeouts to rely on Vitest default (5s), which should suffice on modern CI.
+// CPU-bound fixture build (40-80 markets build real transactions), no real timer waits. Shared
+// fixtures built once in beforeAll to avoid rebuilding for each test. Explicit timeout allows
+// for fixture overhead on loaded CI runners. Will change with M2-16/M2-18 RedStone migration.
 describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
   const BUDGET = 20; // max_staleness_slots 30 minus the safety margin
 
+  // Shared fixtures built once: expensive transaction building (buildSettleInstructions, switchboardAdapter)
+  let sharedPlan40: { w: SettleWorld; plan: SettlementPlan };
+  let sharedPlan80: { w: SettleWorld; plan: SettlementPlan };
+
+  beforeAll(async () => {
+    sharedPlan40 = await splitPlan(40);
+    sharedPlan80 = await splitPlan(80);
+  }, 10_000); // CPU-bound fixture build
+
   it("sends the update, then the settles, when the slots stay within the budget", async () => {
-    const { w, plan } = await splitPlan();
+    const { w, plan } = sharedPlan40;
     const executor = new FakeExecutor(w.program.programId);
     const builtAt = new Map<PlannedTx, number>();
     const report = await sendPlan({
@@ -214,7 +223,7 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
   });
 
   it("re-sends the feed update when the slot gap exceeds the budget, never a stale settle", async () => {
-    const { w, plan } = await splitPlan();
+    const { w, plan } = sharedPlan40;
     const executor = new FakeExecutor(w.program.programId);
     // The first send is the update (1 slot); the next send takes 40 slots: the second settle
     // transaction would run 40 slots after the update, so the update must go out again first.
@@ -249,7 +258,7 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
   });
 
   it("gives up instead of looping when the update keeps going stale", async () => {
-    const { w, plan } = await splitPlan(80);
+    const { w, plan } = sharedPlan80;
     const executor = new FakeExecutor(w.program.programId);
     executor.advancePerSend = () => 50;
     await expect(
