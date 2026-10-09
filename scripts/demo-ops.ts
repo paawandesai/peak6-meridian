@@ -239,14 +239,23 @@ async function ensureDeployed(ctx: DemoContext): Promise<void> {
 async function pinLocalFeeds(ctx: DemoContext, symbol: string): Promise<void> {
   const configAccount = await ctx.program.account.config.fetch(ctx.config);
 
+  // Find which slot this symbol occupies (MAG7 order: AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA)
+  const symbolBuf = symbolBytes(symbol);
+  const tickerIndex = configAccount.tickers.findIndex((ticker) =>
+    Buffer.from(ticker.symbol).equals(symbolBuf),
+  );
+  if (tickerIndex === -1) {
+    throw new Error(`${symbol} not found in config tickers`);
+  }
+
   // Derive local feed PDAs for this symbol (AC1: settle_market requires config-pinned feeds)
   const feeds: [PublicKey, PublicKey] = [
     PublicKey.findProgramAddressSync(
-      [Buffer.from("local_feed"), symbolBytes(symbol), Buffer.from([0])],
+      [Buffer.from("local_feed"), symbolBuf, Buffer.from([0])],
       ctx.program.programId,
     )[0],
     PublicKey.findProgramAddressSync(
-      [Buffer.from("local_feed"), symbolBytes(symbol), Buffer.from([1])],
+      [Buffer.from("local_feed"), symbolBuf, Buffer.from([1])],
       ctx.program.programId,
     )[0],
   ];
@@ -261,7 +270,7 @@ async function pinLocalFeeds(ctx: DemoContext, symbol: string): Promise<void> {
         maxStalenessSlots: BigInt(configAccount.maxStalenessSlots.toString()),
         maxConfBps: configAccount.maxConfBps,
         overrideDelaySecs: BigInt(configAccount.overrideDelaySecs.toString()),
-        tickers: [{ index: 0, ticker: { symbol, feeds, feedHashes } }],
+        tickers: [{ index: tickerIndex, ticker: { symbol, feeds, feedHashes } }],
       }),
     )
     .accountsStrict({
@@ -272,7 +281,7 @@ async function pinLocalFeeds(ctx: DemoContext, symbol: string): Promise<void> {
     .signers([ctx.admin])
     .rpc();
 
-  console.log(`  Pinned ${symbol} local feeds in config slot 0`);
+  console.log(`  Pinned ${symbol} local feeds in config slot ${tickerIndex}`);
   console.log(`    Feed 0: ${feeds[0].toString()}`);
   console.log(`    Feed 1: ${feeds[1].toString()}`);
 }
