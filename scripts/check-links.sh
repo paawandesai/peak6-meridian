@@ -20,6 +20,11 @@ check_link() {
         return 0
     fi
 
+    # Skip GitLab uploads (AC3 screenshots)
+    if [[ "$link" =~ ^/uploads/ ]]; then
+        return 0
+    fi
+
     # Skip anchors for now (would need markdown parser)
     link="${link%#*}"
 
