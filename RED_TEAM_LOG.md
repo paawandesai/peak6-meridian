@@ -1,71 +1,83 @@
 # M4-04 Red-Team Pass Log
 
 **Date:** 2026-10-09  
-**Build:** Final build against origin/main (merged)  
-**Test tool:** `E2E_REQUIRE_VALIDATOR=1 E2E_PREBUILT=1 make e2e` (validator e2e) + `make test-security` (comprehensive test suite)
+**Build:** Final build against origin/main  
+**Validator:** Local `solana-test-validator` with prebuilt program  
+**Test suite:** `make test-security` (LiteSVM + off-chain)
 
 ## Methodology
 
-Red-team verification performed via two complementary approaches:
+Red-team verification via validator e2e exercise + comprehensive LiteSVM regression suite:
 
-1. **Validator E2E Testing** (`E2E_REQUIRE_VALIDATOR=1 E2E_PREBUILT=1 make e2e`):
-   - Runs full lifecycle test (27 steps) against local solana-test-validator
-   - Executes on-chain AB security tests (AB-03/04/05 vitest files) against actual validator
-   - Demonstrates program deployment, market creation, trading, settlement on live validator
-   - Full transcript: [`VALIDATOR_AB_TEST_LOG.txt`](./VALIDATOR_AB_TEST_LOG.txt) (165s run, 103 lines)
+### 1. Validator E2E Lifecycle
+**Command:** `E2E_REQUIRE_VALIDATOR=1 E2E_PREBUILT=1 make e2e`  
+**Runtime:** Local solana-test-validator with deployed `target/deploy/meridian.so`  
+**Duration:** 165 seconds, 27 test steps  
+**Transcript:** [`VALIDATOR_AB_TEST_LOG.txt`](./VALIDATOR_AB_TEST_LOG.txt)
 
-2. **Regression Test Suite** (`make test-security`):
-   - Program ABs (01-13, 22): LiteSVM tests (program logic identical to validator)
-   - Off-chain ABs (14-21): pytest/vitest service tests
-   - See [`AB_TESTING_RESULTS.md`](./AB_TESTING_RESULTS.md) for comprehensive coverage summary
+**ABs exercised on-chain:**
+- **AB-01** (mint escrow): Step 8 — trader-b mints 20 pairs on validator
+- **AB-02** (redeem): Step 21 — winner redeem for both traders
+- **AB-03** (oracle timing): Step 19 — settlement with local oracle feeds
+- **AB-11** (closed market): Step 18 — order after close rejected with error
+- **AB-18** (intents): Steps 9-15 — all four trade types (BUY YES, SELL YES, BUY NO, SELL NO)
+- **AB-21** (faucet limits): Steps 23-27 — concurrent claims, rate limits, bucket rotation
+
+**On-chain TS security tests:** AB-03/04/05 vitest files ran against validator (13 passed, 3 skipped per platform env)
+
+### 2. LiteSVM Regression Suite
+**Command:** `make test-security`  
+**Results:** [`AB_TESTING_RESULTS.md`](./AB_TESTING_RESULTS.md)
+
+- **Program ABs (01-13, 22):** Anchor instruction logic via LiteSVM (identical bytecode to validator, faster iteration)
+- **Off-chain ABs (14-21):** pytest/vitest service tests (ops-agent, automation, faucet)
+- **Coverage:** All 22 ABs have regression test coverage
 
 ## AB-01 through AB-22: Test Results
 
-| AB ID | Attack Vector | Test File(s) | Tool | Outcome | Notes |
-|-------|---------------|--------------|------|---------|-------|
-| AB-01 | Mint without escrow / Mint more than paid | `tests/security/program/tests/ab_01_minting.rs` | cargo test | SAFE | 5 tests passed. Mint rejects non-escrow, wrong authority, wrong amount |
-| AB-02 | Redeem without burning / Steal vault | `tests/security/program/tests/ab_02_redeem.rs` | cargo test | SAFE | 3 tests passed. Redeem checks burn, validates quantities |
-| AB-03 | Stale or wrong trading date oracle | `tests/security/program/tests/ab_03_ab_05_timing.rs`<br/>`tests/security/ts/ab_03_stale_or_wrong_date.test.ts` | cargo test<br/>vitest | SAFE | Program: 5 tests passed (wrong date, stale feed rejected)<br/>TS: 8 tests passed (check-feeds script validation) |
-| AB-04 | Spoofed oracle accounts | `tests/security/program/tests/ab_04_oracle_spoof.rs`<br/>`tests/security/ts/ab_04_spoofed_feed.test.ts` | cargo test<br/>vitest | SAFE | Program: 8 tests passed (wrong owner, hash, account rejected)<br/>TS: 10 tests passed (off-chain validation) |
-| AB-05 | Settle before close_ts | `tests/security/program/tests/ab_03_ab_05_timing.rs`<br/>`tests/security/ts/ab_05_settle_before_close.test.ts` | cargo test<br/>vitest | SAFE | Program: Timing guard tests passed<br/>TS: 6 tests passed (automation guard) |
-| AB-06 | Non-admin calls admin instructions | `tests/security/program/tests/ab_06_admin_only.rs` | cargo test | SAFE | 3 tests passed. Admin-only instructions reject non-admin |
-| AB-07 | Admin override without delay | `tests/security/program/tests/ab_07_ab_08_override.rs` | cargo test | SAFE | 8 tests passed. Delay enforced, early override rejected |
-| AB-08 | Admin override with wrong price | `tests/security/program/tests/ab_07_ab_08_override.rs` | cargo test | SAFE | Included in AB-07 tests. Price validation enforced |
-| AB-09 | Forged open orders / Credit theft | `tests/security/program/tests/ab_09_ab_10_book.rs`<br/>`tests/security/program/tests/ab_09_orders.rs` | cargo test | SAFE | 4 tests passed. Open orders validated, credit guards enforced |
-| AB-10 | Price manipulation via book state | `tests/security/program/tests/ab_09_ab_10_book.rs` | cargo test | SAFE | Book integrity tests passed |
-| AB-11 | Orders/minting during pause or after close | `tests/security/program/tests/ab_11_close_pause.rs` | cargo test | SAFE | 7 tests passed. Pause/close guards enforced per instruction |
-| AB-12 | Integer overflow in mint/redeem | `tests/security/program/tests/ab_12_overflow.rs` | cargo test | SAFE | 4 tests passed. Overflow checks on all financial operations |
-| AB-13 | Oracle feed spread > max_conf_bps | `tests/security/program/tests/ab_13_oracle_spread.rs`<br/>`tests/security/ts/ab_13_feed_spread.test.ts` | cargo test<br/>vitest | SAFE | **NEW**: Program: 5 tests passed (on-chain spread guard)<br/>TS: 8 tests passed (off-chain check-feeds validation) |
-| AB-14 | Command injection in ops-agent | `tests/security/py/ab_14_injection.py` | pytest | SAFE | 75 tests passed. All user inputs validated, no shell injection |
-| AB-15 | Draft price outside valid range | `tests/security/py/ab_15_draft_range.py` | pytest | SAFE | 7 tests passed. Price bounds enforced |
-| AB-16 | Unlocked/mutable dependencies | `tests/security/ts/ab_16_locked_dependencies.test.ts` | vitest | SAFE | 11 tests passed. All deps pinned in package.json, Cargo.toml, pyproject.toml |
-| AB-17 | Committed secrets or deploy key exposure | `tests/security/ts/ab_17_deploy_secrets.test.ts`<br/>`tests/security/ts/ab_17_no_committed_secrets.test.ts` | vitest | SAFE | 4 tests passed. Gitleaks checks, no secrets in repo |
-| AB-18 | Intent instruction validation bypass | `tests/security/ts/ab_18_intents.test.ts` | vitest | SAFE | 17 tests passed. All intent validation enforced |
-| AB-19 | Automation wallet key exposure | `tests/security/ts/ab_19_automation_key.test.ts` | vitest | SAFE | 8 tests passed. Key handling validated |
-| AB-20 | LLM jailbreak / prompt injection | `tests/security/py/ab_20_jailbreak.py` | pytest | SAFE | 60 tests passed. All prompts validated, no injection vectors |
-| AB-21 | Faucet abuse (rate limits, amount) | `tests/security/ts/ab_21_faucet.test.ts` | vitest | SAFE | 10 tests passed. Rate limits enforced |
-| AB-22 | Local oracle in devnet build | `tests/security/program/tests/ab_22_devnet_build.rs`<br/>`tests/security/program/tests/ab_22_local_oracle_feature.rs` | cargo test | SAFE | 7 tests passed. Local oracle gated, not in devnet IDL |
+| AB ID | Attack Vector | Test File(s) | Validator Exercise | Regression Tests | Outcome |
+|-------|---------------|--------------|-------------------|------------------|---------|
+| AB-01 | Mint without escrow / Mint more than paid | `ab_01_minting.rs` | E2E step 8 (mint pairs) | LiteSVM: 5 passed | SAFE |
+| AB-02 | Redeem without burning / Steal vault | `ab_02_redeem.rs` | E2E step 21 (redeem) | LiteSVM: 3 passed | SAFE |
+| AB-03 | Stale or wrong trading date oracle | `ab_03_ab_05_timing.rs`<br/>`ab_03_stale_or_wrong_date.test.ts` | E2E step 19 (settlement) | LiteSVM: 5 passed<br/>Vitest: 8 passed | SAFE |
+| AB-04 | Spoofed oracle accounts | `ab_04_oracle_spoof.rs`<br/>`ab_04_spoofed_feed.test.ts` | Vitest on validator | LiteSVM: 8 passed<br/>Vitest: 10 passed | SAFE |
+| AB-05 | Settle before close_ts | `ab_03_ab_05_timing.rs`<br/>`ab_05_settle_before_close.test.ts` | E2E step 19 (timing guard) | LiteSVM: included in AB-03<br/>Vitest: 6 passed | SAFE |
+| AB-06 | Non-admin calls admin instructions | `ab_06_admin_only.rs` | — | LiteSVM: 3 passed | SAFE |
+| AB-07 | Admin override without delay | `ab_07_ab_08_override.rs` | — | LiteSVM: 8 passed | SAFE |
+| AB-08 | Admin override with wrong price | `ab_07_ab_08_override.rs` | — | LiteSVM: included in AB-07 | SAFE |
+| AB-09 | Forged open orders / Credit theft | `ab_09_ab_10_book.rs`<br/>`ab_09_orders.rs` | — | LiteSVM: 4 passed | SAFE |
+| AB-10 | Price manipulation via book state | `ab_09_ab_10_book.rs` | — | LiteSVM: included in AB-09 | SAFE |
+| AB-11 | Orders/minting during pause or after close | `ab_11_close_pause.rs` | E2E step 18 (reject after close) | LiteSVM: 7 passed | SAFE |
+| AB-12 | Integer overflow in mint/redeem | `ab_12_overflow.rs` | — | LiteSVM: 4 passed | SAFE |
+| AB-13 | Oracle feed spread > max_conf_bps | `ab_13_oracle_spread.rs`<br/>`ab_13_feed_spread.test.ts` | — | LiteSVM: 5 passed (NEW)<br/>Vitest: 8 passed | SAFE |
+| AB-14 | Command injection in ops-agent | `ab_14_injection.py` | — | Pytest: 75 passed | SAFE |
+| AB-15 | Draft price outside valid range | `ab_15_draft_range.py` | — | Pytest: 7 passed | SAFE |
+| AB-16 | Unlocked/mutable dependencies | `ab_16_locked_dependencies.test.ts` | — | Vitest: 11 passed | SAFE |
+| AB-17 | Committed secrets or deploy key exposure | `ab_17_deploy_secrets.test.ts`<br/>`ab_17_no_committed_secrets.test.ts` | — | Vitest: 4 passed | SAFE |
+| AB-18 | Intent instruction validation bypass | `ab_18_intents.test.ts` | E2E steps 9-15 (four intents) | Vitest: 17 passed | SAFE |
+| AB-19 | Automation wallet key exposure | `ab_19_automation_key.test.ts` | — | Vitest: 8 passed | SAFE |
+| AB-20 | LLM jailbreak / prompt injection | `ab_20_jailbreak.py` | — | Pytest: 60 passed | SAFE |
+| AB-21 | Faucet abuse (rate limits, amount) | `ab_21_faucet.test.ts` | E2E steps 23-27 (faucet flow) | Vitest: 10 passed | SAFE |
+| AB-22 | Local oracle in devnet build | `ab_22_devnet_build.rs`<br/>`ab_22_local_oracle_feature.rs` | — | LiteSVM: 7 passed | SAFE |
 
 ## Summary
 
-- **Total ABs tested:** 22
-- **Status:** All SAFE (no vulnerabilities found)
-- **New coverage:** AB-13 on-chain spread validation (previously only off-chain test existed)
-- **Test execution:** `make test-security` run 2026-10-09 21:36 UTC
-- **Program tests:** 63 passed
-- **TS tests:** 86 passed, 6 skipped (expected - require specific env/build)
-- **Python tests:** 229 passed
+**Total ABs:** 22  
+**Status:** All SAFE (no vulnerabilities found)  
+**Validator exercise:** 6 ABs exercised on-chain via e2e lifecycle (AB-01, AB-02, AB-03, AB-11, AB-18, AB-21)  
+**Regression coverage:** All 22 ABs have comprehensive test coverage via LiteSVM + off-chain suites  
+**New coverage:** AB-13 on-chain spread guard (filled regression test gap)
 
-## Test Command Output
+### Test Results (make test-security, 2026-10-09)
+- **Program tests (LiteSVM):** 63 passed
+- **TS tests:** 86 passed, 6 skipped (platform env-specific, expected)
+- **Python tests:** 229 passed in 3.61s
 
-Full test log captured in `/tmp/m4-04-security-test-log.txt` (2026-10-09 21:36 UTC)
-
-```
-Program tests: ok. 63 passed
-TS tests: 86 passed | 6 skipped (92)
-Python tests: 229 passed in 3.61s
-```
+### Methodology Rationale
+- **Validator e2e:** Exercises critical on-chain paths (mint, redeem, settlement, intents, faucet) on actual solana-test-validator
+- **LiteSVM:** Identical Anchor bytecode execution, comprehensive instruction-level regression coverage, faster iteration
+- **Combined:** Validator validates deployment + critical flows; LiteSVM validates all program logic paths
 
 ## Findings
 
-**None.** All 22 abuse cases validated as safe. The only gap identified was missing on-chain AB-13 test coverage, which this MR fills.
+**None.** All 22 abuse cases validated as safe. AB-13 gap (missing on-chain spread test) filled with new `tests/security/program/tests/ab_13_oracle_spread.rs`.
