@@ -492,6 +492,30 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
     ]);
     expect(result.record.oracleSignerThreshold).toBe(2);
     expect(result.record.oracleMaxPackageDelaySecs).toBe(600);
+
+    // Verify on-chain OracleConfig account was written
+    const oracleConfigPda = new PublicKey(result.record.oracleConfigPda!);
+    const accountInfo = await validator.connection.getAccountInfo(oracleConfigPda);
+    expect(accountInfo).not.toBeNull();
+    expect(accountInfo!.owner.toBase58()).toBe(result.record.programId);
+
+    // Deserialize and verify signers and threshold match config file
+    const oracleConfig = await program.account.oracleConfig.fetch(oracleConfigPda);
+    expect(oracleConfig.signerThreshold).toBe(2);
+    expect(oracleConfig.maxPackageDelaySecs.toNumber()).toBe(600);
+    expect(oracleConfig.signers).toHaveLength(3);
+
+    // Signers are stored as [u8; 20] arrays on-chain
+    const expectedSigners = [
+      [0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x78, 0x90],
+      [0xab, 0xcd, 0xef, 0xab, 0xcd, 0xef, 0xab, 0xcd, 0xef, 0xab, 0xcd, 0xef, 0xab, 0xcd, 0xef, 0xab, 0xcd, 0xef, 0xab, 0xcd],
+      [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11],
+    ];
+    for (let i = 0; i < 3; i++) {
+      const signer = oracleConfig.signers[i];
+      expect(signer).toBeDefined();
+      expect(Array.from(signer!)).toEqual(expectedSigners[i]);
+    }
   });
 
   it(
