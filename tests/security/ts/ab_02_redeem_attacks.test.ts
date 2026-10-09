@@ -361,13 +361,57 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
     const config = await v.program.account.config.fetch(v.config);
 
     const userUsdc = getAta(config.usdcMint, user.publicKey);
-
-    // Attempt: pair redeem with YES from market1 and NO from market2
-    // User token accounts would be from different markets
     const userYes1 = getAta(market1Account.yesMint, user.publicKey);
+    const userNo1 = getAta(market1Account.noMint, user.publicKey);
+    const userYes2 = getAta(market2Account.yesMint, user.publicKey);
     const userNo2 = getAta(market2Account.noMint, user.publicKey);
 
-    // Try to redeem against market1 with mismatched NO mint
+    // Create ATAs and mint pairs in both markets so user has tokens
+    await createAta(v, user, userUsdc, config.usdcMint);
+    await createAta(v, user, userYes1, market1Account.yesMint);
+    await createAta(v, user, userNo1, market1Account.noMint);
+    await createAta(v, user, userYes2, market2Account.yesMint);
+    await createAta(v, user, userNo2, market2Account.noMint);
+
+    await fundUsdc(v, user.publicKey, userUsdc, 20);
+
+    // Mint 10 pairs in market1
+    await v.program.methods
+      .mintPair(new BN(10))
+      .accountsStrict({
+        config: v.config,
+        market: market1,
+        user: user.publicKey,
+        userUsdc,
+        userYes: userYes1,
+        userNo: userNo1,
+        yesMint: market1Account.yesMint,
+        noMint: market1Account.noMint,
+        vault: market1Account.vault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([user])
+      .rpc();
+
+    // Mint 10 pairs in market2
+    await v.program.methods
+      .mintPair(new BN(10))
+      .accountsStrict({
+        config: v.config,
+        market: market2,
+        user: user.publicKey,
+        userUsdc,
+        userYes: userYes2,
+        userNo: userNo2,
+        yesMint: market2Account.yesMint,
+        noMint: market2Account.noMint,
+        vault: market2Account.vault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .signers([user])
+      .rpc();
+
+    // Attempt: pair redeem against market1 with YES from market1 but NO from market2
     try {
       await v.program.methods
         .redeem(new BN(1), new BN(1)) // pair redeem
@@ -386,9 +430,11 @@ describe.runIf(v !== null)("AB-02 on-chain (local validator): redeem attacks rej
         .rpc();
       throw new Error("Expected cross-market redeem to fail");
     } catch (error) {
-      // Program constraints (has_one = no_mint) reject the substitution
+      // Program constraints (has_one = no_mint on Market account) reject the substitution
       const err = programError(error);
       expect(err.length).toBeGreaterThan(0);
+      // Anchor constraint errors mention "constraint" or the specific check
+      expect(err.toLowerCase()).toMatch(/constraint|has_one/);
     }
   });
 });
