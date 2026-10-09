@@ -1448,6 +1448,10 @@ export type Meridian = {
       discriminator: [237, 212, 22, 175, 201, 117, 215, 99];
     },
     {
+      name: "oracleConfigSet";
+      discriminator: [248, 155, 240, 40, 76, 69, 13, 4];
+    },
+    {
       name: "orderCancelled";
       discriminator: [108, 56, 128, 68, 168, 113, 168, 239];
     },
@@ -1466,6 +1470,10 @@ export type Meridian = {
     {
       name: "redeemed";
       discriminator: [14, 29, 183, 71, 31, 165, 107, 38];
+    },
+    {
+      name: "redstonePricePosted";
+      discriminator: [107, 134, 33, 214, 200, 199, 239, 225];
     },
     {
       name: "unpaused";
@@ -1680,26 +1688,31 @@ export type Meridian = {
     },
     {
       code: 6041;
+      name: "oracleTooManySigners";
+      msg: "Too many signers: maximum is 8";
+    },
+    {
+      code: 6042;
       name: "oracleThresholdTooLow";
       msg: "Signer threshold must be at least 1";
     },
     {
-      code: 6042;
+      code: 6043;
       name: "oracleThresholdTooHigh";
       msg: "Signer threshold cannot exceed the signer count";
     },
     {
-      code: 6043;
+      code: 6044;
       name: "pairQuantityMismatch";
       msg: "Pair redeem needs equal YES and NO quantities before settlement";
     },
     {
-      code: 6044;
+      code: 6045;
       name: "nothingToRedeem";
       msg: "Nothing to redeem";
     },
     {
-      code: 6045;
+      code: 6046;
       name: "mathOverflow";
       msg: "Arithmetic overflow";
     },
@@ -2349,6 +2362,26 @@ export type Meridian = {
       };
     },
     {
+      name: "oracleConfigSet";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "signerCount";
+            type: "u8";
+          },
+          {
+            name: "signerThreshold";
+            type: "u8";
+          },
+          {
+            name: "maxPackageDelaySecs";
+            type: "i64";
+          },
+        ];
+      };
+    },
+    {
       name: "orderCancelled";
       type: {
         kind: "struct";
@@ -2527,8 +2560,8 @@ export type Meridian = {
           },
           {
             name: "value";
-            docs: ["Price value with 8 decimals (RedStone format)."];
-            type: "u64";
+            docs: ["Price value with 8 decimals (RedStone format, u128 per domain.md)."];
+            type: "u128";
           },
           {
             name: "packageTimestampMs";
@@ -2543,6 +2576,36 @@ export type Meridian = {
           {
             name: "signerCount";
             docs: ["Number of valid signers in the verified package."];
+            type: "u8";
+          },
+        ];
+      };
+    },
+    {
+      name: "redstonePricePosted";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "symbol";
+            type: {
+              array: ["u8", 8];
+            };
+          },
+          {
+            name: "value";
+            type: "u128";
+          },
+          {
+            name: "packageTimestampMs";
+            type: "i64";
+          },
+          {
+            name: "postedSlot";
+            type: "u64";
+          },
+          {
+            name: "signerCount";
             type: "u8";
           },
         ];

@@ -80,7 +80,6 @@ fn post_redstone_price_stays_under_cu_limit() {
 
     let post_ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -185,7 +184,6 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
 
     let post_ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -264,7 +262,6 @@ fn redstone_payload_fits_in_transaction() {
 
     let post_ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 

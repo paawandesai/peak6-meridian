@@ -515,7 +515,8 @@ async function deploy(
           return `0x${hex}` === expected.toLowerCase();
         });
       const thresholdMatches = onChain.signerThreshold === oracleConfig.signerThreshold;
-      const delayMatches = onChain.maxPackageDelaySecs.toNumber() === oracleConfig.maxPackageDelaySecs;
+      const delayMatches =
+        onChain.maxPackageDelaySecs.toNumber() === oracleConfig.maxPackageDelaySecs;
       alreadyMatches = signersMatch && thresholdMatches && delayMatches;
     } catch {
       // OracleConfig not set yet, proceed with set
@@ -538,7 +539,9 @@ async function deploy(
         .accounts({ admin: admin.publicKey })
         .rpc({ commitment: "confirmed" });
       ctx.actions.push("set-oracle-config");
-      log(`set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`);
+      log(
+        `set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`,
+      );
 
       // Fail closed: verify on-chain matches input
       const verified = await program.account.oracleConfig.fetch(oracleConfigPda);
@@ -551,7 +554,8 @@ async function deploy(
           return `0x${hex}` === expected.toLowerCase();
         });
       const verifiedThresholdMatches = verified.signerThreshold === oracleConfig.signerThreshold;
-      const verifiedDelayMatches = verified.maxPackageDelaySecs.toNumber() === oracleConfig.maxPackageDelaySecs;
+      const verifiedDelayMatches =
+        verified.maxPackageDelaySecs.toNumber() === oracleConfig.maxPackageDelaySecs;
 
       if (!verifiedSignersMatch || !verifiedThresholdMatches || !verifiedDelayMatches) {
         throw new Error(
@@ -584,7 +588,14 @@ async function deploy(
     }
   }
 
-  const finalRecord = buildRecord(cluster, ctx, mint, config, upgradeAuthority, oracleConfigForRecord);
+  const finalRecord = buildRecord(
+    cluster,
+    ctx,
+    mint,
+    config,
+    upgradeAuthority,
+    oracleConfigForRecord,
+  );
   const written = writeRecord(options.outPath, finalRecord);
   log(`${written ? "wrote" : "unchanged:"} ${options.outPath}`);
   return { actions: ctx.actions, record: finalRecord };

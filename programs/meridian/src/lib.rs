@@ -170,10 +170,7 @@ pub mod meridian {
         ctx: Context<PostRedstonePrice>,
         symbol: [u8; SYMBOL_LEN],
         payload: Vec<u8>,
-        close_ts: i64,
     ) -> Result<()> {
-        instructions::post_redstone_price::handle_post_redstone_price(
-            ctx, symbol, payload, close_ts,
-        )
+        instructions::post_redstone_price::handle_post_redstone_price(ctx, symbol, payload)
     }
 }

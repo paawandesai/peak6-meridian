@@ -96,7 +96,6 @@ fn post_redstone_price_success_3_of_5() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -158,7 +157,6 @@ fn post_redstone_price_fails_insufficient_signers() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -215,7 +213,6 @@ fn post_redstone_price_unknown_signer_ignored() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -271,7 +268,6 @@ fn post_redstone_price_malformed_payload() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -325,7 +321,6 @@ fn post_redstone_price_duplicate_signer_counts_once() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -393,7 +388,6 @@ fn post_redstone_price_tampered_signature_recovery_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -449,7 +443,6 @@ fn post_redstone_price_tampered_value_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -506,7 +499,6 @@ fn post_redstone_price_tampered_timestamp_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -563,7 +555,6 @@ fn post_redstone_price_tampered_feed_id_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -610,7 +601,6 @@ fn post_redstone_price_oversized_payload_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload,
     };
 
@@ -660,8 +650,7 @@ fn post_redstone_price_wrong_feed_id_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker_nvda, // NVDA
-        close_ts: 1700000000,
-        payload, // TSLA payload
+        payload,             // TSLA payload
     };
 
     let accounts = meridian::accounts::PostRedstonePrice {
@@ -715,7 +704,6 @@ fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
         payload: in_window_payload.clone(),
-        close_ts: close_ts,
     };
 
     let accounts = meridian::accounts::PostRedstonePrice {
@@ -757,7 +745,6 @@ fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
 
     let ix2 = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
-        close_ts: 1700000000,
         payload: too_late_payload,
     };
 

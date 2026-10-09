@@ -1442,6 +1442,10 @@
       "discriminator": [237, 212, 22, 175, 201, 117, 215, 99]
     },
     {
+      "name": "OracleConfigSet",
+      "discriminator": [248, 155, 240, 40, 76, 69, 13, 4]
+    },
+    {
       "name": "OrderCancelled",
       "discriminator": [108, 56, 128, 68, 168, 113, 168, 239]
     },
@@ -1460,6 +1464,10 @@
     {
       "name": "Redeemed",
       "discriminator": [14, 29, 183, 71, 31, 165, 107, 38]
+    },
+    {
+      "name": "RedstonePricePosted",
+      "discriminator": [107, 134, 33, 214, 200, 199, 239, 225]
     },
     {
       "name": "Unpaused",
@@ -1674,26 +1682,31 @@
     },
     {
       "code": 6041,
+      "name": "OracleTooManySigners",
+      "msg": "Too many signers: maximum is 8"
+    },
+    {
+      "code": 6042,
       "name": "OracleThresholdTooLow",
       "msg": "Signer threshold must be at least 1"
     },
     {
-      "code": 6042,
+      "code": 6043,
       "name": "OracleThresholdTooHigh",
       "msg": "Signer threshold cannot exceed the signer count"
     },
     {
-      "code": 6043,
+      "code": 6044,
       "name": "PairQuantityMismatch",
       "msg": "Pair redeem needs equal YES and NO quantities before settlement"
     },
     {
-      "code": 6044,
+      "code": 6045,
       "name": "NothingToRedeem",
       "msg": "Nothing to redeem"
     },
     {
-      "code": 6045,
+      "code": 6046,
       "name": "MathOverflow",
       "msg": "Arithmetic overflow"
     }
@@ -2347,6 +2360,26 @@
       }
     },
     {
+      "name": "OracleConfigSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "signer_count",
+            "type": "u8"
+          },
+          {
+            "name": "signer_threshold",
+            "type": "u8"
+          },
+          {
+            "name": "max_package_delay_secs",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "OrderCancelled",
       "type": {
         "kind": "struct",
@@ -2525,8 +2558,8 @@
           },
           {
             "name": "value",
-            "docs": ["Price value with 8 decimals (RedStone format)."],
-            "type": "u64"
+            "docs": ["Price value with 8 decimals (RedStone format, u128 per domain.md)."],
+            "type": "u128"
           },
           {
             "name": "package_timestamp_ms",
@@ -2541,6 +2574,36 @@
           {
             "name": "signer_count",
             "docs": ["Number of valid signers in the verified package."],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedstonePricePosted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "symbol",
+            "type": {
+              "array": ["u8", 8]
+            }
+          },
+          {
+            "name": "value",
+            "type": "u128"
+          },
+          {
+            "name": "package_timestamp_ms",
+            "type": "i64"
+          },
+          {
+            "name": "posted_slot",
+            "type": "u64"
+          },
+          {
+            "name": "signer_count",
             "type": "u8"
           }
         ]
