@@ -111,6 +111,7 @@ fn settle_market_succeeds_after_redstone_post() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -199,6 +200,7 @@ fn settle_market_fails_package_before_close() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -282,6 +284,7 @@ fn settle_market_fails_package_too_late() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -365,6 +368,7 @@ fn settle_market_fails_stale_oracle() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -455,6 +459,7 @@ fn settle_market_fails_wrong_price_pda() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: wrong_ticker,
+        close_ts: BASE_CLOSE_TS,
         payload,
     };
 
@@ -542,6 +547,7 @@ fn settle_market_fails_before_close() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -624,6 +630,7 @@ fn settle_market_at_strike_boundary() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 

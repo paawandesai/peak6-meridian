@@ -36,6 +36,7 @@ pub fn handle_post_redstone_price(
     ctx: Context<PostRedstonePrice>,
     symbol: [u8; SYMBOL_LEN],
     payload: Vec<u8>,
+    close_ts: i64,
 ) -> Result<()> {
     use crate::redstone::{compute_median, parse_payload, verify_signature};
 
@@ -48,6 +49,29 @@ pub fn handle_post_redstone_price(
     // All packages must have same timestamp and feed_id
     let expected_timestamp = packages[0].timestamp_ms;
     let expected_feed_id = packages[0].feed_id;
+
+    // Settlement window validation (AB-03 liveness): reject packages outside settlement window
+    // to prevent permissionless overwrite bricking oracle settlement
+    // Convert close_ts (seconds) to milliseconds for comparison with package timestamp
+    let close_ts_ms = close_ts
+        .checked_mul(1000)
+        .ok_or(MeridianError::MathOverflow)?;
+    let window_end_ms = close_ts_ms
+        .checked_add(
+            oracle_config
+                .max_package_delay_secs
+                .checked_mul(1000)
+                .ok_or(MeridianError::MathOverflow)?,
+        )
+        .ok_or(MeridianError::MathOverflow)?;
+    require!(
+        expected_timestamp >= close_ts_ms,
+        MeridianError::OracleBeforeClose
+    );
+    require!(
+        expected_timestamp <= window_end_ms,
+        MeridianError::RedStonePackageTooLate
+    );
 
     // AB-04: Validate feed_id matches the canonical feed_id for this symbol.
     // Canonical feed_id: symbol bytes right-padded with zeros to 32 bytes.
@@ -90,13 +114,21 @@ pub fn handle_post_redstone_price(
     // Compute median value
     let median_value = compute_median(valid_values);
 
-    // Check package timestamp not older than stored (if exists)
+    // Timestamp validation: allow same timestamp to refresh posted_slot,
+    // and allow in-window package to replace out-of-window stored value even if older
     let redstone_price = &mut ctx.accounts.redstone_price;
     if redstone_price.package_timestamp_ms > 0 {
-        require!(
-            expected_timestamp > redstone_price.package_timestamp_ms,
-            MeridianError::RedStonePackageOlderThanStored
-        );
+        let stored_in_window = redstone_price.package_timestamp_ms >= close_ts_ms
+            && redstone_price.package_timestamp_ms <= window_end_ms;
+
+        // If stored value is out of window, allow replacement
+        // Otherwise require new timestamp >= stored (allows refresh at same timestamp)
+        if stored_in_window {
+            require!(
+                expected_timestamp >= redstone_price.package_timestamp_ms,
+                MeridianError::RedStonePackageOlderThanStored
+            );
+        }
     }
 
     // Update RedstonePrice account

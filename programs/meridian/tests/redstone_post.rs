@@ -96,6 +96,7 @@ fn post_redstone_price_success_3_of_5() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -157,6 +158,7 @@ fn post_redstone_price_fails_insufficient_signers() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -213,6 +215,7 @@ fn post_redstone_price_unknown_signer_ignored() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -268,6 +271,7 @@ fn post_redstone_price_malformed_payload() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -321,6 +325,7 @@ fn post_redstone_price_duplicate_signer_counts_once() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -388,6 +393,7 @@ fn post_redstone_price_tampered_signature_recovery_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -443,6 +449,7 @@ fn post_redstone_price_tampered_value_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -499,6 +506,7 @@ fn post_redstone_price_tampered_timestamp_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -555,6 +563,7 @@ fn post_redstone_price_tampered_feed_id_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -601,6 +610,7 @@ fn post_redstone_price_oversized_payload_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 
@@ -650,7 +660,8 @@ fn post_redstone_price_wrong_feed_id_fails() {
 
     let ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker_nvda, // NVDA
-        payload,             // TSLA payload
+        close_ts: 1700000000,
+        payload, // TSLA payload
     };
 
     let accounts = meridian::accounts::PostRedstonePrice {
@@ -669,4 +680,117 @@ fn post_redstone_price_wrong_feed_id_fails() {
         .harness
         .send_with_budget(instruction, &[&payer], 400_000);
     assert_meridian_error_with_budget(&result, MeridianError::RedStoneFeedIdMismatch);
+}
+
+#[test]
+fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
+    // AB-03 liveness: in-window price cannot be bricked by posting too-late payload
+    let signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
+    let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
+
+    let mut harness = setup_with_signers(addresses);
+    let payer = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    let ticker = symbol("NVDA");
+    let close_ts = 1700000000i64; // Unix seconds
+    let close_ts_ms = close_ts * 1000;
+
+    // Post in-window price (close_ts + 100s, well within 600s window)
+    let in_window_ts = close_ts_ms + 100_000;
+    let in_window_value = 2000_0000_0000u128;
+    let mut builder = RedstonePayloadBuilder::new("NVDA", in_window_value, in_window_ts);
+    for signer in &signers[0..3] {
+        builder = builder.add_signer(signer.clone());
+    }
+    let in_window_payload = builder.build();
+
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let ix = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        payload: in_window_payload.clone(),
+        close_ts: close_ts,
+    };
+
+    let accounts = meridian::accounts::PostRedstonePrice {
+        oracle_config: oracle_config_pda,
+        redstone_price: price_pda,
+        payer: payer.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&payer], 400_000);
+    expect_success(&result);
+
+    // Verify in-window price was stored
+    let account = harness
+        .harness
+        .svm
+        .get_account(&price_pda)
+        .expect("RedstonePrice account should exist");
+    let mut data = account.data.as_slice();
+    let price = RedstonePrice::try_deserialize(&mut data).unwrap();
+    assert_eq!(price.value, in_window_value);
+    assert_eq!(price.package_timestamp_ms, in_window_ts);
+
+    // Attempt to post too-late payload (close_ts + 700s, outside 600s window)
+    let too_late_ts = close_ts_ms + 700_000;
+    let too_late_value = 2100_0000_0000u128;
+    let mut builder2 = RedstonePayloadBuilder::new("NVDA", too_late_value, too_late_ts);
+    for signer in &signers[0..3] {
+        builder2 = builder2.add_signer(signer.clone());
+    }
+    let too_late_payload = builder2.build();
+
+    let ix2 = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        close_ts: 1700000000,
+        payload: too_late_payload,
+    };
+
+    let instruction2 = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix2.data(),
+    };
+    let result2 = harness
+        .harness
+        .send_with_budget(instruction2, &[&payer], 400_000);
+    // Should be rejected with RedStonePackageTooLate
+    assert_meridian_error_with_budget(&result2, MeridianError::RedStonePackageTooLate);
+
+    // Verify in-window price is still intact
+    let account_after = harness
+        .harness
+        .svm
+        .get_account(&price_pda)
+        .expect("RedstonePrice account should exist");
+    let mut data_after = account_after.data.as_slice();
+    let price_after = RedstonePrice::try_deserialize(&mut data_after).unwrap();
+    assert_eq!(price_after.value, in_window_value);
+    assert_eq!(price_after.package_timestamp_ms, in_window_ts);
+
+    // Verify in-window price can be refreshed (same timestamp, updates posted_slot)
+    let instruction3 = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result3 = harness
+        .harness
+        .send_with_budget(instruction3, &[&payer], 400_000);
+    expect_success(&result3);
 }

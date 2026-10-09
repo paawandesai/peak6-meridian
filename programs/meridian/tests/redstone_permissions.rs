@@ -226,6 +226,7 @@ fn post_redstone_price_is_permissionless() {
 
     let post_ix = meridian::instruction::PostRedstonePrice {
         symbol: ticker,
+        close_ts: 1700000000,
         payload,
     };
 

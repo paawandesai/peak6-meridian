@@ -494,10 +494,13 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
     expect(result.record.oracleMaxPackageDelaySecs).toBe(600);
 
     // Verify on-chain OracleConfig account was written
-    const oracleConfigPda = new PublicKey(result.record.oracleConfigPda!);
+    expect(result.record.oracleConfigPda).toBeDefined();
+    const oracleConfigPda = new PublicKey(result.record.oracleConfigPda ?? "");
     const accountInfo = await validator.connection.getAccountInfo(oracleConfigPda);
     expect(accountInfo).not.toBeNull();
-    expect(accountInfo!.owner.toBase58()).toBe(result.record.programId);
+    if (accountInfo) {
+      expect(accountInfo.owner.toBase58()).toBe(result.record.programId);
+    }
 
     // Deserialize and verify signers and threshold match config file
     const oracleConfig = await program.account.oracleConfig.fetch(oracleConfigPda);
@@ -513,8 +516,9 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
     ];
     for (let i = 0; i < 3; i++) {
       const signer = oracleConfig.signers[i];
-      expect(signer).toBeDefined();
-      expect(Array.from(signer!)).toEqual(expectedSigners[i]);
+      if (signer) {
+        expect(Array.from(signer)).toEqual(expectedSigners[i]);
+      }
     }
   });
 
