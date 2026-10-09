@@ -46,13 +46,14 @@ Environment (public keys and key FILE PATHS only):
   SWITCHBOARD_QUEUE     queue public key; needed with --feeds to verify feed hashes
 
 Options:
-  --out <file>      deployment record (default deployments/devnet.json)
-  --feeds <file>    pin real feeds: { "AAPL": [{pubkey, hash}, {pubkey, hash}], ... }
-  --queue <pubkey>  Switchboard queue (overrides SWITCHBOARD_QUEUE)
-  --repo-root <dir> read sources and build artifacts from <dir> (default: this repository)
-  --skip-build      do not run the devnet build first (use the existing target/ artifacts)
-  --allow-upgrade   upgrade an existing program whose ELF differs from this build; without it a
-                    mismatch fails loudly (a rebuild on another machine is never byte-identical)
+  --out <file>           deployment record (default deployments/devnet.json)
+  --feeds <file>         pin real feeds: { "AAPL": [{pubkey, hash}, {pubkey, hash}], ... }
+  --queue <pubkey>       Switchboard queue (overrides SWITCHBOARD_QUEUE)
+  --oracle-config <file> set RedStone oracle configuration (M2-15)
+  --repo-root <dir>      read sources and build artifacts from <dir> (default: this repository)
+  --skip-build           do not run the devnet build first (use the existing target/ artifacts)
+  --allow-upgrade        upgrade an existing program whose ELF differs from this build; without it a
+                         mismatch fails loudly (a rebuild on another machine is never byte-identical)
   --help
 `;
 
@@ -69,6 +70,7 @@ export type Options = {
   readonly queue: PublicKey | undefined;
   readonly outPath: string;
   readonly feedsPath: string | undefined;
+  readonly oracleConfigPath: string | undefined;
   readonly skipBuild: boolean;
   /** Upgrade an existing program whose ELF differs from the build (opt-in). */
   readonly allowUpgrade: boolean;
@@ -96,6 +98,7 @@ export function parseOptions(
       out: { type: "string" },
       feeds: { type: "string" },
       queue: { type: "string" },
+      "oracle-config": { type: "string" },
       "repo-root": { type: "string" },
       "skip-build": { type: "boolean" },
       "allow-upgrade": { type: "boolean" },
@@ -138,6 +141,8 @@ export function parseOptions(
     queue,
     outPath: resolvePath(root, values.out ?? "deployments/devnet.json"),
     feedsPath: values.feeds === undefined ? undefined : resolvePath(root, values.feeds),
+    oracleConfigPath:
+      values["oracle-config"] === undefined ? undefined : resolvePath(root, values["oracle-config"]),
     skipBuild: values["skip-build"] === true,
     allowUpgrade: values["allow-upgrade"] === true,
   };
