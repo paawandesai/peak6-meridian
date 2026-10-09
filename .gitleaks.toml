@@ -37,6 +37,7 @@ commits = [
   "93e6a8e6710cdd2a4f14c575a29fa337183d9383", # MR !28 old head: fake KEY in market-data-server.test.ts
   "6d3fd0f3d822519e62283c574246b41296043902", # MR !27 old head: fake API keys in switchboard.test.ts
   "5eb5bbfab1b3ab4313e438057fef67e6be3fed5d", # MR !27 old head: public lookup-table address in a fixture
+  "4ebfd5030df352a8a4f96a2b70021927c2bddff8", # M3-10: fake Pyth API token in client.test.ts (test fixture)
 ]
 
 [[allowlists]]
