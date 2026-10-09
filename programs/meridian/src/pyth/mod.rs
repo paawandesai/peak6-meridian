@@ -15,21 +15,10 @@ use anchor_lang::prelude::*;
 use crate::errors::MeridianError;
 use crate::oracle::CloseReading;
 
-/// Pyth program on mainnet-beta.
-/// Source: https://docs.pyth.network/price-feeds/contract-addresses/solana
-pub const PYTH_MAINNET_PID: Pubkey = pubkey!("FsJ3A3u2vn5cTVofAjvy6y5kwABJAqYWpe4975bi2epH");
-
-/// Pyth program on devnet.
-/// Source: https://docs.pyth.network/price-feeds/contract-addresses/solana
-pub const PYTH_DEVNET_PID: Pubkey = pubkey!("gSbePebfvPy7tRqimPoVecS2UsBvYv46ynrzWocc92s");
-
-/// Pyth Solana Receiver program on mainnet-beta (for Pyth Pro signed updates).
-/// Source: https://docs.pyth.network/price-feeds/use-real-data/solana#price-feed-accounts
-pub const PYTH_PUSH_MAINNET_PID: Pubkey =
-    pubkey!("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc6E6JiV");
-
-/// Pyth Solana Receiver program on devnet (for Pyth Pro signed updates).
-pub const PYTH_PUSH_DEVNET_PID: Pubkey = pubkey!("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc6E6JiV");
+/// Pyth Solana Receiver program (for Pyth Pro PriceUpdateV2 accounts).
+/// This is the program that owns PriceUpdateV2 accounts, from pyth-solana-receiver-sdk.
+/// Source: pyth-solana-receiver-sdk declare_id!
+pub const PYTH_RECEIVER_PID: Pubkey = pubkey!("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
 
 /// Pyth feed IDs for MAG7 tickers (from issue #49).
 /// These are PLACEHOLDER hex strings and MUST be verified against official Pyth documentation.
@@ -62,21 +51,25 @@ pub mod feed_ids {
         "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc9641f1";
 }
 
-/// Pyth price account discriminator (first 8 bytes).
-/// Pyth uses a different account structure; this will be refined based on actual Pyth account layout.
-pub const PYTH_PRICE_DISCRIMINATOR: [u8; 8] = [0; 8]; // TODO: Update with actual Pyth discriminator
+/// Pyth PriceUpdateV2 account discriminator (Anchor: sha256("account:PriceUpdateV2")[:8]).
+/// Source: pyth-solana-receiver-sdk
+pub const PYTH_PRICE_UPDATE_V2_DISCRIMINATOR: [u8; 8] = [
+    34, 241, 35, 99, 157, 126, 244, 205,
+];
 
 /// One Pyth feed's reading, before settlement checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PythReading {
     /// Pyth feed ID (32-byte identifier).
     pub feed_id: [u8; 32],
-    /// Price value with Pyth's exponent applied (will be scaled to match our oracle value format).
+    /// Price value scaled to 18 decimals.
     pub value_scaled: i128,
     /// Unix timestamp of the price update (publish_time).
     pub publish_time: i64,
-    /// Confidence interval of the price.
+    /// Confidence interval.
     pub confidence: u64,
+    /// Slot when this price was posted on-chain.
+    pub posted_slot: u64,
 }
 
 fn read_array<const N: usize>(data: &[u8], offset: usize) -> Result<[u8; N]> {
@@ -97,40 +90,67 @@ fn read_array<const N: usize>(data: &[u8], offset: usize) -> Result<[u8; N]> {
 ///
 /// TODO: Verify exact discriminator, offsets, and field sizes against current SDK.
 pub fn parse_pyth_price(data: &[u8]) -> Result<PythReading> {
-    // Conservative minimum: 8 (disc) + 32 (auth) + 1 (level) + 60 (message) = 101
-    require!(data.len() >= 101, MeridianError::OracleInvalidValue);
+    // Conservative minimum: 8 (disc) + 32 (auth) + 1 (level) + 68 (message+posted_slot) = 109
+    require!(data.len() >= 109, MeridianError::OracleInvalidValue);
 
-    // Check discriminator (placeholder - MUST verify actual value)
+    // Check discriminator (fail closed - must match exactly)
     let disc = read_array::<8>(data, 0)?;
-    require!(disc == [0x02, 0x98, 0x73, 0x84, 0x7b, 0x0a, 0x8c, 0x6e] || disc == PYTH_PRICE_DISCRIMINATOR, MeridianError::OracleInvalidValue);
+    require!(
+        disc == PYTH_PRICE_UPDATE_V2_DISCRIMINATOR,
+        MeridianError::OracleInvalidValue
+    );
 
     // Parse VerificationLevel to find message offset
+    // Borsh encoding: Partial=0 (2 bytes: tag + num_signatures), Full=1 (1 byte: tag only)
     let level_tag = *data.get(40).ok_or(MeridianError::OracleInvalidValue)?;
     let msg_offset = match level_tag {
-        0 => 41, // Full: 1 byte
-        1 => 42, // Partial: 2 bytes (tag + num_signatures)
+        0 => 42, // Partial: 2 bytes (tag + num_signatures)
+        1 => 41, // Full: 1 byte
         _ => return Err(MeridianError::OracleInvalidValue.into()),
     };
 
-    require!(data.len() >= msg_offset + 60, MeridianError::OracleInvalidValue);
+    // PriceFeedMessage layout: feed_id(32) + price(8) + conf(8) + expo(4) + publish_time(8) + posted_slot(8) = 68
+    require!(
+        data.len() >= msg_offset + 68,
+        MeridianError::OracleInvalidValue
+    );
 
-    // Parse PriceFeedMessage fields (offsets TODO: verify)
+    // Parse PriceFeedMessage fields
     let feed_id = read_array::<32>(data, msg_offset)?;
     let price_i64 = i64::from_le_bytes(read_array(data, msg_offset + 32)?);
     let conf = u64::from_le_bytes(read_array(data, msg_offset + 40)?);
     let expo = i32::from_le_bytes(read_array(data, msg_offset + 48)?);
     let publish_time = i64::from_le_bytes(read_array(data, msg_offset + 52)?);
+    let posted_slot = u64::from_le_bytes(read_array(data, msg_offset + 60)?);
 
     // Scale to 18 decimals: price_i64 * 10^expo → value * 10^18
     let price_128 = i128::from(price_i64);
     let scale_power = 18i32.checked_sub(expo).ok_or(MeridianError::MathOverflow)?;
     let value_scaled = if scale_power >= 0 {
-        price_128.checked_mul(10i128.checked_pow(scale_power as u32).ok_or(MeridianError::MathOverflow)?).ok_or(MeridianError::MathOverflow)?
+        price_128
+            .checked_mul(
+                10i128
+                    .checked_pow(scale_power as u32)
+                    .ok_or(MeridianError::MathOverflow)?,
+            )
+            .ok_or(MeridianError::MathOverflow)?
     } else {
-        price_128.checked_div(10i128.checked_pow((-scale_power) as u32).ok_or(MeridianError::MathOverflow)?).ok_or(MeridianError::MathOverflow)?
+        price_128
+            .checked_div(
+                10i128
+                    .checked_pow((-scale_power) as u32)
+                    .ok_or(MeridianError::MathOverflow)?,
+            )
+            .ok_or(MeridianError::MathOverflow)?
     };
 
-    Ok(PythReading { feed_id, value_scaled, publish_time, confidence: conf })
+    Ok(PythReading {
+        feed_id,
+        value_scaled,
+        publish_time,
+        confidence: conf,
+        posted_slot,
+    })
 }
 
 /// Validates a Pyth reading: pinned feed ID, positive value, published at or after close, fresh.
@@ -159,36 +179,23 @@ pub fn check_pyth_reading(
         MeridianError::OracleBeforeClose
     );
 
-    // Check 4: Staleness check (fail closed like oracle::check_reading)
-    // Pyth uses timestamps, not slots. Fail if publish_time is in the future.
+    // Check 4: Timestamp must not be in future (fail closed)
     let current_time = clock.unix_timestamp;
     require!(
         reading.publish_time <= current_time,
         MeridianError::OracleInvalidValue
     );
 
-    let age_seconds = current_time
-        .checked_sub(reading.publish_time)
-        .ok_or(MeridianError::MathOverflow)?;
+    // Check 5: Staleness check in slots like oracle::check_reading
+    let age = clock
+        .slot
+        .checked_sub(reading.posted_slot)
+        .ok_or(MeridianError::OracleInvalidValue)?;
+    require!(age <= max_staleness_slots, MeridianError::OracleStale);
 
-    // Convert max_staleness_slots to seconds (assuming ~400ms per slot)
-    let max_age_ms = max_staleness_slots
-        .checked_mul(400)
-        .ok_or(MeridianError::MathOverflow)?;
-    let max_age_seconds = i64::try_from(
-        max_age_ms
-            .checked_div(1000)
-            .ok_or(MeridianError::MathOverflow)?,
-    )
-    .map_err(|_| MeridianError::MathOverflow)?;
-
-    require!(age_seconds <= max_age_seconds, MeridianError::OracleStale);
-
-    // Return validated reading with non-zero slot (approximation from publish_time)
-    // Use clock.slot as a conservative estimate since we know it's recent
     Ok(CloseReading {
         value_scaled: reading.value_scaled,
-        slot: clock.slot,
+        slot: reading.posted_slot,
     })
 }
 
@@ -204,13 +211,11 @@ pub fn read_pyth_close(
     close_ts: i64,
     max_staleness_slots: u64,
 ) -> Result<CloseReading> {
-    // Check 1: Owner must be Pyth program or Pyth Push program
-    let valid_owner = *price_account.owner == PYTH_MAINNET_PID
-        || *price_account.owner == PYTH_DEVNET_PID
-        || *price_account.owner == PYTH_PUSH_MAINNET_PID
-        || *price_account.owner == PYTH_PUSH_DEVNET_PID;
-
-    require!(valid_owner, MeridianError::OracleWrongOwner);
+    // Check 1: Owner must be Pyth Solana Receiver program (PriceUpdateV2 accounts)
+    require!(
+        *price_account.owner == PYTH_RECEIVER_PID,
+        MeridianError::OracleWrongOwner
+    );
 
     // Check 2: Account key must match expected (pinned in Config)
     require_keys_eq!(
