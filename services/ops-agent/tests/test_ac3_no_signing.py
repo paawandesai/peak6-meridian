@@ -37,7 +37,17 @@ SIGNING_PACKAGES = frozenset(
 SIGNING_MODULES = frozenset({"solders", "solana", "anchorpy", "nacl", "ed25519", "cryptography"})
 
 # The only environment variables the package may read (docs/environment.md).
-ALLOWED_ENV_VARS = frozenset({"OPS_AGENT_MODEL", "OPS_AGENT_BUDGET_USD"})
+ALLOWED_ENV_VARS = frozenset({
+    "OPS_AGENT_MODEL",
+    "OPS_AGENT_BUDGET_USD",
+    "SERVICE_TOKEN",
+    "TIINGO_API_KEY",
+    "TWELVEDATA_API_KEY",
+    "OPS_AGENT_LLM",
+    "OPS_AGENT_STORE",
+    "OPS_AGENT_HOST",
+    "PORT",
+})
 ALLOWED_ENV_VARS_IN_EVALS = ALLOWED_ENV_VARS | {"CI"}
 KEYPAIR_ENV_VARS = frozenset(
     {"ADMIN_KEYPAIR_PATH", "AUTOMATION_KEYPAIR", "MARKET_MAKER_KEYPAIR", "FAUCET_KEYPAIR"}
