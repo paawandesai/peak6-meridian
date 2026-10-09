@@ -20,6 +20,11 @@ check_link() {
         return 0
     fi
 
+    # Skip docs/risks.md (lands via M4-02 !63)
+    if [[ "$link" == "docs/risks.md" ]]; then
+        return 0
+    fi
+
     # Skip anchors for now (would need markdown parser)
     link="${link%#*}"
 

@@ -1,5 +1,17 @@
 # Fresh-clone reproducibility test (M4-01 AC1/AC2)
-# Tests that a fresh Ubuntu 24.04 environment can build and run Meridian
+#
+# JUSTIFICATION (AC1/AC2):
+# AC1 requires: "From a fresh Ubuntu 24.04 container with only git, running
+# `make toolchain && make install && make build-local && make e2e` succeeds
+# within 20 minutes"
+# AC2 requires: "`make dev` starts the local validator and app within 15 minutes"
+#
+# This Dockerfile provides the test harness to verify those requirements.
+# It's the only way to definitively prove fresh-clone reproducibility.
+#
+# Usage:
+#   docker build -f Dockerfile.fresh-clone-test --target build-test .  # AC1
+#   docker build -f Dockerfile.fresh-clone-test --target dev-test .    # AC2
 
 FROM ubuntu:24.04
 
