@@ -284,36 +284,34 @@ class MarketMakerLoop:
         et_now = now.astimezone(ZoneInfo("America/New_York"))
         today_trading_date = int(et_now.strftime("%Y%m%d"))
 
+        # Filter to today's markets only (Finding #3: prior-day markets stay Open for
+        # settlement but don't get new quotes)
+        today_markets = [m for m in markets if m.is_open and m.trading_date == today_trading_date]
+
         # Count current resting orders PER MARKET (domain.md: 8 per owner per market)
         orders_per_market: dict[str, int] = {}
-        for market in markets:
-            if market.is_open:
-                try:
-                    orders = await self._order_client.fetch_resting_orders(market.market)
-                    mm_orders = [o for o in orders if o.owner == self._mm_owner]
-                    orders_per_market[market.market] = len(mm_orders)
-                except Exception:
-                    logger.exception(f"Failed to fetch orders for {market.ticker}")
-                    orders_per_market[market.market] = 0
+        for market in today_markets:
+            try:
+                orders = await self._order_client.fetch_resting_orders(market.market)
+                mm_orders = [o for o in orders if o.owner == self._mm_owner]
+                orders_per_market[market.market] = len(mm_orders)
+            except Exception:
+                logger.exception(f"Failed to fetch orders for {market.ticker}")
+                orders_per_market[market.market] = 0
 
         for fv in fair_values:
-            # Match by market string (includes trading_date) to handle multiple
-            # days with same ticker/strike (Finding #3)
+            # Match by ticker + strike among today's markets only.
+            # Market IDs may differ between M3-01 and ChainMarketSource (M3-01 uses
+            # opaque strings or PDAs; ChainMarketSource uses TICKER_YYYYMMDD_STRIKE).
             fv_market: MarketState | None = next(
-                (m for m in markets if m.market == fv.market),
+                (
+                    m
+                    for m in today_markets
+                    if m.ticker == fv.ticker and m.strike_cents == fv.strike_cents
+                ),
                 None,
             )
-            if not fv_market or not fv_market.is_open:
-                continue
-
-            # Skip prior-day markets: they remain Open for settlement (AB-11)
-            # but don't get new quotes. (This is belt-and-suspenders since M3-01
-            # shouldn't provide fair values for prior days.)
-            if fv_market.trading_date != today_trading_date:
-                logger.debug(
-                    f"Skipping prior-day market {fv_market.market} "
-                    f"(date={fv_market.trading_date}, today={today_trading_date})"
-                )
+            if not fv_market:
                 continue
 
             # Get current inventory using MarketKey (Finding #5)
