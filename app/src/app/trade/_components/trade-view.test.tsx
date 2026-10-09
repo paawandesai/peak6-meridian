@@ -89,6 +89,8 @@ const signButton = () => screen.getByRole("button", { name: /^Sign and/ });
 describe("the four intents (UI-04 AC1)", () => {
   it("shows all four, in domain order, each with an outcome sub-label", async () => {
     renderView();
+    // Wait for wallet to load before checking intent labels (M2-06: fail closed during load)
+    await screen.findByText("spread 3¢ · mid 59¢");
     const radios = within(intentGroup()).getAllByRole("radio");
     expect(radios.map((r) => r.textContent)).toEqual([
       "Buy YESwins if ≥ $180",
@@ -96,17 +98,17 @@ describe("the four intents (UI-04 AC1)", () => {
       "Sell YESexit YES",
       "Sell NOexit NO",
     ]);
-    await screen.findByText("spread 3¢ · mid 59¢");
   });
 
   it("gives Buy NO the same size and weight as Buy YES", async () => {
     renderView();
+    // Wait for wallet to load before checking intent labels
+    await screen.findByTestId("simulated");
     fireEvent.click(intentRadio("Sell YESexit YES")); // neither buy intent selected
     const yes = intentRadio("Buy YESwins if ≥ $180");
     const no = intentRadio("Buy NOwins if < $180");
     expect(no.className).toBe(yes.className);
     expect(no.tagName).toBe(yes.tagName);
-    await screen.findByTestId("simulated");
   });
 });
 
@@ -145,6 +147,8 @@ describe("simulate, then sign (AC2)", () => {
 
   it("stays disabled when nothing would fill (empty book, market order)", async () => {
     renderView({ actions: fakeActions({ ok: true, events: [] }) });
+    // Wait for wallet to load
+    await screen.findByTestId("simulated");
     fireEvent.click(screen.getByLabelText("Market"));
     expect(await screen.findByRole("alert")).toHaveTextContent(/nothing would fill/);
     expect(signButton()).toBeDisabled();
@@ -286,6 +290,8 @@ describe("limit and market (FR-17)", () => {
 
   it("a market order is an IOC at the worst price, 99 to buy and 1 to sell", async () => {
     const { fake } = renderView();
+    // Wait for wallet to load
+    await screen.findByTestId("simulated");
     fireEvent.click(screen.getByLabelText("Market"));
     expect(screen.getByLabelText(/Worst price/)).toHaveValue("99");
     await waitFor(() => expect(signButton()).toBeEnabled());
@@ -300,6 +306,8 @@ describe("limit and market (FR-17)", () => {
 
   it("Sell NO is immediate-or-cancel only: the limit choice is disabled", async () => {
     renderView();
+    // Wait for wallet to load
+    await screen.findByTestId("simulated");
     await pick("Sell NO");
     expect(screen.getByLabelText("Limit")).toBeDisabled();
     expect(screen.getByLabelText("Market")).toBeChecked();

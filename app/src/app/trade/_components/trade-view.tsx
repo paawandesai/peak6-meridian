@@ -82,15 +82,21 @@ export function TradeView(props: Props) {
     () => (fullBook === null || walletKey === "" ? [] : ownOrders(fullBook, walletKey)),
     [fullBook, walletKey],
   );
-  const holdings: Holdings = {
-    yes: walletData?.yes ?? 0n,
-    no: walletData?.no ?? 0n,
-    freeYes: walletData?.freeYes ?? 0n,
-    // Only a Buy NO rest (YES Ask while holding NO) is the exception; a Sell YES rest is not.
-    hasRestingAsk: own.some((order) => order.side === "Ask") && (walletData?.no ?? 0n) > 0n,
-    // Any resting asks (Sell YES or Buy NO) escrow YES; count as held for Buy NO constraint.
-    escrowedYesFromAsks: own.some((order) => order.side === "Ask"),
-  };
+  // Fail closed: if wallet is loading or errored, block all intents until ready.
+  // Defaulting to 0 would bypass the position constraint when a wallet *is* connected but slow/failed.
+  // When no wallet is connected (walletData === null after ready), holdings of 0 is safe.
+  const holdings: Holdings | null =
+    walletView.state.status === "ready"
+      ? {
+          yes: walletData?.yes ?? 0n,
+          no: walletData?.no ?? 0n,
+          freeYes: walletData?.freeYes ?? 0n,
+          // Only a Buy NO rest (YES Ask while holding NO) is the exception; a Sell YES rest is not.
+          hasRestingAsk: own.some((order) => order.side === "Ask") && (walletData?.no ?? 0n) > 0n,
+          // Any resting asks (Sell YES or Buy NO) escrow YES; count as held for Buy NO constraint.
+          escrowedYesFromAsks: own.some((order) => order.side === "Ask"),
+        }
+      : null;
   const refresh = (): void => {
     book.refresh();
     walletView.refresh();

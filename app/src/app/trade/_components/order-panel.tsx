@@ -35,7 +35,7 @@ type Props = {
   readonly market: MarketRow;
   readonly panel: PanelState;
   readonly book: FullBook | null;
-  readonly holdings: Holdings;
+  readonly holdings: Holdings | null;
   /** Base58 of the connected wallet, or `null`. */
   readonly user: string | null;
   readonly actions: TradeActions | null;
@@ -55,7 +55,7 @@ function IntentControl({
   readonly panel: PanelState;
   readonly intent: Intent;
   readonly strikeText: string;
-  readonly holdings: Holdings;
+  readonly holdings: Holdings | null;
   readonly onSelect: (intent: Intent) => void;
 }) {
   const tradable = panel.tradable;
@@ -67,7 +67,17 @@ function IntentControl({
       className="grid grid-cols-2 gap-mer-2 sm:grid-cols-4"
     >
       {INTENT_ORDER.map((value) => {
-        const gate = gateFor(value, holdings);
+        const gate =
+          holdings === null
+            ? {
+                blocked: true as const,
+                kind: "hold-yes" as const,
+                text: "Loading wallet...",
+                exit: null,
+                exitLabel: null,
+                exitQty: 0n,
+              }
+            : gateFor(value, holdings);
         const selected = value === intent;
         const sub = gate.blocked
           ? `blocked: ${gate.kind === "hold-yes" ? "you hold YES" : gate.kind === "hold-no" ? "you hold NO" : "order resting"}`
@@ -117,7 +127,18 @@ export function OrderPanel(props: Props) {
   const [tx, setTx] = useState<TxStatusProps | null>(null);
   const strikeText = formatStrike(market.strikeCents);
   const levels = useMemo(() => (book === null ? { bids: [], asks: [] } : levelsOf(book)), [book]);
-  const gate = gateFor(intent, holdings);
+  // Fail closed: if wallet is still loading or not connected, block all intents.
+  const gate =
+    holdings === null
+      ? {
+          blocked: true as const,
+          kind: "hold-yes" as const,
+          text: "Loading wallet...",
+          exit: null,
+          exitLabel: null,
+          exitQty: 0n,
+        }
+      : gateFor(intent, holdings);
 
   // Start each intent / kind with a sensible price (one that crosses the best opposite order).
   const selectIntent = (next: Intent, qty?: bigint): void => {
