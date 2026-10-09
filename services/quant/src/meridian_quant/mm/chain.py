@@ -568,9 +568,9 @@ class ChainOrderClient:
     async def get_yes_token_balance(self, market: str, owner: str) -> int:
         """Get YES token balance for owner in market.
 
-        Returns YES token balance (u64) from getTokenAccountBalance.
-        Returns 0 if ATA doesn't exist (response.value is None).
+        Returns 0 if ATA doesn't exist (checked via get_account_info).
         Propagates RPC errors (timeouts, 429, connection errors) to caller.
+        getTokenAccountBalance raises when account doesn't exist, so check first.
         """
         ticker, trading_date, strike_cents = self._parse_market_key(market)
         market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
@@ -578,18 +578,21 @@ class ChainOrderClient:
         yes_mint = derive_yes_mint_pda(self.program_id, market_pda)
         user_yes = get_associated_token_address(yes_mint, owner_pubkey)
 
-        response = await self.rpc.get_token_account_balance(user_yes)
-        if response.value is None:
+        # Check if account exists (getTokenAccountBalance raises if it doesn't)
+        account_info = await self.rpc.get_account_info(user_yes)
+        if account_info.value is None:
             return 0
-        # response.value.amount is a string, convert to int
-        return int(response.value.amount)
+
+        # Account exists, get balance
+        balance_resp = await self.rpc.get_token_account_balance(user_yes)
+        return int(balance_resp.value.amount)
 
     async def get_no_token_balance(self, market: str, owner: str) -> int:
         """Get NO token balance for owner in market.
 
-        Returns NO token balance (u64) from getTokenAccountBalance.
-        Returns 0 if ATA doesn't exist (response.value is None).
+        Returns 0 if ATA doesn't exist (checked via get_account_info).
         Propagates RPC errors (timeouts, 429, connection errors) to caller.
+        getTokenAccountBalance raises when account doesn't exist, so check first.
         """
         ticker, trading_date, strike_cents = self._parse_market_key(market)
         market_pda = derive_market_pda(self.program_id, ticker, trading_date, strike_cents)
@@ -597,7 +600,11 @@ class ChainOrderClient:
         no_mint = derive_no_mint_pda(self.program_id, market_pda)
         user_no = get_associated_token_address(no_mint, owner_pubkey)
 
-        response = await self.rpc.get_token_account_balance(user_no)
-        if response.value is None:
+        # Check if account exists (getTokenAccountBalance raises if it doesn't)
+        account_info = await self.rpc.get_account_info(user_no)
+        if account_info.value is None:
             return 0
-        return int(response.value.amount)
+
+        # Account exists, get balance
+        balance_resp = await self.rpc.get_token_account_balance(user_no)
+        return int(balance_resp.value.amount)

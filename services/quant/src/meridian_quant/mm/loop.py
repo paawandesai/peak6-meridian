@@ -135,13 +135,15 @@ class MarketMakerLoop:
             await self._settle_funds()
 
             # Sync inventory from wallet (now all YES is in wallet, not escrowed)
-            await self._sync_inventory(open_markets)
+            # Returns only markets with successful balance reads (RPC errors skip quoting)
+            synced_markets = await self._sync_inventory(open_markets)
 
             # Place new quotes (no cancel needed, already cancelled above)
-            await self._quote_all_strikes(fair_values, open_markets)
+            # Only quote markets that were successfully synced
+            await self._quote_all_strikes(fair_values, synced_markets)
 
-            # Update coverage metric
-            await self._update_coverage(open_markets)
+            # Update coverage metric (only for successfully synced markets)
+            await self._update_coverage(synced_markets)
 
         except Exception:
             logger.exception("Error in MM loop iteration")
@@ -201,13 +203,17 @@ class MarketMakerLoop:
             logger.exception("Failed to fetch open markets")
             return []
 
-    async def _sync_inventory(self, markets: list[MarketState]) -> None:
+    async def _sync_inventory(self, markets: list[MarketState]) -> list[MarketState]:
         """Sync inventory from on-chain YES token balances (AC1/AC2).
 
         Reads wallet YES token balance via getTokenAccountBalance, syncs to
         InventoryTracker, then mints pairs if inventory is low. This ensures
         skew reflects actual fills and the 200-lot cap binds correctly.
+
+        Returns markets that were successfully synced. Markets with balance read
+        failures are excluded (RPC errors propagate from get_*_token_balance).
         """
+        synced_markets = []
         for market in markets:
             if not market.is_open:
                 continue
@@ -231,7 +237,7 @@ class MarketMakerLoop:
                 self.inventory.set(market_key, signed_position)
             except Exception:
                 logger.exception(f"Failed to read token balances for {market.market}")
-                continue
+                continue  # Skip this market (don't add to synced_markets, don't quote it)
 
             # Mint only if we need YES for asks AND position isn't at cap
             # Don't replenish sold inventory - let position move with fills
@@ -256,6 +262,11 @@ class MarketMakerLoop:
                     )
                 except Exception:
                     logger.exception(f"Failed to mint pairs for {market.market}")
+
+            # Successfully synced this market's inventory
+            synced_markets.append(market)
+
+        return synced_markets
 
     async def _settle_funds(self) -> None:
         """Settle funds to recycle proceeds from fills.
