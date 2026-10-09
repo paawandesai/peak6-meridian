@@ -193,9 +193,9 @@ async function splitPlan(markets = 40) {
 }
 
 // CPU-bound fixture build (40-80 markets build real transactions), no real timer waits. Shared
-// fixtures built once in beforeAll to avoid rebuilding for each test. Describe-level timeout
-// covers fixture build (>5s each on loaded CI per pipeline 42851) plus property runs under coverage.
-// Will change with M2-16/M2-18 RedStone migration.
+// fixtures built once in beforeAll to avoid rebuilding for each test. beforeAll has explicit 30s
+// timeout for fixture build (>5s each on loaded CI per pipeline 42851); describe timeout covers
+// property runs under coverage. Will change with M2-16/M2-18 RedStone migration.
 describe("sendPlan: the 30-slot staleness budget (AC5)", { timeout: 30_000 }, () => {
   const BUDGET = 20; // max_staleness_slots 30 minus the safety margin
 
@@ -206,7 +206,7 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", { timeout: 30_000 }, ()
   beforeAll(async () => {
     sharedPlan40 = await splitPlan(40);
     sharedPlan80 = await splitPlan(80);
-  }); // No timeout here - covered by describe-level 30s
+  }, 30_000); // Explicit hook timeout: >5s per plan on loaded CI (pipeline 42851)
 
   it("sends the update, then the settles, when the slots stay within the budget", async () => {
     const { w, plan } = sharedPlan40;
