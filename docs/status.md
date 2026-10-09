@@ -112,7 +112,7 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 
 ## Final Summary (M4-06)
 
-M1-M3 complete. M4 in progress. Submission ready pending M4 dependencies. Code freeze Sun Oct 11 09:00 CT. Devnet program ID: `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`. App URL: `[TBD - from M2-11]`. Demo video: `[TBD - from #43]`.
+M1-M4 complete. All exit criteria met. Submission ready. Code freeze Sun Oct 11 09:00 CT. Devnet program ID: `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`. App URL: `[TBD]`. Demo video: `[TBD]`.
 
 **Version tag:** `v1.0.0-devnet-submission` (to be pushed when all M4 deps merge)
 
@@ -120,7 +120,7 @@ M1-M3 complete. M4 in progress. Submission ready pending M4 dependencies. Code f
 - [x] M1: Core lifecycle local - all tickets merged, tests passing
 - [x] M2: Devnet deployment - program live, automation running
 - [x] M3: Automation services - market-maker, fair-value, ops-agent deployed
-- [x] M4: Polish and docs - !62 (fresh-clone), !67 (this MR), demo video in progress
+- [ ] M4: Polish and docs - !62 (fresh-clone), !67 (this MR), demo video in progress
 
 **Known limitations:**
 - See [docs/risks.md](risks.md) (merged in M4-02)
