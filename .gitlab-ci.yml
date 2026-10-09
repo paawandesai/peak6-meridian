@@ -386,6 +386,10 @@ test:rust:
 test:js-py:
   stage: test
   extends: .light-on-app-change
+  needs:
+    - job: build
+      optional: true
+      artifacts: true
   tags: [$LIGHT_RUNNER_TAG]
   # Own group (not meridian-heavy): one JS/Python test job at a time across all Meridian
   # pipelines, so it no longer queues behind Rust builds but never stacks on the 8 GB Vultr box.
@@ -397,6 +401,10 @@ test:js-py:
     - *cache-uv
   script:
     - make install-js install-py
+    - |
+      if [ -f target/deploy/meridian.so ] && [ -f target/idl/meridian.json ]; then
+        export MERIDIAN_PREBUILT=1
+      fi
     - make test-js-py-unit test-js-py-security
 
 # Coverage gate: automatic on main, manual (non-blocking) on MRs that change code (.e2e-paths:
