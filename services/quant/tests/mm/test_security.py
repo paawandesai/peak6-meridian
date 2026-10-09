@@ -7,6 +7,7 @@ import base58
 from solders.keypair import Keypair  # type: ignore[import-untyped]
 
 from meridian_quant.mm.config import MMConfig
+from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.loop import MarketMakerLoop
 
 
@@ -32,7 +33,12 @@ def test_no_keypair_in_logs() -> None:
             service_token="secret_token",
         )
 
-        _mm = MarketMakerLoop(config)  # noqa: F841 - testing initialization doesn't leak
+        _mm = MarketMakerLoop(
+            config,
+            market_source=FakeMarketSource(),
+            fair_value_source=FakeFairValueSource(),
+            order_client=FakeOrderClient(),
+        )  # noqa: F841 - testing initialization doesn't leak
 
         # Log startup (this is what production code does - safe logging)
         logger.info("MM initialized")

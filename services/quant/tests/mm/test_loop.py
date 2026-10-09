@@ -7,6 +7,7 @@ import pytest
 from solders.keypair import Keypair  # type: ignore[import-untyped]
 
 from meridian_quant.mm.config import MMConfig
+from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.loop import MarketMakerLoop
 from meridian_quant.mm.quoter import generate_quote
 from meridian_quant.mm.types import FairValue, Inventory, MarketKey, MarketState
@@ -37,7 +38,13 @@ async def test_pull_on_stale_spot_data(mm_config: MMConfig) -> None:
     # Inject a fake clock
     now = datetime.now(UTC)
     fake_clock = lambda: now
-    mm = MarketMakerLoop(mm_config, clock=fake_clock)
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource(),
+        fair_value_source=FakeFairValueSource(),
+        order_client=FakeOrderClient(),
+        clock=fake_clock,
+    )
 
     # Create fair value with stale timestamp
     stale_time = now - timedelta(seconds=15)
@@ -64,7 +71,13 @@ async def test_no_pull_on_fresh_spot_data(mm_config: MMConfig) -> None:
     """MM does not pull quotes when spot data is fresh (AC2)."""
     now = datetime.now(UTC)
     fake_clock = lambda: now
-    mm = MarketMakerLoop(mm_config, clock=fake_clock)
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource(),
+        fair_value_source=FakeFairValueSource(),
+        order_client=FakeOrderClient(),
+        clock=fake_clock,
+    )
 
     fair_values = [
         FairValue(
@@ -88,7 +101,13 @@ async def test_pull_on_stale_flag(mm_config: MMConfig) -> None:
     """MM pulls all quotes when fair value has stale=True flag (AC2)."""
     now = datetime.now(UTC)
     fake_clock = lambda: now
-    mm = MarketMakerLoop(mm_config, clock=fake_clock)
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource(),
+        fair_value_source=FakeFairValueSource(),
+        order_client=FakeOrderClient(),
+        clock=fake_clock,
+    )
 
     fair_values = [
         FairValue(
@@ -113,7 +132,13 @@ async def test_pull_within_2_min_of_close(mm_config: MMConfig) -> None:
     # Set fake clock at 15:58:30 (90 seconds before close at 16:00)
     now = datetime(2026, 10, 8, 15, 58, 30, tzinfo=UTC)
     fake_clock = lambda: now
-    mm = MarketMakerLoop(mm_config, clock=fake_clock)
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource(),
+        fair_value_source=FakeFairValueSource(),
+        order_client=FakeOrderClient(),
+        clock=fake_clock,
+    )
 
     # Market closes at 16:00 (90 seconds away)
     close_ts = int(datetime(2026, 10, 8, 16, 0, 0, tzinfo=UTC).timestamp())
@@ -153,7 +178,13 @@ async def test_no_pull_when_far_from_close(mm_config: MMConfig) -> None:
     # Set fake clock at 15:00 (1 hour before close)
     now = datetime(2026, 10, 8, 15, 0, 0, tzinfo=UTC)
     fake_clock = lambda: now
-    mm = MarketMakerLoop(mm_config, clock=fake_clock)
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource(),
+        fair_value_source=FakeFairValueSource(),
+        order_client=FakeOrderClient(),
+        clock=fake_clock,
+    )
 
     # Market closes at 16:00 (3600 seconds away)
     close_ts = int(datetime(2026, 10, 8, 16, 0, 0, tzinfo=UTC).timestamp())
@@ -190,7 +221,12 @@ async def test_no_pull_when_far_from_close(mm_config: MMConfig) -> None:
 @pytest.mark.asyncio
 async def test_inventory_cap_respected(mm_config: MMConfig) -> None:
     """MM respects inventory cap of 200 per strike (AC2)."""
-    mm = MarketMakerLoop(mm_config)
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource(),
+        fair_value_source=FakeFairValueSource(),
+        order_client=FakeOrderClient(),
+    )
 
     # Set inventory to limit
     key = MarketKey(ticker="AAPL", trading_date=20261008, strike_cents=68000)

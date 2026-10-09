@@ -4,18 +4,17 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
 
-import httpx
 from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair  # type: ignore[import-untyped]
-from solders.pubkey import Pubkey  # type: ignore[import-untyped]
+from solders.pubkey import Pubkey
 
 from .config import MMConfig
 from .inventory import InventoryTracker
 from .metrics import book_coverage
 from .quoter import generate_quote
-from .types import FairValue, MarketKey, MarketState
+from .sources import FairValueSource, MarketSource, OrderClient
+from .types import FairValue, MarketKey, MarketState, Quote, RestingOrder
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +29,20 @@ def _utc_now() -> datetime:
 
 
 class MarketMakerLoop:
-    """Main market maker loop (M3-02)."""
+    """Main market maker loop (M3-02).
 
-    def __init__(self, config: MMConfig, clock: Clock | None = None) -> None:
+    AC1/AC2: Dependency injection for testability - markets, fair values, and order
+    client are injectable so tests can use fakes without a live validator.
+    """
+
+    def __init__(
+        self,
+        config: MMConfig,
+        market_source: MarketSource,
+        fair_value_source: FairValueSource,
+        order_client: OrderClient,
+        clock: Clock | None = None,
+    ) -> None:
         self.config = config
         self.keypair = Keypair.from_base58_string(config.market_maker_keypair)
         self.program_id = Pubkey.from_string(config.program_id)
@@ -41,6 +51,10 @@ class MarketMakerLoop:
         self._running = False
         self._coverage = 0.0
         self._clock = clock or _utc_now  # Finding #2: injectable clock
+        self._market_source = market_source
+        self._fair_value_source = fair_value_source
+        self._order_client = order_client
+        self._mm_owner = str(self.keypair.pubkey())
 
     async def start(self) -> None:
         """Start the market maker loop."""
@@ -112,16 +126,9 @@ class MarketMakerLoop:
             logger.exception("Error in MM loop iteration")
 
     async def _fetch_fair_values(self) -> list[FairValue]:
-        """Fetch fair values from the quant service."""
+        """Fetch fair values (AC1: uses injected source)."""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(
-                    self.config.fair_values_url,
-                    headers={"Authorization": f"Bearer {self.config.service_token}"},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return [FairValue.model_validate(fv) for fv in data]
+            return await self._fair_value_source.fetch_fair_values()
         except Exception:
             logger.exception("Failed to fetch fair values")
             return []
@@ -156,10 +163,12 @@ class MarketMakerLoop:
         return False
 
     async def _fetch_open_markets(self) -> list[MarketState]:
-        """Fetch open markets from on-chain state."""
-        # Placeholder: would scan for markets in Open state
-        # Real impl uses getProgramAccounts with market discriminator + state filter
-        return []
+        """Fetch open markets (AC1: uses injected source)."""
+        try:
+            return await self._market_source.fetch_open_markets()
+        except Exception:
+            logger.exception("Failed to fetch open markets")
+            return []
 
     async def _sync_inventory(self, markets: list[MarketState]) -> None:
         """Sync inventory from on-chain positions."""
@@ -227,24 +236,58 @@ class MarketMakerLoop:
             # Place orders (would check existing orders and update/replace as needed)
             await self._place_quote(market, quote)
 
-    async def _place_quote(self, market: MarketState, quote: Any) -> None:
-        """Place or update a two-sided quote."""
-        # Placeholder: would place_order for bid and ask
-        # Respecting max_orders_per_owner cap (8)
-        # And potentially minting pairs for inventory
-        pass
+    async def _place_quote(self, market: MarketState, quote: Quote) -> None:
+        """Place a two-sided quote (AC1: actually places orders)."""
+        try:
+            # Place bid
+            await self._order_client.place_order(
+                market=market.market,
+                side="Bid",
+                price=quote.bid_price,
+                qty=quote.size,
+                owner=self._mm_owner,
+            )
+            # Place ask
+            await self._order_client.place_order(
+                market=market.market,
+                side="Ask",
+                price=quote.ask_price,
+                qty=quote.size,
+                owner=self._mm_owner,
+            )
+        except Exception:
+            logger.exception(f"Failed to place quote for {market.ticker}")
 
     async def _cancel_all_quotes(self) -> None:
-        """Cancel all resting MM orders."""
-        # Placeholder: would cancel all orders owned by MM keypair
-        pass
+        """Cancel all resting MM orders (AC2: actually cancels orders)."""
+        try:
+            markets = await self._fetch_open_markets()
+            for market in markets:
+                orders = await self._order_client.fetch_resting_orders(market.market)
+                mm_orders = [o for o in orders if o.owner == self._mm_owner]
+                for order in mm_orders:
+                    await self._order_client.cancel_order(
+                        market=market.market, order_id=order.order_id, owner=self._mm_owner
+                    )
+        except Exception:
+            logger.exception("Failed to cancel quotes")
 
     async def _update_coverage(self, markets: list[MarketState]) -> None:
-        """Update the book coverage metric."""
-        # Placeholder: would fetch resting orders from on-chain state
-        # For now, use empty list until program integration is complete
-        resting_orders = []  # TODO: fetch via getProgramAccounts once integrated
-        open_markets = [m.market for m in markets if m.is_open]
-        mm_owner = str(self.keypair.pubkey())
+        """Update the book coverage metric (AC4: actually fetches orders)."""
+        try:
+            open_markets = [m.market for m in markets if m.is_open]
+            if not open_markets:
+                self._coverage = 0.0
+                return
 
-        self._coverage = book_coverage(open_markets, resting_orders, mm_owner)
+            # Fetch all resting orders across all open markets
+            all_orders: list[RestingOrder] = []
+            for market in markets:
+                if market.is_open:
+                    orders = await self._order_client.fetch_resting_orders(market.market)
+                    all_orders.extend(orders)
+
+            self._coverage = book_coverage(open_markets, all_orders, self._mm_owner)
+        except Exception:
+            logger.exception("Failed to update coverage")
+            self._coverage = 0.0

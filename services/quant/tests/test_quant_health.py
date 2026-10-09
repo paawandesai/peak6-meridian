@@ -3,6 +3,7 @@ from solders.keypair import Keypair  # type: ignore[import-untyped]
 
 from meridian_quant import health
 from meridian_quant.mm.config import MMConfig
+from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.loop import MarketMakerLoop
 
 
@@ -19,7 +20,12 @@ def test_health_includes_book_coverage_when_mm_running() -> None:
         program_id="11111111111111111111111111111112",
         service_token="test_token",
     )
-    mm_loop = MarketMakerLoop(config)
+    mm_loop = MarketMakerLoop(
+        config,
+        market_source=FakeMarketSource(),
+        fair_value_source=FakeFairValueSource(),
+        order_client=FakeOrderClient(),
+    )
 
     # Coverage starts at 0.0
     result = health(mm_loop)
