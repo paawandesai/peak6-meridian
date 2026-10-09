@@ -13,10 +13,10 @@ from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from solders.signature import Signature
 
-from meridian_quant.mm.chain import ChainOrderClient, TOKEN_PROGRAM_ID
+from meridian_quant.mm.chain import TOKEN_PROGRAM_ID, ChainOrderClient
 
 
-async def mock_rpc_client():
+async def mock_rpc_client() -> AsyncMock:
     """Create a mocked AsyncClient for testing instruction building."""
     mock_client = AsyncMock()
 
@@ -50,11 +50,11 @@ async def test_place_order_builds_correct_instruction_accounts() -> None:
     mock_client = await mock_rpc_client()
 
     # Mock fetch_resting_orders to return empty (no contra orders)
-    async def mock_fetch_orders(market: str):
+    async def mock_fetch_orders(market: str) -> list[object]:
         return []
 
     client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
-    client.fetch_resting_orders = mock_fetch_orders  # type: ignore[method-assign]
+    client.fetch_resting_orders = mock_fetch_orders  # type: ignore[assignment]
 
     # Call place_order - this builds and "sends" the instruction
     await client.place_order(

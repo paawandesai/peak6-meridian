@@ -480,3 +480,74 @@ async def test_prior_day_markets_dont_block_today_quoting(mm_config: MMConfig) -
     assert len(yesterday_mm_orders) == 0, (
         f"Expected 0 quotes on yesterday's market, got {len(yesterday_mm_orders)}"
     )
+
+
+@pytest.mark.asyncio
+async def test_pull_condition_zeros_coverage(mm_config: MMConfig) -> None:
+    """Pull condition (stale spot or near close) zeros book_coverage metric.
+
+    After a pull, /health should report 0% coverage since all quotes are cancelled.
+    """
+    # Fixed time: 2026-10-08 14:00 ET (18:00 UTC)
+    now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)
+
+    # Market closing in 1 hour (not near close)
+    close_ts = int((now + timedelta(hours=1)).timestamp())
+
+    markets = [
+        MarketState(
+            market="AAPL_20261008_23000",
+            ticker="AAPL",
+            strike_cents=23000,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        )
+    ]
+
+    # Fair value with STALE spot (>10s old) to trigger pull
+    stale_time = now - timedelta(seconds=15)
+    fair_values = [
+        FairValue(
+            market="AAPL_20261008_23000",
+            ticker="AAPL",
+            strike_cents=23000,
+            fair_cents=50,
+            sigma=0.2,
+            spot=230.0,
+            as_of=stale_time,  # Stale - triggers pull
+            stale=False,
+        )
+    ]
+
+    market_source = FakeMarketSource(markets)
+    fv_source = FakeFairValueSource(fair_values)
+    order_client = FakeOrderClient()
+
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=market_source,
+        fair_value_source=fv_source,
+        order_client=order_client,
+        clock=lambda: now,
+    )
+
+    # Seed some inventory
+    mm_owner = str(mm.keypair.pubkey())
+    order_client.set_yes_balance(markets[0].market, mm_owner, 50)
+    order_client.set_no_balance(markets[0].market, mm_owner, 50)
+
+    # Initially coverage is 0
+    assert mm.book_coverage == 0.0
+
+    # Run once - pull condition should cancel all quotes and zero coverage
+    await mm._run_once()
+
+    # Verify: no quotes placed (pulled due to stale spot)
+    orders = await order_client.fetch_resting_orders(markets[0].market)
+    mm_orders = [o for o in orders if o.owner == mm_owner]
+    assert len(mm_orders) == 0, f"Expected 0 orders after pull, got {len(mm_orders)}"
+
+    # Verify: coverage metric is 0.0 (not stale from before pull)
+    assert mm.book_coverage == 0.0, f"Expected book_coverage=0.0 after pull, got {mm.book_coverage}"

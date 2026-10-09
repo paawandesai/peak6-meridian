@@ -120,6 +120,7 @@ class MarketMakerLoop:
                 await self._cancel_all_quotes()
                 # Settle funds to recycle proceeds (AB-11: settle still works after close)
                 await self._settle_funds()
+                self._coverage = 0.0
                 return
 
             # Cancel all old quotes first (frees escrowed YES to OpenOrders.free_yes)
