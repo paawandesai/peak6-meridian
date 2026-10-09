@@ -16,7 +16,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { BN, type Program } from "@coral-xyz/anchor";
+import { AnchorProvider, BN, type Program, Wallet } from "@coral-xyz/anchor";
 import {
   type Meridian,
   createMeridianProgram,
@@ -24,7 +24,6 @@ import {
   marketAddresses,
   symbolBytes,
   tradingDate,
-  findLocalFeedPda,
   assertCluster,
 } from "@meridian/client";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
@@ -99,10 +98,9 @@ async function main(): Promise<void> {
   if (faultConfig.source !== undefined) {
     // Only check cluster if fault injection is requested
     await assertCluster({
-      getGenesisHash: () => connection.getGenesisHash(),
+      cluster: "localnet",
       rpcUrl: env.SOLANA_RPC_URL,
-      expected: "localnet",
-      action: "fault injection",
+      getGenesisHash: () => connection.getGenesisHash(),
     });
   }
 
@@ -123,8 +121,9 @@ async function main(): Promise<void> {
   const admin = Keypair.fromSecretKey(adminSecretKey);
   const programId = new PublicKey(env.MERIDIAN_PROGRAM_ID);
 
-  const program = createMeridianProgram({ connection, programId });
-  const [config] = findConfigPda(programId);
+  const provider = new AnchorProvider(connection, new Wallet(admin), { commitment: "confirmed" });
+  const program = createMeridianProgram(provider, programId);
+  const config = findConfigPda(programId).address;
 
   const ctx: DemoContext = {
     connection,
@@ -253,13 +252,13 @@ async function setFaultedOracle(ctx: DemoContext, marketKey: MarketKey): Promise
     [normalSlot, normalPrice],
     [faultedSlot, faultedPrice],
   ]) {
-    const [feedPda] = findLocalFeedPda({
-      programId: ctx.program.programId,
-      symbol: marketKey.symbol,
-      sourceSlot: sourceIndex,
-    });
-
     const sourceSlotNum = typeof sourceIndex === "number" ? sourceIndex : 0;
+
+    // Derive local_feed PDA: ["local_feed", symbol, [source_slot]]
+    const [feedPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("local_feed"), symbolBytes(marketKey.symbol), Buffer.from([sourceSlotNum])],
+      ctx.program.programId,
+    );
 
     await ctx.program.methods
       .localOracleSet(
