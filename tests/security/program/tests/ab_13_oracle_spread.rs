@@ -5,8 +5,8 @@
 
 use meridian::errors::MeridianError;
 use meridian::state::MarketStatus;
-use security_tests::harness::settlement::{scaled_cents, SettlementHarness, BASE_STRIKE_CENTS};
-use security_tests::harness::assert_meridian_error;
+use security_tests::harness::settlement::{scaled_cents, SettlementHarness};
+use security_tests::harness::{assert_meridian_error, expect_success, BASE_STRIKE_CENTS};
 
 #[test]
 fn spread_at_exactly_5_bps_passes() {
@@ -14,7 +14,7 @@ fn spread_at_exactly_5_bps_passes() {
     // For a mean price around $680 (BASE_STRIKE_CENTS = 68000), 5 bps = 0.05% = 34.0 cents.
     // Feed1: $680.00, Feed2: $680.34 (exactly at limit).
     s.publish_pair(scaled_cents(68_000), scaled_cents(68_034));
-    security_tests::harness::expect_success(&s.settle());
+    expect_success(&s.settle());
     assert_eq!(s.market().status, MarketStatus::Settled);
 }
 
@@ -41,7 +41,7 @@ fn spread_rejected_regardless_of_which_feed_is_higher() {
 fn zero_spread_always_passes() {
     let mut s = SettlementHarness::new();
     s.publish_close(scaled_cents(BASE_STRIKE_CENTS));
-    security_tests::harness::expect_success(&s.settle());
+    expect_success(&s.settle());
     assert_eq!(s.market().status, MarketStatus::Settled);
 }
 
@@ -50,6 +50,6 @@ fn small_spread_inside_limit_passes() {
     let mut s = SettlementHarness::new();
     // 1 cent spread on a $680 price is well within 5 bps.
     s.publish_pair(scaled_cents(68_000), scaled_cents(68_001));
-    security_tests::harness::expect_success(&s.settle());
+    expect_success(&s.settle());
     assert_eq!(s.market().status, MarketStatus::Settled);
 }
