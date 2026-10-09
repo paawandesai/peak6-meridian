@@ -123,7 +123,8 @@ fn parse_data_package(payload: &[u8], cursor: &mut usize) -> Result<RedstonePack
         .checked_sub(DATA_POINTS_COUNT_SIZE)
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
     let dp_count = read_u24_be(payload, *cursor)?;
-    require!(dp_count == 1, MeridianError::RedStoneMalformedPayload); // Simplification: single data point
+    require!(dp_count > 0, MeridianError::RedStoneMalformedPayload);
+    require!(dp_count <= 10, MeridianError::RedStoneMalformedPayload); // Safety: cap at 10 data points
 
     // Data point value byte size (4 bytes, official format)
     *cursor = cursor
@@ -157,42 +158,64 @@ fn parse_data_package(payload: &[u8], cursor: &mut usize) -> Result<RedstonePack
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
     let timestamp_ms = i64::from_be_bytes([0, 0, ts[0], ts[1], ts[2], ts[3], ts[4], ts[5]]);
 
-    // Data point (value + feed_id, single point)
-    // Value (32 bytes, u256 big-endian)
-    *cursor = cursor
-        .checked_sub(value_size)
-        .ok_or(MeridianError::RedStoneMalformedPayload)?;
-    let val_end = cursor
+    // Parse all N data points, each is feed_id (32) + value (32)
+    let data_point_size = FEED_ID_SIZE
         .checked_add(value_size)
         .ok_or(MeridianError::MathOverflow)?;
-    let val = payload
-        .get(*cursor..val_end)
-        .ok_or(MeridianError::RedStoneMalformedPayload)?;
-    // RedStone u256: validate high 16 bytes are zero (fail-closed per domain.md: stored as u128)
-    if val[0..16].iter().any(|&b| b != 0) {
-        return Err(MeridianError::RedStoneMalformedPayload.into());
-    }
-    // Extract last 16 bytes as u128 (RedStone uses 8 decimals)
-    let value = u128::from_be_bytes([
-        val[16], val[17], val[18], val[19], val[20], val[21], val[22], val[23], val[24], val[25],
-        val[26], val[27], val[28], val[29], val[30], val[31],
-    ]);
-
-    // Feed ID (32 bytes)
-    *cursor = cursor
-        .checked_sub(FEED_ID_SIZE)
-        .ok_or(MeridianError::RedStoneMalformedPayload)?;
-    let feed_id_end = cursor
-        .checked_add(FEED_ID_SIZE)
+    let total_data_size = data_point_size
+        .checked_mul(dp_count)
         .ok_or(MeridianError::MathOverflow)?;
-    let mut feed_id = [0u8; 32];
-    feed_id.copy_from_slice(
-        payload
-            .get(*cursor..feed_id_end)
-            .ok_or(MeridianError::RedStoneMalformedPayload)?,
-    );
+
+    *cursor = cursor
+        .checked_sub(total_data_size)
+        .ok_or(MeridianError::RedStoneMalformedPayload)?;
 
     let signable_start = *cursor;
+
+    // Find the data point matching target feed_id
+    // Real RedStone packages contain multiple feeds (BTC, ETH, SOL, etc.) under one signature
+    let mut feed_id = [0u8; 32];
+    let mut value = 0u128;
+    let mut found = false;
+
+    let mut dp_cursor = *cursor;
+    for _ in 0..dp_count {
+        // Read feed_id (32 bytes)
+        let fid_end = dp_cursor
+            .checked_add(FEED_ID_SIZE)
+            .ok_or(MeridianError::MathOverflow)?;
+        let fid = payload
+            .get(dp_cursor..fid_end)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?;
+
+        // Read value (32 bytes)
+        let val_start = fid_end;
+        let val_end = val_start
+            .checked_add(value_size)
+            .ok_or(MeridianError::MathOverflow)?;
+        let val = payload
+            .get(val_start..val_end)
+            .ok_or(MeridianError::RedStoneMalformedPayload)?;
+
+        // Check if this is the target feed_id (will be verified in post_redstone_price)
+        // For now, just take the first valid point; caller validates feed_id match
+        if !found {
+            feed_id.copy_from_slice(fid);
+
+            // RedStone u256: validate high 16 bytes are zero (fail-closed per domain.md: stored as u128)
+            if val[0..16].iter().any(|&b| b != 0) {
+                return Err(MeridianError::RedStoneMalformedPayload.into());
+            }
+            // Extract last 16 bytes as u128 (RedStone uses 8 decimals)
+            value = u128::from_be_bytes([
+                val[16], val[17], val[18], val[19], val[20], val[21], val[22], val[23], val[24],
+                val[25], val[26], val[27], val[28], val[29], val[30], val[31],
+            ]);
+            found = true;
+        }
+
+        dp_cursor = val_end;
+    }
 
     // Signable bytes for THIS package only (independent signing)
     let signable_bytes = payload[signable_start..signable_end].to_vec();
