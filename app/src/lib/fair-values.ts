@@ -64,7 +64,15 @@ export function useFairValues(
   }, []);
 
   useEffect(() => {
-    if (!enabled) return undefined;
+    if (!enabled) {
+      // When disabled and nothing has been read, surface unavailable instead of loading forever.
+      setState((previous) =>
+        previous.status === "loading"
+          ? { status: "unavailable", byMarket: {}, refreshFailed: false }
+          : previous,
+      );
+      return undefined;
+    }
     let cancelled = false;
     let inFlight = false;
     const run = async (): Promise<void> => {
