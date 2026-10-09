@@ -42,11 +42,7 @@ function useOpenTimes(markets: readonly MarketRow[]): Record<string, number | nu
  * trading date's markets, YES / NO prices from the book, a state badge, the open and close time
  * in ET and a countdown to the next state change (D-050).
  */
-export function MarketsView({
-  nowSecs,
-}: {
-  readonly nowSecs?: number;
-}) {
+export function MarketsView({ nowSecs }: { readonly nowSecs?: number }) {
   const reader = useReader();
   const ticking = useNow();
   // `null` until the clock has mounted (server render and first paint): the date-dependent parts
