@@ -563,6 +563,9 @@ heartbeat:
 # network call, naming the variable. No retries: a failed deploy is re-run by hand.
 .deploy:
   stage: deploy
+  # Demo push (Paawan 2026-10-09 18:35 CT): deploy as soon as the main pipeline starts, without
+  # waiting for earlier stages. Revert after the demo to restore test-gated deploys.
+  needs: []
   rules:
     # Docs-only pushes to main skip the deploy: only deploy inputs trigger it.
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
