@@ -67,7 +67,9 @@ Red-team verification via three test layers:
 
 **Total ABs:** 22  
 **Status:** All SAFE (no vulnerabilities found)  
-**Validator exercise:** 6 ABs exercised on-chain via e2e lifecycle (AB-01, AB-02, AB-03, AB-11, AB-18, AB-21)  
+**Validator attacks attempted:** 5 ABs (AB-01, AB-02 via vitest; AB-03, AB-04, AB-05 via vitest on validator)  
+**LiteSVM-only attacks:** 9 program ABs (AB-06 through AB-13, AB-18, AB-22) — require crafted bytecode  
+**Off-chain attacks:** 4 service ABs (AB-14, AB-15, AB-19, AB-20) + 2 static (AB-16, AB-17) + 1 e2e (AB-21 faucet)  
 **Regression coverage:** All 22 ABs have comprehensive test coverage via LiteSVM + off-chain suites  
 **New coverage:** AB-13 on-chain spread guard (filled regression test gap)
 
@@ -77,7 +79,9 @@ Red-team verification via three test layers:
 - **Python tests:** 229 passed in 3.61s
 
 ### Methodology Rationale
-- **Validator e2e:** Exercises critical on-chain paths (mint, redeem, settlement, intents, faucet) on actual solana-test-validator
+- **Validator attacks:** AB-01/02 vitest tests craft malicious MintTo/double-redeem; AB-03/04/05 vitest tests provide stale/spoofed oracle data
+- **LiteSVM attacks:** AB-06 through AB-13, AB-18, AB-22 require crafted instruction bytecode (forged PDAs, invalid state, wrong discriminators, time manipulation, overflow amounts) — faster iteration in LiteSVM
+- **E2e lifecycle (not attacks):** Validates happy-path on validator but does not attempt AB attacks
 - **LiteSVM:** Identical Anchor bytecode execution, comprehensive instruction-level regression coverage, faster iteration
 - **Combined:** Validator validates deployment + critical flows; LiteSVM validates all program logic paths
 
