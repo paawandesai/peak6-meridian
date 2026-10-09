@@ -17,12 +17,13 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { DateTime } from "luxon";
 
 const MAG7_TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"] as const;
 
 const REDSTONE_GATEWAYS = [
-  "https://api.redstone.finance",
-  "https://api-primary-prod.redstone.finance",
+  "https://oracle-gateway-1.a.redstone.finance",
+  "https://oracle-gateway-2.a.redstone.finance",
 ] as const;
 
 const FETCH_TIMEOUT_MS = 30_000;
@@ -208,16 +209,12 @@ async function fetchOfficialClose(
 }
 
 function marketCloseTimeMs(date: string): number {
-  const parts = date.split("-").map(Number);
-  if (parts.length !== 3) {
-    throw new Error(`Invalid date format: ${date}`);
+  // US stock market close: 16:00 ET (America/New_York timezone)
+  const closeTime = DateTime.fromISO(`${date}T16:00:00`, { zone: "America/New_York" });
+  if (!closeTime.isValid) {
+    throw new Error(`Invalid date: ${date} (${closeTime.invalidReason})`);
   }
-  const [year, month, day] = parts;
-  if (year === undefined || month === undefined || day === undefined) {
-    throw new Error(`Invalid date format: ${date}`);
-  }
-  const closeDate = new Date(Date.UTC(year, month - 1, day, 21, 0, 0));
-  return closeDate.getTime();
+  return closeTime.toMillis();
 }
 
 async function recordFixtures(args: CliArgs): Promise<void> {
