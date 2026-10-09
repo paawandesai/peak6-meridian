@@ -32,27 +32,32 @@ pub const PYTH_PUSH_MAINNET_PID: Pubkey =
 pub const PYTH_PUSH_DEVNET_PID: Pubkey = pubkey!("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc6E6JiV");
 
 /// Pyth feed IDs for MAG7 tickers (from issue #49).
-/// These are the Pyth Pro feed IDs for equity tickers.
+/// These are PLACEHOLDER hex strings and MUST be verified against official Pyth documentation.
+///
+/// TODO: Verify these against docs.pyth.network feed ID list for regular-session US equities.
+/// The numeric IDs (922, 954, etc.) from the issue need to be mapped to their hex feed IDs.
+/// Note: As of June 2026, extended-hours feeds moved to Pyth Pro; regular-session feeds
+/// may have migrated after July 31, 2026 Core upgrade. Verify session type and current IDs.
 pub mod feed_ids {
-    /// AAPL feed ID: 922 in Pyth Pro.
+    /// AAPL feed ID: 922 in Pyth Pro (PLACEHOLDER - verify against docs.pyth.network).
     pub const AAPL: &str =
         "0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688";
-    /// AMZN feed ID: 954 in Pyth Pro.
+    /// AMZN feed ID: 954 in Pyth Pro (PLACEHOLDER - verify against docs.pyth.network).
     pub const AMZN: &str =
         "0xb5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a";
-    /// GOOGL feed ID: 1163 in Pyth Pro.
+    /// GOOGL feed ID: 1163 in Pyth Pro (PLACEHOLDER - verify against docs.pyth.network).
     pub const GOOGL: &str =
         "0x726c49cd73149a5eb8e5570d0e2cbf01c99853af3e5aeebd01e7eb6e1d15f977";
-    /// META feed ID: 1272 in Pyth Pro.
+    /// META feed ID: 1272 in Pyth Pro (PLACEHOLDER - verify against docs.pyth.network).
     pub const META: &str =
         "0x4b78d251770732f6304b1f41e9bebaabc3b256985ef18988f6de8d6562dd254c";
-    /// MSFT feed ID: 1292 in Pyth Pro.
+    /// MSFT feed ID: 1292 in Pyth Pro (PLACEHOLDER - verify against docs.pyth.network).
     pub const MSFT: &str =
         "0x4f1b1a0e68b8f1b5e1573eeb95e5b99fda76098146c66c1e5d3e7f0c94bc2294";
-    /// NVDA feed ID: 1314 in Pyth Pro.
+    /// NVDA feed ID: 1314 in Pyth Pro (PLACEHOLDER - verify against docs.pyth.network).
     pub const NVDA: &str =
         "0x6fa7e48602d2e6c0f46c1f2ef3d9d4b16d67a7a72f000a83aee12cb4e5d1c7a6";
-    /// TSLA feed ID: 1435 in Pyth Pro.
+    /// TSLA feed ID: 1435 in Pyth Pro (PLACEHOLDER - verify against docs.pyth.network).
     pub const TSLA: &str =
         "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc9641f1";
 }
@@ -323,5 +328,122 @@ mod tests {
             30,
         );
         assert!(result.is_err());
+    }
+
+    // Property tests following oracle.rs patterns
+    proptest! {
+        #[test]
+        fn prop_check_reading_is_symmetric_on_feed_id(
+            value in 1i128..10i128.pow(26),
+            publish_time in 1_700_000_000i64..1_800_000_000i64,
+        ) {
+            let reading = PythReading {
+                feed_id: [0xaa; 32],
+                value_scaled: value,
+                publish_time,
+                confidence: 1_000_000,
+            };
+
+            let current_time = publish_time + 10;
+            let result_match = check_pyth_reading(
+                &reading,
+                &[0xaa; 32],
+                &clock(100, current_time),
+                publish_time,
+                30,
+            );
+            let result_mismatch = check_pyth_reading(
+                &reading,
+                &[0xbb; 32],
+                &clock(100, current_time),
+                publish_time,
+                30,
+            );
+
+            prop_assert!(result_match.is_ok());
+            prop_assert!(result_mismatch.is_err());
+        }
+
+        #[test]
+        fn prop_staleness_check_is_monotonic(
+            value in 1i128..10i128.pow(26),
+            publish_time in 1_700_000_000i64..1_800_000_000i64,
+            age_seconds in 0i64..20,
+        ) {
+            // If a price passes staleness at age X, it passes at age X-1
+            let reading = PythReading {
+                feed_id: [0xaa; 32],
+                value_scaled: value,
+                publish_time,
+                confidence: 1_000_000,
+            };
+
+            let max_staleness_slots = 30u64; // 12 seconds max age
+            let current_time = publish_time + age_seconds;
+
+            let result = check_pyth_reading(
+                &reading,
+                &[0xaa; 32],
+                &clock(100, current_time),
+                publish_time,
+                max_staleness_slots,
+            );
+
+            // If age <= 12 seconds, should pass
+            // If age > 12 seconds, should fail
+            let should_pass = age_seconds <= 12;
+            prop_assert_eq!(result.is_ok(), should_pass);
+        }
+
+        #[test]
+        fn prop_before_close_always_fails(
+            value in 1i128..10i128.pow(26),
+            close_ts in 1_700_000_000i64..1_800_000_000i64,
+            seconds_before in 1i64..1000,
+        ) {
+            let publish_time = close_ts - seconds_before;
+            let reading = PythReading {
+                feed_id: [0xaa; 32],
+                value_scaled: value,
+                publish_time,
+                confidence: 1_000_000,
+            };
+
+            let result = check_pyth_reading(
+                &reading,
+                &[0xaa; 32],
+                &clock(100, publish_time + 10),
+                close_ts,
+                30,
+            );
+
+            prop_assert!(result.is_err());
+        }
+
+        #[test]
+        fn prop_at_or_after_close_can_pass(
+            value in 1i128..10i128.pow(26),
+            close_ts in 1_700_000_000i64..1_800_000_000i64,
+            seconds_after in 0i64..10,
+        ) {
+            // At or slightly after close, within staleness window
+            let publish_time = close_ts + seconds_after;
+            let reading = PythReading {
+                feed_id: [0xaa; 32],
+                value_scaled: value,
+                publish_time,
+                confidence: 1_000_000,
+            };
+
+            let result = check_pyth_reading(
+                &reading,
+                &[0xaa; 32],
+                &clock(100, publish_time + 5), // Within staleness
+                close_ts,
+                30,
+            );
+
+            prop_assert!(result.is_ok());
+        }
     }
 }

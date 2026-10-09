@@ -1,10 +1,22 @@
 /**
  * Pyth Pro (Lazer) client (M3-10, D-055): fetches signed price updates for settlement.
  *
- * Pyth Pro provides 1ms equity feeds for all MAG7 tickers via REST API. This module:
- * - Fetches latest price updates from Pyth Lazer API (PYTH_API_TOKEN)
+ * Pyth Pro provides 1ms equity feeds for all MAG7 tickers. This module:
+ * - Fetches latest price updates from Pyth Lazer websocket or REST API (PYTH_API_TOKEN)
  * - Prepares signed updates for on-chain verification via Pyth Solana Receiver program
  * - Validates feed IDs match expected tickers
+ *
+ * Architecture (based on docs.pyth.network/lazer research):
+ * - Lazer offers configurable update frequencies: 1ms, 50ms, 200ms, or custom
+ * - Supports websocket subscription for low-latency streaming
+ * - REST API for polling latest prices
+ * - Up to 1,000 distinct price feeds supported
+ *
+ * TODO: Verify against official Pyth Pro documentation:
+ * - Exact API endpoints (REST and websocket)
+ * - Authentication header format for PYTH_API_TOKEN
+ * - Response schema and signed update format
+ * - Feed ID mapping for equity tickers (numeric IDs to hex)
  *
  * Security (AC3, AB-17):
  * - PYTH_API_TOKEN is server-only, never in logs/commits/client bundle
@@ -13,6 +25,7 @@
  *
  * Feed IDs (from issue #49):
  * AAPL: 922, AMZN: 954, GOOGL: 1163, META: 1272, MSFT: 1292, NVDA: 1314, TSLA: 1435
+ * Note: These numeric IDs need to be verified against docs.pyth.network feed list.
  */
 
 import { z } from "zod";
@@ -20,15 +33,25 @@ import { z } from "zod";
 /**
  * Pyth feed IDs for MAG7 tickers (Pyth Pro identifiers).
  * These are hex-encoded 32-byte feed IDs.
+ *
+ * IMPORTANT: These are PLACEHOLDER values and MUST be verified against
+ * docs.pyth.network official feed ID list before use. The numeric IDs
+ * (922, 954, etc.) from issue #49 need to be mapped to their correct
+ * hex feed IDs for regular-session US equity feeds.
+ *
+ * Note: As of June 2026, extended-hours equity feeds moved to Pyth Pro.
+ * Regular-session feeds remain on Pyth Core through July 31, 2026 upgrade.
+ * Verify current feed locations and IDs before production use.
  */
 export const PYTH_FEED_IDS: Record<string, string> = {
-  AAPL: "0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688",
-  AMZN: "0xb5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a",
-  GOOGL: "0x726c49cd73149a5eb8e5570d0e2cbf01c99853af3e5aeebd01e7eb6e1d15f977",
-  META: "0x4b78d251770732f6304b1f41e9bebaabc3b256985ef18988f6de8d6562dd254c",
-  MSFT: "0x4f1b1a0e68b8f1b5e1573eeb95e5b99fda76098146c66c1e5d3e7f0c94bc2294",
-  NVDA: "0x6fa7e48602d2e6c0f46c1f2ef3d9d4b16d67a7a72f000a83aee12cb4e5d1c7a6",
-  TSLA: "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc9641f1",
+  // TODO: Verify these hex values against docs.pyth.network feed list
+  AAPL: "0x49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688", // ID 922
+  AMZN: "0xb5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a", // ID 954
+  GOOGL: "0x726c49cd73149a5eb8e5570d0e2cbf01c99853af3e5aeebd01e7eb6e1d15f977", // ID 1163
+  META: "0x4b78d251770732f6304b1f41e9bebaabc3b256985ef18988f6de8d6562dd254c", // ID 1272
+  MSFT: "0x4f1b1a0e68b8f1b5e1573eeb95e5b99fda76098146c66c1e5d3e7f0c94bc2294", // ID 1292
+  NVDA: "0x6fa7e48602d2e6c0f46c1f2ef3d9d4b16d67a7a72f000a83aee12cb4e5d1c7a6", // ID 1314
+  TSLA: "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc9641f1", // ID 1435
 };
 
 /**
