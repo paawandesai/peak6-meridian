@@ -40,7 +40,7 @@ Business rules and units live in [domain.md](domain.md); this file covers struct
 | Scripts | `scripts/` | Devnet deploy, lifecycle, e2e, Switchboard spike, CI guard and heartbeat |
 
 ### App structure (M3-04, M3-06)
-**Status page** (`/status`): Reads Config and all Markets from the chain, checks vault balance against `pairsOutstanding × $1` (USDC locked must equal pairs minted minus redeemed). Displays on-chain pause state and any invariant violations. Read-only, client-rendered.
+**Status page** (`/status`): Reads Config and all Markets from the chain, checks vault USDC against `pairsOutstanding × 1_000_000` (base units per pair). Displays liveness (market creation time vs 09:00 ET, settlement delay vs close from on-chain events), on-chain pause state, and any invariant violations. Client-rendered (`"use client"`).
 
 **Admin override flow** (`app/src/components/admin-override/`): Fetches drafts from `/api/ops/drafts` (which proxies ops-agent's `GET /drafts`), validates each draft against the program's override rules (market must be Open/unsettled; `now >= close_ts + override_delay_secs`), and builds `admin_settle_override` transactions for the admin wallet to sign. The proposed price is checked against source range as a sanity cue (not a rejection gate). Drafts that fail the Open or delay check cannot be approved.
 
