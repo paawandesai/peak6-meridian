@@ -17,17 +17,33 @@ def test_coverage_all_covered() -> None:
     assert cov == 1.0
 
 
-@given(num_markets=st.integers(min_value=1, max_value=20), num_covered=st.integers(min_value=0, max_value=20))
+@given(
+    num_markets=st.integers(min_value=1, max_value=20),
+    num_covered=st.integers(min_value=0, max_value=20),
+)
 def test_coverage_property(num_markets: int, num_covered: int) -> None:
     """Property test: coverage equals covered/total (AC4, Finding #4)."""
-    if num_covered > num_markets:
-        num_covered = num_markets
+    num_covered = min(num_covered, num_markets)
     markets = [f"market_{i}" for i in range(num_markets)]
     orders = []
     for i in range(num_covered):
         orders.extend([
-            RestingOrder(order_id=i*2, market=markets[i], side="Bid", price=48, qty=10, owner="MM"),
-            RestingOrder(order_id=i*2+1, market=markets[i], side="Ask", price=52, qty=10, owner="MM"),
+            RestingOrder(
+                order_id=i * 2,
+                market=markets[i],
+                side="Bid",
+                price=48,
+                qty=10,
+                owner="MM",
+            ),
+            RestingOrder(
+                order_id=i * 2 + 1,
+                market=markets[i],
+                side="Ask",
+                price=52,
+                qty=10,
+                owner="MM",
+            ),
         ])
     cov = book_coverage(open_markets=markets, resting_orders=orders, mm_owner="MM")
     assert cov == num_covered / num_markets
