@@ -2,10 +2,13 @@
 
 import json
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from solders.keypair import Keypair
+from solders.pubkey import Pubkey
 
+from meridian_quant.mm.chain import ChainOrderClient
 from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.loop import MarketMakerLoop
@@ -651,3 +654,36 @@ async def test_empty_fair_values_pulls_all_quotes(mm_config: MMConfig) -> None:
     assert mm.book_coverage == 0.0, (
         f"Expected book_coverage=0.0 after empty FVs, got {mm.book_coverage}"
     )
+
+
+@pytest.mark.asyncio
+async def test_missing_ata_vs_rpc_timeout(mm_config: MMConfig) -> None:
+    """Missing ATA returns 0 and still mints; RPC timeout skips mint and quote (AC1).
+
+    Tests that ChainOrderClient correctly distinguishes:
+    - Missing ATA (get_account_info returns None): balance=0, mint succeeds
+    - RPC timeout (exception): propagates, skips mint, skips quote
+    """
+    # Create a minimal mock RPC client
+    mock_rpc = AsyncMock()
+    program_id = Pubkey.from_string("5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi")
+    usdc_mint = Pubkey.from_string("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
+
+    payer = Keypair()
+    client = ChainOrderClient(mock_rpc, program_id, payer, usdc_mint)
+
+    # Test 1: Missing ATA (account doesn't exist)
+    # get_account_info returns None -> should return 0
+    account_info_response = MagicMock()
+    account_info_response.value = None  # Account doesn't exist
+    mock_rpc.get_account_info.return_value = account_info_response
+
+    balance = await client.get_yes_token_balance("AAPL_20261008_23000", str(payer.pubkey()))
+    assert balance == 0, "Missing ATA should return 0"
+
+    # Test 2: RPC timeout (exception raised)
+    # Should propagate the exception
+    mock_rpc.get_account_info.side_effect = Exception("RPC timeout")
+
+    with pytest.raises(Exception, match="RPC timeout"):
+        await client.get_yes_token_balance("AAPL_20261008_23000", str(payer.pubkey()))

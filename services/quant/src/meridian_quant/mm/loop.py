@@ -142,8 +142,9 @@ class MarketMakerLoop:
             # Only quote markets that were successfully synced
             await self._quote_all_strikes(fair_values, synced_markets)
 
-            # Update coverage metric (only for successfully synced markets)
-            await self._update_coverage(synced_markets)
+            # Update coverage metric (denominator = all open markets per AC4)
+            # Coverage is share of OPEN strikes with quotes, not share of synced
+            await self._update_coverage(open_markets)
 
         except Exception:
             logger.exception("Error in MM loop iteration")
