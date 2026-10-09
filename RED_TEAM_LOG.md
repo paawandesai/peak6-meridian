@@ -15,11 +15,13 @@ Red-team verification via three test layers:
 **Transcript:** Vitest output for ab_03, ab_04, ab_05 validator tests
 
 **On-chain attack attempts:**
+- **AB-01** (mint without deposit): `ab_01_mint_without_deposit.test.ts` — 2 passed (mint authority check, MintTo rejected)
+- **AB-02** (redeem attacks): `ab_02_redeem_attacks.test.ts` — 4 passed (redeem before settle, loser pays 0, double-redeem, cross-market check)
 - **AB-03** (stale oracle): `ab_03_stale_or_wrong_date.test.ts` — 8 passed
 - **AB-04** (spoofed feed): `ab_04_spoofed_feed.test.ts` — 10 passed  
 - **AB-05** (settle before close): `ab_05_settle_before_close.test.ts` — 6 passed
 
-**Note:** Validator e2e lifecycle (`VALIDATOR_AB_TEST_LOG.txt`) is happy-path only, not attack attempts. AB-01 (mint without deposit), AB-02 (redeem mismatch), and AB-18 (wrong intent) require malicious transactions rejected by the program — these are tested in LiteSVM where the attack bytecode can be crafted directly.
+**Note:** Validator e2e lifecycle (`VALIDATOR_AB_TEST_LOG.txt`) is happy-path only, not attack attempts. AB-18 (wrong intent discriminators) requires malicious bytecode and is LiteSVM-only.
 
 ### 2. LiteSVM Regression Suite (Program ABs)
 **Command:** `make test-security`  
@@ -60,17 +62,17 @@ Red-team verification via three test layers:
 | AB-18 | Intent instruction validation bypass | `ab_18_intents.test.ts` | LiteSVM only (requires wrong intent discriminators) | Vitest: 17 passed | SAFE |
 | AB-19 | Automation wallet key exposure | `ab_19_automation_key.test.ts` | — | Vitest: 8 passed | SAFE |
 | AB-20 | LLM jailbreak / prompt injection | `ab_20_jailbreak.py` | — | Pytest: 60 passed | SAFE |
-| AB-21 | Faucet abuse (rate limits, amount) | `ab_21_faucet.test.ts` | E2E steps 23-27 (faucet flow) | Vitest: 10 passed | SAFE |
+| AB-21 | Faucet abuse (rate limits, amount) | `ab_21_faucet.test.ts` | — | Vitest: 10 passed | SAFE |
 | AB-22 | Local oracle in devnet build | `ab_22_devnet_build.rs`<br/>`ab_22_local_oracle_feature.rs` | — | LiteSVM: 7 passed | SAFE |
 
 ## Summary
 
 **Total ABs:** 22  
 **Status:** All SAFE (no vulnerabilities found)  
-**Validator attacks attempted:** 5 ABs (AB-01, AB-02 via vitest; AB-03, AB-04, AB-05 via vitest on validator)  
-**LiteSVM-only attacks:** 9 program ABs (AB-06 through AB-13, AB-18, AB-22) — require crafted bytecode  
-**Off-chain attacks:** 4 service ABs (AB-14, AB-15, AB-19, AB-20) + 2 static (AB-16, AB-17) + 1 e2e (AB-21 faucet)  
-**Regression coverage:** All 22 ABs have comprehensive test coverage via LiteSVM + off-chain suites  
+**Validator attacks attempted:** 5 program ABs (AB-01 through AB-05 via vitest on local validator) — 30 attack scenarios passed  
+**LiteSVM-only attacks:** 8 program ABs (AB-06 through AB-13, AB-22) — require crafted bytecode for time manipulation, admin bypass, or forged PDAs  
+**Off-chain attacks:** 4 service ABs (AB-14, AB-15, AB-19, AB-20) + 2 static (AB-16, AB-17) + 1 vitest (AB-18 intents) + 1 vitest (AB-21 faucet)  
+**Regression coverage:** All 22 ABs have comprehensive test coverage via validator/LiteSVM + off-chain suites  
 **New coverage:** AB-13 on-chain spread guard (filled regression test gap)
 
 ### Test Results (make test-security, 2026-10-09)
