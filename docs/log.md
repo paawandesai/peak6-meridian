@@ -97,4 +97,28 @@ M2-12 live devnet rehearsal: trade phase
   - Sell NO ask (trader-b 1@70¢): https://explorer.solana.com/tx/226TYgh45gxQtC3JFzxwZK1Y57hiEdGWXYLyprTyD7cjDTWwnUBS5yX3Hnqgnmp3taYHkYgKD2yHWAUZj94U58NY?cluster=devnet
   - Sell NO (trader-a IOC 1@70¢): https://explorer.solana.com/tx/44Kwd69Rc9gGhhpkL8K9TtDZtdDMPqJfW9AMqX27toF2zWux4GHcp7fGJvFpzTvZPdEgTbPEYysCu9Uhff5dHQ5Y?cluster=devnet
 - State saved: target/rehearsal/state.json
-- Next: await settlement at 16:05 ET (20:05 UTC), then run redeem phase (deferred to #46/#47 RedStone settlement)
+- Next: await settlement at 16:05 ET (20:05 UTC), then run redeem phase
+
+## YYYY-MM-DD HH:MM ET · <who>
+M2-12 live devnet rehearsal: settlement verification (AC2)
+- Markets closed: 16:00 ET
+- Settlement time: <HH:MM ET>
+- Within 10 min of close: <YES|NO>
+- All markets settled from RedStone oracle: <YES|NO: details>
+- If delayed/failed: <diagnosis, fix ticket opened>
+- Next: redeem phase
+
+## YYYY-MM-DD HH:MM ET · <who>
+M2-12 live devnet rehearsal: redeem phase
+- Command: pnpm --filter e2e run rehearsal --phase redeem
+- Outcome: <SUCCESS: P&L exact match|FAILED: reason>
+- Explorer links (devnet):
+  - Settle funds trader-a: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Settle funds trader-b: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Redeem trader-a: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Redeem trader-b: https://explorer.solana.com/tx/<sig>?cluster=devnet
+- P&L verification: <details of exact match against ledger.ts model>
+- M2-12 AC1 complete: <YES|NO>
+
+## 2026-10-09 13:40 ET · worker
+M2-12 settlement and redeem phases deferred: awaiting #46 (RedStone settle_market) and #47 (settle_funds + redeem). Trade phase evidence above satisfies partial AC1 (four intents with explorer links). AC2 (settlement within 10 min) will be filled when #46/#47 land and the full end-to-end run completes.
