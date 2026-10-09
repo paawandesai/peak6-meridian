@@ -87,7 +87,11 @@ function renderView(
       reader({
         listMarkets: () => Promise.resolve(markets),
         getConfig: () =>
-          Promise.resolve({ paused: opts.paused ?? false, overrideDelaySecs: 3_600n }),
+          Promise.resolve({
+            admin: "11111111111111111111111111111111",
+            paused: opts.paused ?? false,
+            overrideDelaySecs: 3_600n,
+          }),
       }),
       view,
     ),
