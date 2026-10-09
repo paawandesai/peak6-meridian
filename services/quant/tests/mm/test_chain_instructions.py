@@ -15,7 +15,13 @@ from solders.message import Message
 from solders.pubkey import Pubkey
 from solders.signature import Signature
 
-from meridian_quant.mm.chain import TOKEN_PROGRAM_ID, ChainOrderClient, derive_market_pda
+from meridian_quant.mm.chain import (
+    TOKEN_PROGRAM_ID,
+    ChainOrderClient,
+    derive_market_pda,
+    derive_open_orders_pda,
+)
+from meridian_quant.mm.types import RestingOrder
 
 
 class InstructionCapture:
@@ -118,6 +124,90 @@ async def test_place_order_builds_correct_instruction_accounts() -> None:
     assert not accounts[9].is_signer and not accounts[9].is_writable  # token_program
     assert accounts[9].pubkey == TOKEN_PROGRAM_ID
     assert not accounts[10].is_signer and not accounts[10].is_writable  # system_program
+
+
+@pytest.mark.asyncio
+async def test_place_order_includes_same_side_owners_in_remaining_accounts() -> None:
+    """place_order includes OpenOrders for same-side owners (displaced refunds).
+
+    When the book is full (32 orders), placing a better order displaces the worst
+    order and refunds it. The program needs that displaced owner's OpenOrders in
+    remaining_accounts to credit them (place_order.rs credit_other).
+
+    Stubs a same-side resting order and asserts that owner's PDA is in remaining_accounts.
+    """
+    program_id = Pubkey.from_string("5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi")
+    usdc_mint = Pubkey.from_string("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
+    payer = Keypair()
+
+    # Create distinct owners for resting orders
+    same_side_owner = Keypair()
+    contra_side_owner = Keypair()
+
+    mock_client = await mock_rpc_client()
+
+    # Mock fetch_resting_orders to return both same-side and contra-side orders
+    async def mock_fetch_orders(market: str) -> list[object]:
+        return [
+            RestingOrder(
+                order_id=1,
+                market=market,
+                side="Bid",  # Same side as our new order
+                price=48,
+                qty=10,
+                owner=str(same_side_owner.pubkey()),
+            ),
+            RestingOrder(
+                order_id=2,
+                market=market,
+                side="Ask",  # Contra side
+                price=52,
+                qty=10,
+                owner=str(contra_side_owner.pubkey()),
+            ),
+        ]
+
+    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
+    client.fetch_resting_orders = mock_fetch_orders  # type: ignore[assignment]
+
+    # Capture instruction
+    with InstructionCapture() as capture:
+        await client.place_order(
+            market="AAPL_20261008_23000",
+            side="Bid",  # Same side as the first resting order
+            price=50,
+            qty=10,
+            owner=str(payer.pubkey()),
+        )
+
+    instruction = capture.instructions[0]
+
+    # Base accounts (11) + remaining_accounts for both unique owners (2)
+    # Payer is already in named accounts, so only same_side_owner and contra_side_owner
+    assert len(instruction.accounts) == 11 + 2
+
+    # Verify remaining_accounts contains both owners' OpenOrders PDAs
+    remaining = instruction.accounts[11:]  # After the 11 base accounts
+
+    ticker, trading_date, strike_cents = ("AAPL", 20261008, 23000)
+    market_pda = derive_market_pda(program_id, ticker, trading_date, strike_cents)
+
+    expected_same_side_oo = derive_open_orders_pda(program_id, market_pda, same_side_owner.pubkey())
+    expected_contra_side_oo = derive_open_orders_pda(
+        program_id, market_pda, contra_side_owner.pubkey()
+    )
+
+    remaining_pubkeys = {acc.pubkey for acc in remaining}
+    assert expected_same_side_oo in remaining_pubkeys, (
+        "Same-side owner OpenOrders missing from remaining_accounts (needed for displaced refund)"
+    )
+    assert expected_contra_side_oo in remaining_pubkeys, (
+        "Contra-side owner OpenOrders missing from remaining_accounts"
+    )
+
+    # Verify all remaining_accounts are writable (program may credit them)
+    for acc in remaining:
+        assert acc.is_writable, f"OpenOrders {acc.pubkey} must be writable in remaining_accounts"
 
 
 @pytest.mark.asyncio
