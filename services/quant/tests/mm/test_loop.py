@@ -328,3 +328,67 @@ async def test_skew_applied_correctly(mm_config: MMConfig) -> None:  # noqa: ARG
     # fair=50, spread=2, skew=+2 → bid=50-2-2=46, ask=50+2-2=50
     assert quote.bid_price == 46
     assert quote.ask_price == 50
+
+
+@pytest.mark.asyncio
+async def test_inventory_cap_enforced_in_run_once(mm_config: MMConfig) -> None:
+    """AC2: MM stops quoting when signed position at ±200 cap (Finding #3).
+    
+    Drive _run_once with FakeOrderClient balances set to cap. Verify loop
+    doesn't place quotes when |YES - NO| >= 200.
+    """
+    now = datetime.now(UTC)
+    close_ts = int((now + timedelta(hours=1)).timestamp())
+
+    market = MarketState(
+        market="AAPL_20261008_23000",
+        ticker="AAPL",
+        strike_cents=23000,
+        trading_date=20261008,
+        close_ts=close_ts,
+        is_open=True,
+        pairs_outstanding=100,
+    )
+
+    fv = FairValue(
+        market=market.market,
+        ticker=market.ticker,
+        strike_cents=market.strike_cents,
+        fair_cents=50,
+        sigma=0.2,
+        spot=230.0,
+        as_of=now,
+    )
+
+    order_client = FakeOrderClient()
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource([market]),
+        fair_value_source=FakeFairValueSource([fv]),
+        order_client=order_client,
+        clock=lambda: now,
+    )
+
+    mm_owner = str(mm.keypair.pubkey())
+
+    # Set signed position at cap: YES=250, NO=50 → position=+200
+    order_client.set_yes_balance(market.market, mm_owner, 250)
+    order_client.set_no_balance(market.market, mm_owner, 50)
+
+    await mm._run_once()
+
+    # Cap enforced: no quotes placed (would exceed limit)
+    orders = await order_client.fetch_resting_orders(market.market)
+    mm_orders = [o for o in orders if o.owner == mm_owner]
+    assert len(mm_orders) == 0, f"Expected 0 orders at cap, got {len(mm_orders)}"
+
+    # Now set position below cap: YES=190, NO=0 → position=+190
+    order_client.set_yes_balance(market.market, mm_owner, 190)
+    order_client.set_no_balance(market.market, mm_owner, 0)
+
+    await mm._run_once()
+
+    # Below cap: quotes placed
+    orders = await order_client.fetch_resting_orders(market.market)
+    mm_orders = [o for o in orders if o.owner == mm_owner]
+    assert len(mm_orders) == 2, f"Expected 2 orders below cap, got {len(mm_orders)}"

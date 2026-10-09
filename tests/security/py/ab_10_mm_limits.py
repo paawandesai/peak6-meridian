@@ -38,15 +38,14 @@ def test_ab10_inventory_cap_enforced() -> None:
 
 @pytest.mark.asyncio
 async def test_ab10_order_cap_per_owner() -> None:
-    """MM never exceeds 8 resting orders per owner (domain.md § Limits).
+    """MM never exceeds 8 resting orders per owner per market (domain.md § Limits).
 
-    Drive the actual MM loop with 5 open markets and verify it never places
-    more than 8 resting orders (4 two-sided quotes).
+    Seed 7 existing MM orders in one market, then run loop. MM should skip that
+    market (placing 2 more would exceed 8) but still quote other markets.
     """
     now = datetime.now(UTC)
     close_ts = int((now + timedelta(hours=1)).timestamp())
 
-    # 5 open markets - MM should only quote 4 (8 orders max)
     markets = [
         MarketState(
             market="AAPL_20261008_23000",
@@ -58,36 +57,9 @@ async def test_ab10_order_cap_per_owner() -> None:
             pairs_outstanding=100,
         ),
         MarketState(
-            market="AAPL_20261008_23500",
-            ticker="AAPL",
-            strike_cents=23500,
-            trading_date=20261008,
-            close_ts=close_ts,
-            is_open=True,
-            pairs_outstanding=100,
-        ),
-        MarketState(
             market="AAPL_20261008_24000",
             ticker="AAPL",
             strike_cents=24000,
-            trading_date=20261008,
-            close_ts=close_ts,
-            is_open=True,
-            pairs_outstanding=100,
-        ),
-        MarketState(
-            market="MSFT_20261008_42000",
-            ticker="MSFT",
-            strike_cents=42000,
-            trading_date=20261008,
-            close_ts=close_ts,
-            is_open=True,
-            pairs_outstanding=100,
-        ),
-        MarketState(
-            market="NVDA_20261008_13500",
-            ticker="NVDA",
-            strike_cents=13500,
             trading_date=20261008,
             close_ts=close_ts,
             is_open=True,
@@ -108,14 +80,13 @@ async def test_ab10_order_cap_per_owner() -> None:
         for m in markets
     ]
 
-    # Create MM loop with fakes
     keypair = Keypair()
-    # Convert to JSON array format per environment.md
     keypair_json = json.dumps(list(bytes(keypair)))
     config = MMConfig.model_validate(
         {
             "market_maker_keypair": keypair_json,
             "program_id": "11111111111111111111111111111112",
+            "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
             "service_token": "test_token",
         }
     )
@@ -123,6 +94,16 @@ async def test_ab10_order_cap_per_owner() -> None:
     market_source = FakeMarketSource(markets)
     fv_source = FakeFairValueSource(fair_values)
     order_client = FakeOrderClient()
+
+    # Make cancel_order a no-op for this test to simulate orders that survive
+    # (e.g., from other systems or failed cancel attempts)
+    original_cancel = order_client.cancel_order
+
+    async def cancel_noop(market: str, order_id: int, owner: str) -> None:
+        """No-op cancel for this test."""
+        pass
+
+    order_client.cancel_order = cancel_noop  # type: ignore[method-assign]
 
     mm = MarketMakerLoop(
         config,
@@ -132,20 +113,36 @@ async def test_ab10_order_cap_per_owner() -> None:
         clock=lambda: now,
     )
 
-    # Run loop once
-    await mm._run_once()
-
-    # AB-10: Never exceed 8 orders per owner PER MARKET (domain.md § Limits)
     mm_owner = str(mm.keypair.pubkey())
-    for market in markets:
-        market_orders = order_client.count_orders_by_owner(market.market, mm_owner)
-        assert market_orders <= 8, (
-            f"Market {market.market}: {market_orders} orders exceeds cap of 8 per market"
+
+    # Seed 7 existing orders in first market
+    # With cancel as no-op, these will persist
+    for i in range(7):
+        await order_client.place_order(
+            market=markets[0].market,
+            side="Bid" if i % 2 == 0 else "Ask",
+            price=45 + i,
+            qty=10,
+            owner=mm_owner,
         )
 
-    # With 5 markets, MM should place 2 orders (bid+ask) in each market = 10 total
-    total_orders = sum(order_client.count_orders_by_owner(m.market, mm_owner) for m in markets)
-    assert total_orders == 10, f"Expected 10 orders (5 markets x 2), got {total_orders}"
+    # Run loop - should skip first market (7 + 2 > 8), quote second market
+    await mm._run_once()
+
+    # First market: still 7 orders (MM skipped it due to cap)
+    market_0_orders = order_client.count_orders_by_owner(markets[0].market, mm_owner)
+    assert market_0_orders == 7, (
+        f"Market 0 should still have 7 orders (cap prevents new quotes), got {market_0_orders}"
+    )
+
+    # Second market: 2 orders (bid + ask placed)
+    market_1_orders = order_client.count_orders_by_owner(markets[1].market, mm_owner)
+    assert market_1_orders == 2, f"Market 1 should have 2 orders, got {market_1_orders}"
+
+    # AB-10: Each market respects 8-order cap
+    for market in markets:
+        count = order_client.count_orders_by_owner(market.market, mm_owner)
+        assert count <= 8, f"Market {market.market} has {count} orders, exceeds cap of 8"
 
 
 def test_ab10_prices_always_in_range() -> None:

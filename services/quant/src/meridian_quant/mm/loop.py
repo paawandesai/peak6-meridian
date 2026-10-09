@@ -117,6 +117,8 @@ class MarketMakerLoop:
             if self._should_pull_all_quotes(fair_values, open_markets):
                 logger.info("Pull condition met, canceling all quotes")
                 await self._cancel_all_quotes()
+                # Settle funds to recycle proceeds (AB-11: settle still works after close)
+                await self._settle_funds()
                 return
 
             # Cancel all old quotes first (frees escrowed YES to OpenOrders.free_yes)
