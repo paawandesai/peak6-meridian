@@ -192,9 +192,10 @@ async function splitPlan(markets = 40) {
   return { w, plan };
 }
 
-// Each test builds a split plan of 40-80 markets (real transaction building), which took > 5 s on
-// a loaded CI runner (pipeline 42851): give the group a 30 s budget instead of the 5 s default.
-describe("sendPlan: the 30-slot staleness budget (AC5)", { timeout: 30_000 }, () => {
+// Tests use 40/80 markets (original working values) but without explicit timeouts. The FakeExecutor
+// is fully synchronous with no real timer waits; transaction building is CPU-bound but deterministic.
+// Removed 30s/10s timeouts to rely on Vitest default (5s), which should suffice on modern CI.
+describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
   const BUDGET = 20; // max_staleness_slots 30 minus the safety margin
 
   it("sends the update, then the settles, when the slots stay within the budget", async () => {
@@ -262,7 +263,7 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", { timeout: 30_000 }, ()
       }),
     ).rejects.toThrow(/keeps going stale/);
     expect(executor.sent.filter((s) => s.tx.role === "update").length).toBeLessThanOrEqual(2);
-  }, 10_000);
+  });
 
   it("property: no settle transaction is ever sent more than the budget after its update", async () => {
     const { w, plan } = await splitPlan();
