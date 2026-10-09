@@ -46,8 +46,20 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
     validator_process = None
 
     try:
-        # Start validator with prebuilt program (mirroring scripts/e2e.sh)
-        program_id = "5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi"
+        # Read program ID from Anchor.toml (same as scripts/e2e.sh)
+        # BPF program must be loaded at declare_id! address or it will be rejected
+        anchor_toml_path = Path("Anchor.toml")
+        if not anchor_toml_path.exists():
+            pytest.skip("Anchor.toml not found")
+
+        anchor_toml = anchor_toml_path.read_text()
+        program_id_match = re.search(r'meridian\s*=\s*"([^"]+)"', anchor_toml)
+        if not program_id_match:
+            pytest.fail("Could not parse program ID from Anchor.toml")
+
+        program_id = program_id_match.group(1)
+        print(f"Program ID from Anchor.toml: {program_id}")
+
         rpc_url = "http://localhost:8899"
 
         # Check no validator already running
