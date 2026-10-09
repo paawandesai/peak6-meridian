@@ -2,8 +2,9 @@
 
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 from solana.rpc.async_api import AsyncClient
@@ -12,6 +13,7 @@ from solders.pubkey import Pubkey  # type: ignore[import-untyped]
 
 from .config import MMConfig
 from .inventory import InventoryTracker
+from .metrics import book_coverage
 from .quoter import generate_quote
 from .types import FairValue, MarketState
 
@@ -221,5 +223,10 @@ class MarketMakerLoop:
 
     async def _update_coverage(self, markets: list[MarketState]) -> None:
         """Update the book coverage metric."""
-        # Placeholder: would fetch resting orders and compute coverage
-        self._coverage = 0.0
+        # Placeholder: would fetch resting orders from on-chain state
+        # For now, use empty list until program integration is complete
+        resting_orders = []  # TODO: fetch via getProgramAccounts once integrated
+        open_markets = [m.market for m in markets if m.is_open]
+        mm_owner = str(self.keypair.pubkey())
+
+        self._coverage = book_coverage(open_markets, resting_orders, mm_owner)
