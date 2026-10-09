@@ -7,12 +7,14 @@ package_manager = "pnpm"
 resolution = true
 skip-lint = false
 
+[programs.devnet]
+meridian = "Cdn18mfGmJ9SKhkgCRKTjqwPHJk3DLueEgxgdUhQhkzB"
+
 [programs.localnet]
 meridian = "H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm"
 
-# The devnet program ID (D-053): the same ID as localnet, so the one `declare_id!` matches both.
-[programs.devnet]
-meridian = "H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm"
+[registry]
+url = "https://api.apr.dev"
 
 [provider]
 cluster = "localnet"

@@ -12,6 +12,7 @@ import { useNow } from "./use-now";
 import { useMarketData, type MarketDataSources } from "@/lib/market-data";
 import { formatTradingDate, groupByTicker, marketStatus, type MarketRow } from "@/lib/markets";
 import { activeDateMarkets, etTradingDate } from "@/lib/time";
+import { tradeHref } from "@/app/trade/_lib/href";
 
 /** Inert sources for pages without a data provider: nothing is live, so rows show "—". */
 const NO_SOURCES: MarketDataSources = {
@@ -43,11 +44,8 @@ function useOpenTimes(markets: readonly MarketRow[]): Record<string, number | nu
  */
 export function MarketsView({
   nowSecs,
-  tradeHref,
 }: {
   readonly nowSecs?: number;
-  /** Builds a strike's Trade link; absent until the Trade route exists (UI-04 turns it on). */
-  readonly tradeHref?: (market: MarketRow) => string;
 }) {
   const reader = useReader();
   const ticking = useNow();
