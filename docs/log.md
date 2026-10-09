@@ -65,30 +65,39 @@ PRD/docs verification (local `.ao-ops/prd-docs-verification.md`):
 ## 2026-10-08 17:55 CT · orchestrator
 - M3 tickets M3-01..M3-09 drafted by the orchestrator (Tier 2, Paawan notified).
 
-## YYYY-MM-DD HH:MM ET · <who>
-<!-- M2-12 live devnet rehearsal evidence template (issue #28) -->
-<!-- Replace placeholders with actual values; delete this template when filled -->
+## 2026-10-09 09:50 EDT · AO worker peak6-meridian-39
 M2-12 live devnet rehearsal: pre-flight
-- Deployment verified: make deploy-devnet (dry-run, no tx sent)
-- Automation service: <Railway|Fallback A worker session ID>
-- Markets created: <08:00 automation|Fallback B manual, N markets created>
+- Deployment verified: make deploy-devnet (dry-run, no tx sent - program and config current)
+- Automation service: Fallback B used (no automation running)
+- Markets created: Fallback B manual creation - 14 new markets created, 32 already existed
+- Previous closes fetched from Tiingo API for all MAG7 tickers (2026-10-09)
+- Market creation explorer links:
+  - Sample META markets: LyTdfVXH9kDyuF9w38djSkWtbpi2FQXxv5rQSty9qEcq3wVhpxbj4JSg6kbigrBnQ7JTrnBTcyMxtq9piDLqLVT
+  - Sample TSLA markets: 5XyQiNMndS7xE6Dpg33JumxiG4AJj98hyPT9ydtpyi1sM9Z3PE1JhuCDMSomMuBxgNwRQj8E3uP3PK58XcsoRdnX
 - Next: trade phase
 
-## YYYY-MM-DD HH:MM ET · <who>
+## 2026-10-09 09:52 EDT · AO worker peak6-meridian-39
 M2-12 live devnet rehearsal: trade phase
-- Command: pnpm --filter e2e run rehearsal --phase trade --fund <faucet|direct|none>
-- Symbol: META, strike: $XXX.XX
-- Outcome: <SUCCESS|FAILED: reason>
-- Trader wallets: <trader-a-pubkey>, <trader-b-pubkey>
+- Command: pnpm --filter e2e run rehearsal --phase trade --fund direct
+- Symbol: META, strike: $660.00 (66000 cents)
+- Market: 62gu1va8jFJKR2KDwssgs2inMeX1iuwzbj6Hqh1cwUJf
+- Close time: 2026-10-09T20:00:00.000Z (16:00 EDT / 4:00 PM EDT)
+- Outcome: SUCCESS - all 4 trade paths executed
+- Trader wallets: Hprwcmcd9eTkTg6aa9tv93SpPNALUL3NhkpsKnZS9uFM (trader-a), 436sjKf5xMacTDnQWdqpPZFmryGqGvSkf3YDczfHZFCg (trader-b)
 - Explorer links (devnet):
-  - Fund trader-a SOL: https://explorer.solana.com/tx/<sig>?cluster=devnet
-  - Fund trader-b SOL: https://explorer.solana.com/tx/<sig>?cluster=devnet
-  - Buy YES: https://explorer.solana.com/tx/<sig>?cluster=devnet
-  - Sell YES: https://explorer.solana.com/tx/<sig>?cluster=devnet
-  - Buy NO: https://explorer.solana.com/tx/<sig>?cluster=devnet
-  - Sell NO: https://explorer.solana.com/tx/<sig>?cluster=devnet
+  - Fund trader-a SOL+USDC: https://explorer.solana.com/tx/3PUKDQrjVNQHjCSMEJL3SUynyv4FJiRV6dGzx1Qh1nAeN4NwZ8z3tDx3QJsCusMVLM52sRHdr9dZXjM3tNCXZMCs?cluster=devnet
+  - Fund trader-b SOL+USDC: https://explorer.solana.com/tx/3x7731UVLj47qo5oKTTzViopXuMu4jysjvoS5aKxrx58oDC4pioXQC9G3Rs1EvqV8gLhP9DfBVNSuFdL1LY5wr2X?cluster=devnet
+  - Mint 20 pairs (trader-b): https://explorer.solana.com/tx/3gxWaVfuQ1dn16zAv1tAUWqziCqhAivgBMvFnMArWeCwPW5Vq7rT9HD7CNaR7bXxtQcACUYVs2B7oRqUrmczBiu2?cluster=devnet
+  - Sell YES order (trader-b 10@60¢): https://explorer.solana.com/tx/5pLnBFAesjeT1g1xoAKGDhddR2EGZ5vNPsaPCS1m1rUdoBXesWCaEGEQ78mYDGBrAB7EYjsTvy9xhn5pGbQ1dbYs?cluster=devnet
+  - Buy YES (trader-a IOC 10@60¢): https://explorer.solana.com/tx/EjYhDwx8X9DMQPYb86KNB7CgHSufdUugaMox1CbcZ5E8W4uC5eyQ3KsgSAqQauwcUpn5MnqmjfC2pH7i4aebCEG?cluster=devnet
+  - Sell YES bid (trader-b 4@55¢): https://explorer.solana.com/tx/XTbaajUSRpPQdsqHeZxqkUP6xb8goRDEacq73eRp9z4rCD1bJTynkDfyS12Dt3sjo3mfEZq22YG8towPpuNaoyc?cluster=devnet
+  - Sell YES (trader-a IOC 4@55¢): https://explorer.solana.com/tx/NK4CvuqCfS6e3hpUSteqmHJKo2Ecoq1VNV1XCnzQDVxKBkuaQ2y34zAvuQ4QSvphJxvypDhZM2KSshixCoQsNyZ?cluster=devnet
+  - Buy NO bid (trader-b 3@45¢): https://explorer.solana.com/tx/4AHjJoXB34DmUeXahiPZKmz8MBNDKtZDNVQ9EnrEnje3dWh8JsWKdcr8Vsmf8stNMvEmxT8BYBfzCV2RGKrErps8?cluster=devnet
+  - Buy NO (trader-a IOC 3@55¢ YES = 45¢ NO): https://explorer.solana.com/tx/4WD6qQ9VGjyLonKZZjpXfoXonUktXod76kX4A3acrfpxnuDnnzS73iPZivVcEb6Vwg1FgLjFnkdXVwMuy26RuGqK?cluster=devnet
+  - Sell NO ask (trader-b 1@70¢): https://explorer.solana.com/tx/226TYgh45gxQtC3JFzxwZK1Y57hiEdGWXYLyprTyD7cjDTWwnUBS5yX3Hnqgnmp3taYHkYgKD2yHWAUZj94U58NY?cluster=devnet
+  - Sell NO (trader-a IOC 1@70¢): https://explorer.solana.com/tx/44Kwd69Rc9gGhhpkL8K9TtDZtdDMPqJfW9AMqX27toF2zWux4GHcp7fGJvFpzTvZPdEgTbPEYysCu9Uhff5dHQ5Y?cluster=devnet
 - State saved: target/rehearsal/state.json
-- Next: await settlement at 16:05 ET
+- Next: await settlement at 16:05 ET (20:05 UTC), then run redeem phase
 
 ## YYYY-MM-DD HH:MM ET · <who>
 M2-12 live devnet rehearsal: settlement verification (AC2)
