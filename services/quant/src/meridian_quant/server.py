@@ -61,6 +61,7 @@ class Service:
     sources: Sources
     token: str
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
+    mm_loop: object | None = None  # Optional MarketMakerLoop for M3-02 book_coverage
 
     def __post_init__(self) -> None:
         if not self.token:
@@ -116,6 +117,16 @@ def handle_request(
     service: Service, method: str, path: str, authorization: str | None
 ) -> tuple[int, bytes]:
     """Returns (status, JSON body)."""
+    # /health is unauthenticated (M3-02 AC4, M3-04/M3-09 monitoring)
+    if path == "/health":
+        if method != "GET":
+            return 405, b'{"error":"method not allowed"}'
+        health_data: dict[str, object] = {"service": "quant", "status": "ok"}
+        # Include book_coverage if MM loop is running (M3-02)
+        if service.mm_loop is not None and hasattr(service.mm_loop, "book_coverage"):
+            health_data["book_coverage"] = service.mm_loop.book_coverage
+        return 200, json.dumps(health_data).encode()
+
     if path != "/fair-values":
         return 404, b'{"error":"not found"}'
     if method != "GET":
