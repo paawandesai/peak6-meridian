@@ -11,6 +11,7 @@ import pytest
 from solders.hash import Hash
 from solders.instruction import Instruction
 from solders.keypair import Keypair
+from solders.message import Message
 from solders.pubkey import Pubkey
 from solders.signature import Signature
 
@@ -18,25 +19,31 @@ from meridian_quant.mm.chain import TOKEN_PROGRAM_ID, ChainOrderClient, derive_m
 
 
 class InstructionCapture:
-    """Captures Instruction objects created during test execution."""
+    """Captures instructions passed to Message.new_with_blockhash.
+
+    PyO3 Instruction uses __new__ not __init__, so patching __init__ doesn't work.
+    Instead, intercept Message.new_with_blockhash and capture the instruction list.
+    """
 
     def __init__(self) -> None:
         self.instructions: list[Instruction] = []
-        self.original_init = Instruction.__init__
+        self.original_new_with_blockhash = Message.new_with_blockhash
 
     def __enter__(self) -> "InstructionCapture":
-        """Patch Instruction.__init__ to capture created instructions."""
+        """Patch Message.new_with_blockhash to capture instructions."""
 
-        def capturing_init(inst: Instruction, *args: object, **kwargs: object) -> None:
-            self.original_init(inst, *args, **kwargs)  # type: ignore[arg-type]
-            self.instructions.append(inst)
+        def capturing_new(instructions: object, payer: object, blockhash: object) -> Message:
+            # Capture the instructions before Message compilation
+            if isinstance(instructions, list):
+                self.instructions.extend(instructions)
+            return self.original_new_with_blockhash(instructions, payer, blockhash)  # type: ignore[arg-type]
 
-        Instruction.__init__ = capturing_init  # type: ignore[assignment,method-assign]
+        Message.new_with_blockhash = capturing_new  # type: ignore[method-assign]
         return self
 
     def __exit__(self, *args: object) -> None:
-        """Restore original Instruction.__init__."""
-        Instruction.__init__ = self.original_init  # type: ignore[method-assign]
+        """Restore original Message.new_with_blockhash."""
+        Message.new_with_blockhash = self.original_new_with_blockhash  # type: ignore[method-assign]
 
 
 async def mock_rpc_client() -> AsyncMock:
