@@ -215,8 +215,8 @@ class ChainMarketSource:
 
             return markets
         except Exception:
-            # Return empty list on error (logged at call site)
-            return []
+            logger.exception("Failed to fetch open markets from getProgramAccounts")
+            raise
 
 
 class ChainOrderClient:
