@@ -99,7 +99,7 @@ describe("deployRailway", () => {
     );
     expect(runArgs.join(" ")).toContain("--environment e1");
     expect(runArgs.join(" ")).not.toContain(TOKEN);
-    expect(CONFIG_FILE).toBe("services/automation/railway.json");
+    expect(CONFIG_FILE).toBe("/services/automation/railway.json");
     const output = logs.join("\n");
     for (const secret of [TOKEN, KEYPAIR, SERVICE_TOKEN, "tiingo-key-xyz"]) {
       expect(output).not.toContain(secret);
