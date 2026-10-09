@@ -193,9 +193,10 @@ async function splitPlan(markets = 40) {
 }
 
 // CPU-bound fixture build (40-80 markets build real transactions), no real timer waits. Shared
-// fixtures built once in beforeAll to avoid rebuilding for each test. Explicit timeout allows
-// for fixture overhead on loaded CI runners. Will change with M2-16/M2-18 RedStone migration.
-describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
+// fixtures built once in beforeAll to avoid rebuilding for each test. Describe-level timeout
+// covers fixture build (>5s each on loaded CI per pipeline 42851) plus property runs under coverage.
+// Will change with M2-16/M2-18 RedStone migration.
+describe("sendPlan: the 30-slot staleness budget (AC5)", { timeout: 30_000 }, () => {
   const BUDGET = 20; // max_staleness_slots 30 minus the safety margin
 
   // Shared fixtures built once: expensive transaction building (buildSettleInstructions, switchboardAdapter)
@@ -205,7 +206,7 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
   beforeAll(async () => {
     sharedPlan40 = await splitPlan(40);
     sharedPlan80 = await splitPlan(80);
-  }, 10_000); // CPU-bound fixture build
+  }); // No timeout here - covered by describe-level 30s
 
   it("sends the update, then the settles, when the slots stay within the budget", async () => {
     const { w, plan } = sharedPlan40;
@@ -275,7 +276,7 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
   });
 
   it("property: no settle transaction is ever sent more than the budget after its update", async () => {
-    const { w, plan } = await splitPlan();
+    const { w, plan } = sharedPlan40;
     await fc.assert(
       fc.asyncProperty(
         fc.array(fc.integer({ min: 0, max: 45 }), { minLength: 1, maxLength: 12 }),
