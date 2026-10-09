@@ -2,6 +2,12 @@
  * Environment specs for quant and ops-agent Railway services (M3-08). Extends the M2-11 platform
  * deployment pattern. These specs are used by the deploy commands to collect and set variables
  * from GitLab CI protected variables, never committed to the repo.
+ *
+ * DEPLOYMENT: Once M2-11 (platform-cli, railway.ts) and M3-01/M3-02/M3-05 (server modules) merge,
+ * the .gitlab-ci.yml deploy jobs will use M2-11's deployRailway() with these env specs and the
+ * railway.json configs. The services start via `uv run --frozen --package <name> python -m <name>.server`
+ * and expose GET /health (with SERVICE_TOKEN bearer), GET /fair-values (quant), POST /incidents
+ * and GET /drafts (ops-agent). This MR provides the Railway config; deployment happens after deps merge.
  */
 
 /** Environment spec type from platform.ts (M2-11). */

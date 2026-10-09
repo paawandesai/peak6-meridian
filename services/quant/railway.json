@@ -2,10 +2,19 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "uv sync --frozen"
+    "nixpacksPlan": {
+      "phases": {
+        "setup": {
+          "nixPkgs": ["python312", "uv"]
+        },
+        "install": {
+          "cmds": ["uv sync --frozen --no-dev --package meridian_quant"]
+        }
+      }
+    }
   },
   "deploy": {
-    "startCommand": "uv run python -m meridian_quant.server",
+    "startCommand": "uv run --frozen --package meridian_quant python -m meridian_quant.server",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
