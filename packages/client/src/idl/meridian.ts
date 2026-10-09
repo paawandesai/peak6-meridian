@@ -927,11 +927,32 @@ export type Meridian = {
         {
           name: "market";
           docs: [
-            "Optional Market PDA (for close_ts window validation; AB-03 liveness).",
-            "If provided, validates package is within [close_ts, close_ts + max_package_delay_secs].",
-            "Seeds constrained to ensure it's a valid Market; ticker match checked in handler.",
+            "Market PDA (read-only, for close_ts window validation; AB-03 liveness).",
+            "Must match the symbol being posted. Seeds constrained per settle_market pattern.",
           ];
-          optional: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [109, 97, 114, 107, 101, 116];
+              },
+              {
+                kind: "account";
+                path: "market.ticker";
+                account: "market";
+              },
+              {
+                kind: "account";
+                path: "market.trading_date";
+                account: "market";
+              },
+              {
+                kind: "account";
+                path: "market.strike_cents";
+                account: "market";
+              },
+            ];
+          };
         },
         {
           name: "redstonePrice";

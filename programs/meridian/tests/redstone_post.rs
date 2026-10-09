@@ -60,6 +60,18 @@ fn setup_with_signers(signer_addresses: Vec<[u8; 20]>) -> MarketHarness {
         .send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
+    // Create a market for RedStone post window validation (AB-03)
+    // Most tests use timestamp 1700000000000 ms, so set close_ts before that
+    let test_close_ts = 1700000000i64; // Unix seconds, matches test timestamps
+    harness.harness.set_unix_timestamp(test_close_ts - 3600);
+    let market_args = MarketArgs {
+        ticker: symbol("NVDA"),
+        strike_cents: 200_000,
+        trading_date: BASE_TRADING_DATE,
+        close_ts: test_close_ts,
+    };
+    harness.create_market(&market_args);
+
     harness
 }
 
@@ -99,12 +111,21 @@ fn post_redstone_price_success_3_of_5() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -161,12 +182,21 @@ fn post_redstone_price_fails_insufficient_signers() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -218,12 +248,21 @@ fn post_redstone_price_unknown_signer_ignored() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -274,12 +313,21 @@ fn post_redstone_price_malformed_payload() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -328,12 +376,21 @@ fn post_redstone_price_duplicate_signer_counts_once() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -396,12 +453,21 @@ fn post_redstone_price_tampered_signature_recovery_fails() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -452,12 +518,21 @@ fn post_redstone_price_tampered_value_fails() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -509,12 +584,21 @@ fn post_redstone_price_tampered_timestamp_fails() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -566,12 +650,21 @@ fn post_redstone_price_tampered_feed_id_fails() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -613,12 +706,21 @@ fn post_redstone_price_oversized_payload_fails() {
         payload,
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -663,12 +765,21 @@ fn post_redstone_price_wrong_feed_id_fails() {
         payload,             // TSLA payload
     };
 
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &symbol("NVDA"),
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: market_pda,
     };
 
     let instruction = Instruction {
@@ -735,7 +846,7 @@ fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: Some(addresses_market.market),
+        market: addresses_market.market,
     };
 
     let instruction = Instruction {

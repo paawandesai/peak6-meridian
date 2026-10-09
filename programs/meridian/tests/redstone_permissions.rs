@@ -13,8 +13,8 @@ use anchor_lang::prelude::Pubkey;
 use anchor_lang::{InstructionData, ToAccountMetas};
 use common::redstone::{RedstonePayloadBuilder, TestSigner};
 use common::{
-    assert_meridian_error_with_budget, config_pda, expect_success, symbol, MarketHarness,
-    FUNDING_LAMPORTS,
+    assert_meridian_error_with_budget, config_pda, expect_success, symbol, MarketArgs,
+    MarketHarness, BASE_TRADING_DATE, FUNDING_LAMPORTS,
 };
 use meridian::errors::MeridianError;
 use solana_sdk::instruction::Instruction;
@@ -207,6 +207,17 @@ fn post_redstone_price_is_permissionless() {
         .send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
+    // Create market for RedStone window validation (AB-03)
+    let test_close_ts = 1700000000i64;
+    harness.harness.set_unix_timestamp(test_close_ts - 3600);
+    let market_args = MarketArgs {
+        ticker: symbol("NVDA"),
+        strike_cents: 200_000,
+        trading_date: BASE_TRADING_DATE,
+        close_ts: test_close_ts,
+    };
+    harness.create_market(&market_args);
+
     // Now post price as a random payer (not admin)
     let random_payer = Keypair::new();
     harness
@@ -231,7 +242,18 @@ fn post_redstone_price_is_permissionless() {
 
     let post_accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: None,
+        market: {
+            let (pda, _) = Pubkey::find_program_address(
+                &[
+                    meridian::MARKET_SEED,
+                    &symbol("NVDA"),
+                    &BASE_TRADING_DATE.to_le_bytes(),
+                    &200_000u64.to_le_bytes(),
+                ],
+                &meridian::ID,
+            );
+            pda
+        },
         redstone_price: price_pda,
         payer: random_payer.pubkey(),
         system_program: system_program::ID,

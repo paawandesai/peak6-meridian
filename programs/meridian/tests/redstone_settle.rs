@@ -116,7 +116,7 @@ fn settle_market_succeeds_after_redstone_post() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: Some(market_pda),
+        market: market_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -205,7 +205,7 @@ fn settle_market_fails_package_before_close() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: Some(market_pda),
+        market: market_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -289,7 +289,7 @@ fn settle_market_fails_package_too_late() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: Some(market_pda),
+        market: market_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -373,7 +373,7 @@ fn settle_market_fails_stale_oracle() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: Some(market_pda),
+        market: market_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -439,6 +439,16 @@ fn settle_market_fails_wrong_price_pda() {
         .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
 
+    // Create TSLA market for post_redstone_price (requires matching ticker)
+    harness.harness.set_unix_timestamp(BASE_CLOSE_TS - 3600);
+    let tsla_args = MarketArgs {
+        ticker: symbol("TSLA"),
+        strike_cents: 200_000,
+        trading_date: BASE_TRADING_DATE,
+        close_ts: BASE_CLOSE_TS,
+    };
+    harness.create_market(&tsla_args);
+
     // Post price for TSLA instead of NVDA
     let wrong_ticker = symbol("TSLA");
     let value = 2050_0000_0000u128;
@@ -464,7 +474,18 @@ fn settle_market_fails_wrong_price_pda() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: None,
+        market: {
+            let (pda, _) = Pubkey::find_program_address(
+                &[
+                    meridian::MARKET_SEED,
+                    &symbol("TSLA"),
+                    &BASE_TRADING_DATE.to_le_bytes(),
+                    &200_000u64.to_le_bytes(),
+                ],
+                &meridian::ID,
+            );
+            pda
+        },
         redstone_price: wrong_price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -552,7 +573,7 @@ fn settle_market_fails_before_close() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: Some(market_pda),
+        market: market_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -635,7 +656,7 @@ fn settle_market_at_strike_boundary() {
 
     let accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: Some(market_pda),
+        market: market_pda,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,

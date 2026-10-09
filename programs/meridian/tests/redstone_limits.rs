@@ -61,6 +61,16 @@ fn post_redstone_price_stays_under_cu_limit() {
         .send_with_budget(instruction, &[&admin], 400_000);
     expect_success(&result);
 
+    // Create market for RedStone window validation (AB-03)
+    harness.harness.set_unix_timestamp(BASE_CLOSE_TS - 3600);
+    let market_args = MarketArgs {
+        ticker: symbol("NVDA"),
+        strike_cents: 200_000,
+        trading_date: BASE_TRADING_DATE,
+        close_ts: BASE_CLOSE_TS,
+    };
+    harness.create_market(&market_args);
+
     // Post price with all 5 signers
     let payer = Keypair::new();
     harness
@@ -85,7 +95,18 @@ fn post_redstone_price_stays_under_cu_limit() {
 
     let post_accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: None,
+        market: {
+            let (pda, _) = Pubkey::find_program_address(
+                &[
+                    meridian::MARKET_SEED,
+                    &symbol("NVDA"),
+                    &BASE_TRADING_DATE.to_le_bytes(),
+                    &200_000u64.to_le_bytes(),
+                ],
+                &meridian::ID,
+            );
+            pda
+        },
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -190,7 +211,7 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
 
     let post_accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: Some(addresses_market.market),
+        market: addresses_market.market,
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
@@ -269,7 +290,18 @@ fn redstone_payload_fits_in_transaction() {
 
     let post_accounts = meridian::accounts::PostRedstonePrice {
         oracle_config: oracle_config_pda,
-        market: None,
+        market: {
+            let (pda, _) = Pubkey::find_program_address(
+                &[
+                    meridian::MARKET_SEED,
+                    &symbol("NVDA"),
+                    &BASE_TRADING_DATE.to_le_bytes(),
+                    &200_000u64.to_le_bytes(),
+                ],
+                &meridian::ID,
+            );
+            pda
+        },
         redstone_price: price_pda,
         payer: admin.pubkey(),
         system_program: system_program::ID,
