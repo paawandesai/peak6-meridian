@@ -397,7 +397,12 @@ async function attemptSettlement(
     throw new Error("Settlement succeeded unexpectedly - spread check should have failed");
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.log(`  Settlement failed as expected: ${errorMsg}`);
+    // Only continue if this is the expected OracleSpreadTooWide error (code 6031)
+    // If accountsStrict or RPC fails, re-throw to fail the demo
+    if (!errorMsg.includes("Oracle values differ by more than max_conf_bps")) {
+      throw error;
+    }
+    console.log(`  Settlement failed with spread check: ${errorMsg}`);
   }
 
   // POST /incidents to ops-agent (with timeout per AC3)
