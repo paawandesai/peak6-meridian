@@ -92,7 +92,7 @@ fn settle_market_succeeds_after_redstone_post() {
         .unwrap();
 
     let ticker = args.ticker;
-    let value = 2050_0000_0000u64; // $2050 > $2000 strike → YES wins
+    let value = 2050_0000_0000u128; // $2050 > $2000 strike → YES wins
     let timestamp_ms = BASE_CLOSE_TS
         .checked_mul(1000)
         .and_then(|t| t.checked_add(1000))
@@ -180,7 +180,7 @@ fn settle_market_fails_package_before_close() {
         .unwrap();
 
     let ticker = args.ticker;
-    let value = 2050_0000_0000u64;
+    let value = 2050_0000_0000u128;
     // Timestamp BEFORE close_ts
     let timestamp_ms = BASE_CLOSE_TS
         .checked_sub(60)
@@ -244,7 +244,10 @@ fn settle_market_fails_package_before_close() {
         data: settle_ix.data(),
     };
     let settle_result = harness.harness.send(settle_instruction, &[&settler]);
-    common::assert_meridian_error(&settle_result, meridian::errors::MeridianError::OracleBeforeClose);
+    common::assert_meridian_error(
+        &settle_result,
+        meridian::errors::MeridianError::OracleBeforeClose,
+    );
 }
 
 #[test]
@@ -261,7 +264,7 @@ fn settle_market_fails_package_too_late() {
         .unwrap();
 
     let ticker = args.ticker;
-    let value = 2050_0000_0000u64;
+    let value = 2050_0000_0000u128;
     // Timestamp after close_ts + max_package_delay_secs (600s)
     let timestamp_ms = BASE_CLOSE_TS
         .checked_add(601)
@@ -324,7 +327,10 @@ fn settle_market_fails_package_too_late() {
         data: settle_ix.data(),
     };
     let settle_result = harness.harness.send(settle_instruction, &[&settler]);
-    common::assert_meridian_error(&settle_result, meridian::errors::MeridianError::RedStonePackageTooLate);
+    common::assert_meridian_error(
+        &settle_result,
+        meridian::errors::MeridianError::RedStonePackageTooLate,
+    );
 }
 
 #[test]
@@ -341,7 +347,7 @@ fn settle_market_fails_stale_oracle() {
         .unwrap();
 
     let ticker = args.ticker;
-    let value = 2050_0000_0000u64;
+    let value = 2050_0000_0000u128;
     let timestamp_ms = BASE_CLOSE_TS
         .checked_mul(1000)
         .and_then(|t| t.checked_add(1000))
@@ -431,7 +437,7 @@ fn settle_market_fails_wrong_price_pda() {
 
     // Post price for TSLA instead of NVDA
     let wrong_ticker = symbol("TSLA");
-    let value = 2050_0000_0000u64;
+    let value = 2050_0000_0000u128;
     let timestamp_ms = BASE_CLOSE_TS
         .checked_mul(1000)
         .and_then(|t| t.checked_add(1000))
@@ -443,7 +449,8 @@ fn settle_market_fails_wrong_price_pda() {
     }
     let payload = builder.build();
 
-    let (wrong_price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &wrong_ticker], &meridian::ID);
+    let (wrong_price_pda, _) =
+        Pubkey::find_program_address(&[b"redstone_price", &wrong_ticker], &meridian::ID);
     let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
 
     let ix = meridian::instruction::PostRedstonePrice {
@@ -494,7 +501,10 @@ fn settle_market_fails_wrong_price_pda() {
     };
     let settle_result = harness.harness.send(settle_instruction, &[&settler]);
     // Should fail with constraint error (seeds constraint in settle_market)
-    common::assert_anchor_error(&settle_result, anchor_lang::error::ErrorCode::ConstraintSeeds);
+    common::assert_anchor_error(
+        &settle_result,
+        anchor_lang::error::ErrorCode::ConstraintSeeds,
+    );
 }
 
 #[test]
@@ -514,7 +524,7 @@ fn settle_market_fails_before_close() {
         .unwrap();
 
     let ticker = args.ticker;
-    let value = 2050_0000_0000u64;
+    let value = 2050_0000_0000u128;
     // Valid timestamp after close
     let timestamp_ms = BASE_CLOSE_TS
         .checked_mul(1000)
@@ -595,7 +605,7 @@ fn settle_market_at_strike_boundary() {
 
     let ticker = args.ticker;
     // Exactly at strike: $2000.00 strike → 2000_0000_0000 (8 decimals)
-    let value = args.strike_cents
+    let value = u128::from(args.strike_cents)
         .checked_mul(1_000_000)
         .expect("strike * 10^6");
     let timestamp_ms = BASE_CLOSE_TS
@@ -666,5 +676,9 @@ fn settle_market_at_strike_boundary() {
     let mut data = account.data.as_slice();
     let market = Market::try_deserialize(&mut data).unwrap();
     assert_eq!(market.status, MarketStatus::Settled);
-    assert_eq!(market.outcome, Outcome::Yes, "At strike boundary, YES should win");
+    assert_eq!(
+        market.outcome,
+        Outcome::Yes,
+        "At strike boundary, YES should win"
+    );
 }

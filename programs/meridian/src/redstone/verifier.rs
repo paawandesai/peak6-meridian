@@ -43,7 +43,7 @@ pub fn verify_signature(package: &RedstonePackage) -> Result<[u8; 20]> {
 }
 
 /// Compute median of values (for threshold signers).
-pub fn compute_median(mut values: Vec<u64>) -> u64 {
+pub fn compute_median(mut values: Vec<u128>) -> u128 {
     values.sort_unstable();
     let len = values.len();
     if len % 2 == 0 {

@@ -56,14 +56,14 @@ impl TestSigner {
 /// RedStone data package builder for tests.
 pub struct RedstonePayloadBuilder {
     feed_id: [u8; 32],
-    value: u64,
+    value: u128,
     timestamp_ms: i64,
     signers: Vec<TestSigner>,
 }
 
 impl RedstonePayloadBuilder {
     /// Creates a new payload builder for the given ticker symbol.
-    pub fn new(symbol: &str, value: u64, timestamp_ms: i64) -> Self {
+    pub fn new(symbol: &str, value: u128, timestamp_ms: i64) -> Self {
         let mut feed_id = [0u8; 32];
         let symbol_bytes = symbol.as_bytes();
         let len = symbol_bytes.len().min(32);
@@ -109,9 +109,9 @@ impl RedstonePayloadBuilder {
             // Feed ID (32 bytes)
             package_signable.extend_from_slice(&self.feed_id);
 
-            // Value as 32-byte big-endian u256
+            // Value as 32-byte big-endian u256 (u128 with high 16 bytes zero per domain.md)
             let mut value_bytes = [0u8; 32];
-            value_bytes[24..32].copy_from_slice(&self.value.to_be_bytes());
+            value_bytes[16..32].copy_from_slice(&self.value.to_be_bytes());
             package_signable.extend_from_slice(&value_bytes);
 
             // Timestamp (6 bytes big-endian from i64 milliseconds)

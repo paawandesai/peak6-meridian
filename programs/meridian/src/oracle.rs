@@ -195,8 +195,10 @@ pub fn read_redstone_price(
         .ok_or(MeridianError::OracleInvalidValue)?;
     require!(age <= max_staleness_slots, MeridianError::OracleStale);
 
-    // Convert RedStone value (8 decimals) to oracle scale (18 decimals)
-    let value_scaled = i128::from(redstone_price.value)
+    // Convert RedStone value (8 decimals, u128) to oracle scale (18 decimals, i128)
+    let value_i128 =
+        i128::try_from(redstone_price.value).map_err(|_| MeridianError::MathOverflow)?;
+    let value_scaled = value_i128
         .checked_mul(10i128.pow(10))
         .ok_or(MeridianError::MathOverflow)?;
 

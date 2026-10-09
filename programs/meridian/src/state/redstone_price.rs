@@ -11,8 +11,8 @@ use crate::state::SYMBOL_LEN;
 pub struct RedstonePrice {
     /// Ticker symbol (8 bytes, zero-padded).
     pub symbol: [u8; SYMBOL_LEN],
-    /// Price value with 8 decimals (RedStone format).
-    pub value: u64,
+    /// Price value with 8 decimals (RedStone format, u128 per domain.md).
+    pub value: u128,
     /// Package timestamp in milliseconds (RedStone format).
     pub package_timestamp_ms: i64,
     /// Slot when this price was posted.
@@ -22,8 +22,8 @@ pub struct RedstonePrice {
 }
 
 impl RedstonePrice {
-    /// Space: 8 (discriminator) + 8 (symbol) + 8 (value) + 8 (timestamp) + 8 (slot) + 1 (count).
-    pub const SPACE: usize = 8 + SYMBOL_LEN + 8 + 8 + 8 + 1;
+    /// Space: 8 (discriminator) + 8 (symbol) + 16 (value) + 8 (timestamp) + 8 (slot) + 1 (count).
+    pub const SPACE: usize = 8 + SYMBOL_LEN + 16 + 8 + 8 + 1;
 
     /// PDA seeds prefix (symbol is appended).
     pub const SEED_PREFIX: &'static [u8] = b"redstone_price";

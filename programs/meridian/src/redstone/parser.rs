@@ -31,8 +31,8 @@ const UNSIGNED_METADATA_BYTE_SIZE_SIZE: usize = 3;
 pub struct RedstonePackage {
     /// Feed ID (32 bytes).
     pub feed_id: [u8; 32],
-    /// Value (u256 big-endian, 8 decimals).
-    pub value: u64,
+    /// Value (u256 big-endian, 8 decimals; stored as u128 per domain.md).
+    pub value: u128,
     /// Package timestamp in milliseconds.
     pub timestamp_ms: i64,
     /// Signature (65 bytes r‖s‖v).
@@ -168,9 +168,14 @@ fn parse_data_package(payload: &[u8], cursor: &mut usize) -> Result<RedstonePack
     let val = payload
         .get(*cursor..val_end)
         .ok_or(MeridianError::RedStoneMalformedPayload)?;
-    // Extract last 8 bytes as u64 (RedStone uses 8 decimals, fits in u64)
-    let value = u64::from_be_bytes([
-        val[24], val[25], val[26], val[27], val[28], val[29], val[30], val[31],
+    // RedStone u256: validate high 16 bytes are zero (fail-closed per domain.md: stored as u128)
+    if val[0..16].iter().any(|&b| b != 0) {
+        return Err(MeridianError::RedStoneMalformedPayload.into());
+    }
+    // Extract last 16 bytes as u128 (RedStone uses 8 decimals)
+    let value = u128::from_be_bytes([
+        val[16], val[17], val[18], val[19], val[20], val[21], val[22], val[23], val[24], val[25],
+        val[26], val[27], val[28], val[29], val[30], val[31],
     ]);
 
     // Feed ID (32 bytes)

@@ -78,7 +78,7 @@ fn post_redstone_price_success_3_of_5() {
         .unwrap();
 
     let ticker = symbol("NVDA");
-    let value = 2000_0000_0000u64; // $2000 with 8 decimals
+    let value = 2000_0000_0000u128; // $2000 with 8 decimals
     let timestamp_ms = 1700000000000i64;
 
     // Build payload with first 3 signers (meets threshold)
@@ -305,7 +305,7 @@ fn post_redstone_price_duplicate_signer_counts_once() {
         .unwrap();
 
     let ticker = symbol("NVDA");
-    let value = 2000_0000_0000u64;
+    let value = 2000_0000_0000u128;
     let timestamp_ms = 1700000000000i64;
 
     // Build payload with 3 unique signers + 1 duplicate (first signer twice)
@@ -345,7 +345,10 @@ fn post_redstone_price_duplicate_signer_counts_once() {
     let account = harness.harness.svm.get_account(&price_pda).unwrap();
     let mut data = account.data.as_slice();
     let price = RedstonePrice::try_deserialize(&mut data).unwrap();
-    assert_eq!(price.signer_count, 3, "Duplicate signer should count once (3 unique from 4 packages)");
+    assert_eq!(
+        price.signer_count, 3,
+        "Duplicate signer should count once (3 unique from 4 packages)"
+    );
 }
 
 #[test]
