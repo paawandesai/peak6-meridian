@@ -151,6 +151,9 @@ class ChainMarketSource:
             markets = []
             for account_info in response.value:
                 try:
+                    # Get the market account pubkey (base58 string)
+                    market_pubkey = str(account_info.pubkey)
+
                     data = account_info.account.data
                     # Skip if too small to be a Market (min size ~250 bytes)
                     min_market_size = 250
@@ -195,12 +198,11 @@ class ChainMarketSource:
                     if status != 0:
                         continue
 
-                    # Construct market string: ticker_date_strike
-                    market_str = f"{ticker}_{trading_date}_{strike_cents}"
-
+                    # Use the account pubkey as the market identifier (base58 string)
+                    # Keep ticker/date/strike for PDA derivation and display
                     markets.append(
                         MarketState(
-                            market=market_str,
+                            market=market_pubkey,
                             ticker=ticker,
                             strike_cents=strike_cents,
                             trading_date=trading_date,
