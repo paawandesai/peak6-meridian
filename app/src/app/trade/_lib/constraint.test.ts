@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { gateFor, type Holdings, RESTING_BUY_NO_TEXT } from "./constraint";
 
-const none: Holdings = { yes: 0n, no: 0n, hasRestingAsk: false };
+const none: Holdings = { yes: 0n, no: 0n, hasRestingAsk: false, escrowedYesFromAsks: false };
 
 describe("gateFor (US-07)", () => {
   it("blocks nothing for a flat wallet", () => {
@@ -34,7 +34,7 @@ describe("gateFor (US-07)", () => {
   });
 
   it("never blocks the exits or the same side", () => {
-    const both = { yes: 5n, no: 5n, hasRestingAsk: false };
+    const both = { yes: 5n, no: 5n, hasRestingAsk: false, escrowedYesFromAsks: false };
     expect(gateFor("SELL_YES", both).blocked).toBe(false);
     expect(gateFor("SELL_NO", both).blocked).toBe(false);
     expect(gateFor("BUY_YES", { ...none, yes: 5n }).blocked).toBe(false);
@@ -42,7 +42,7 @@ describe("gateFor (US-07)", () => {
   });
 
   it("explains a resting limit Buy NO (YES escrowed, NO held) instead of offering an exit", () => {
-    expect(gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: true })).toEqual({
+    expect(gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: true, escrowedYesFromAsks: true })).toEqual({
       blocked: true,
       kind: "resting-buy-no",
       text: RESTING_BUY_NO_TEXT,
@@ -57,13 +57,22 @@ describe("gateFor (US-07)", () => {
 
   it("does not apply the Buy-NO exception when holding NO without a resting Ask", () => {
     // Holding NO without a resting Ask triggers normal hold-NO constraint.
-    expect(gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: false })).toEqual({
+    expect(gateFor("BUY_YES", { yes: 0n, no: 10n, hasRestingAsk: false, escrowedYesFromAsks: false })).toEqual({
       blocked: true,
       kind: "hold-no",
       text: "You hold 10 NO on this strike. Sell NO first to buy YES.",
       exit: "SELL_NO",
       exitLabel: "Sell NO",
       exitQty: 10n,
+    });
+  });
+
+  it("blocks Buy NO when holding escrowed YES (Sell YES or Buy NO resting)", () => {
+    // Even with wallet YES === 0, escrowed YES from asks blocks Buy NO (AC3 / UI-04 AC2).
+    expect(gateFor("BUY_NO", { yes: 0n, no: 0n, hasRestingAsk: false, escrowedYesFromAsks: true })).toMatchObject({
+      blocked: true,
+      kind: "hold-yes",
+      exit: "SELL_YES",
     });
   });
 });

@@ -12,6 +12,8 @@ export type Holdings = {
   readonly no: bigint;
   /** The wallet has a resting YES ask on this book (a limit Buy NO waiting to fill). */
   readonly hasRestingAsk: boolean;
+  /** The wallet has YES escrowed in resting asks (Sell YES or Buy NO). Count as YES held. */
+  readonly escrowedYesFromAsks: boolean;
 };
 
 export type IntentGate =
@@ -53,7 +55,7 @@ export function gateFor(intent: Intent, holdings: Holdings): IntentGate {
       exitQty: holdings.no,
     };
   }
-  if (intent === "BUY_NO" && holdings.yes > 0n) {
+  if (intent === "BUY_NO" && (holdings.yes > 0n || holdings.escrowedYesFromAsks)) {
     return {
       blocked: true,
       kind: "hold-yes",
