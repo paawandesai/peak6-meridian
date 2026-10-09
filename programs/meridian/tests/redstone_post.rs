@@ -16,8 +16,8 @@ use anchor_lang::prelude::Pubkey;
 use anchor_lang::{AccountDeserialize, InstructionData, ToAccountMetas};
 use common::redstone::{RedstonePayloadBuilder, TestSigner};
 use common::{
-    assert_meridian_error_with_budget, config_pda, expect_success, symbol, MarketHarness,
-    FUNDING_LAMPORTS,
+    assert_meridian_error_with_budget, config_pda, expect_success, symbol, MarketArgs,
+    MarketHarness, BASE_TRADING_DATE, FUNDING_LAMPORTS,
 };
 use meridian::errors::MeridianError;
 use meridian::state::RedstonePrice;
@@ -689,16 +689,29 @@ fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
     let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
 
     let mut harness = setup_with_signers(addresses);
+
+    // Create market for window validation
+    let ticker = symbol("NVDA");
+    let close_ts = 1700000000i64; // Unix seconds
+    let close_ts_ms = close_ts * 1000;
+
+    // Set time before close_ts so market creation succeeds
+    harness.harness.set_unix_timestamp(close_ts - 3600); // 1 hour before close
+
+    let args = MarketArgs {
+        ticker,
+        strike_cents: 200_000,
+        trading_date: BASE_TRADING_DATE,
+        close_ts,
+    };
+    let addresses_market = harness.create_market(&args);
+
     let payer = Keypair::new();
     harness
         .harness
         .svm
         .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
-
-    let ticker = symbol("NVDA");
-    let close_ts = 1700000000i64; // Unix seconds
-    let close_ts_ms = close_ts * 1000;
 
     // Post in-window price (close_ts + 100s, well within 600s window)
     let in_window_ts = close_ts_ms + 100_000;
@@ -722,7 +735,7 @@ fn post_redstone_price_in_window_protected_from_too_late_overwrite() {
         redstone_price: price_pda,
         payer: payer.pubkey(),
         system_program: system_program::ID,
-        market: None,
+        market: Some(addresses_market.market),
     };
 
     let instruction = Instruction {
