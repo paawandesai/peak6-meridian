@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "httpx>=0.28,<1",
   "pydantic>=2.11,<3",
+  "tzdata>=2024.1",  # Timezone database for zoneinfo (CI containers don't have system tzdata)
 ]
 
 [build-system]
