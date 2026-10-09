@@ -6,16 +6,20 @@ implementation that does.
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import Protocol, runtime_checkable
 
 from pydantic import Field
 
+from meridian_ops_agent.budget import Budget
 from meridian_ops_agent.models import StrictModel
 
 __all__ = [
     "LLMClient",
     "LLMRequest",
     "LLMResponse",
+    "LoggedLLM",
     "RecordingLLM",
     "ScriptExhausted",
     "ScriptedLLM",
@@ -79,3 +83,43 @@ class RecordingLLM:
         response = self._inner.complete(request)
         self.responses.append(response)
         return response
+
+
+class LoggedLLM:
+    """Logs one structured line per model call: tokens, cost and spend against the budget.
+
+    Only numbers and the exception class name are logged, never prompts, replies or keys.
+    The inner client charges the budget itself; this wrapper reads the result.
+    """
+
+    def __init__(self, inner: LLMClient, budget: Budget, log: logging.Logger | None = None) -> None:
+        self._inner = inner
+        self._budget = budget
+        self._log = log or logging.getLogger("meridian_ops_agent.llm")
+
+    def complete(self, request: LLMRequest) -> LLMResponse:
+        try:
+            response = self._inner.complete(request)
+        except Exception as exc:
+            self._emit({"event": "llm_call_failed", "error": type(exc).__name__})
+            raise
+        cost = self._budget.cost(response.model, response.input_tokens, response.output_tokens)
+        self._emit(
+            {
+                "event": "llm_call",
+                "model": response.model,
+                "input_tokens": response.input_tokens,
+                "output_tokens": response.output_tokens,
+                "cost_usd": str(cost),
+            }
+        )
+        return response
+
+    def _emit(self, fields: dict[str, str | int]) -> None:
+        fields = {
+            **fields,
+            "spent_usd": str(self._budget.spent_usd),
+            "remaining_usd": str(self._budget.remaining_usd),
+            "limit_usd": str(self._budget.limit_usd),
+        }
+        self._log.info(json.dumps(fields, sort_keys=True))
