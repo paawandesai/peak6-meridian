@@ -171,8 +171,8 @@ fn post_redstone_price_is_permissionless() {
     let random_payer = Keypair::new();
     harness.harness.svm.airdrop(&random_payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 
-    let ticker = symbol("ETH");
-    let mut builder = RedstonePayloadBuilder::new("ETH", 2000_0000_0000, 1700000000000);
+    let ticker = symbol("NVDA");
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
     for signer in signing_signers {
         builder = builder.add_signer(signer);
     }

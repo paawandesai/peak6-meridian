@@ -70,12 +70,12 @@ fn post_redstone_price_success_3_of_5() {
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 
-    let ticker = symbol("ETH");
+    let ticker = symbol("NVDA");
     let value = 2000_0000_0000u64; // $2000 with 8 decimals
     let timestamp_ms = 1700000000000i64;
 
     // Build payload with first 3 signers (meets threshold)
-    let mut builder = RedstonePayloadBuilder::new("ETH", value, timestamp_ms);
+    let mut builder = RedstonePayloadBuilder::new("NVDA", value, timestamp_ms);
     let mut remaining_signers = signers.split_off(3); // Take last 2, keep first 3
     for signer in signers {
         builder = builder.add_signer(signer);
@@ -133,10 +133,10 @@ fn post_redstone_price_fails_insufficient_signers() {
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 
-    let ticker = symbol("ETH");
+    let ticker = symbol("NVDA");
 
     // Build payload with only 2 signers (below threshold)
-    let mut builder = RedstonePayloadBuilder::new("ETH", 2000_0000_0000, 1700000000000);
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
     let mut remaining_signers = signers.split_off(2); // Take last 3, keep first 2
     for signer in signers {
         builder = builder.add_signer(signer);
@@ -187,10 +187,10 @@ fn post_redstone_price_unknown_signer_ignored() {
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 
-    let ticker = symbol("ETH");
+    let ticker = symbol("NVDA");
 
     // Build payload with 3 known + 2 unknown signers
-    let mut builder = RedstonePayloadBuilder::new("ETH", 2000_0000_0000, 1700000000000);
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
     for signer in known_signers {
         builder = builder.add_signer(signer);
     }
@@ -246,7 +246,7 @@ fn post_redstone_price_malformed_payload() {
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 
-    let ticker = symbol("ETH");
+    let ticker = symbol("NVDA");
 
     // Create malformed payload (too short, missing marker)
     let payload = vec![0u8; 50];

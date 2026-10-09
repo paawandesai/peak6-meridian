@@ -62,8 +62,8 @@ fn post_redstone_price_stays_under_cu_limit() {
     let payer = Keypair::new();
     harness.harness.svm.airdrop(&payer.pubkey(), FUNDING_LAMPORTS).unwrap();
 
-    let ticker = symbol("ETH");
-    let mut builder = RedstonePayloadBuilder::new("ETH", 2000_0000_0000, 1700000000000);
+    let ticker = symbol("NVDA");
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
     for signer in signers_test {
         builder = builder.add_signer(signer);
     }
@@ -146,7 +146,7 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
 
     // Create market
     let args = MarketArgs {
-        ticker: symbol("ETH"),
+        ticker: symbol("NVDA"),
         strike_cents: 2000_00,
         trading_date: BASE_TRADING_DATE,
         close_ts: BASE_CLOSE_TS,
@@ -162,7 +162,7 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
 
     let ticker = args.ticker;
     let timestamp_ms = (BASE_CLOSE_TS as i64) * 1000 + 1000;
-    let mut builder = RedstonePayloadBuilder::new("ETH", 2050_0000_0000, timestamp_ms);
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2050_0000_0000, timestamp_ms);
     for signer in signing_signers {
         builder = builder.add_signer(signer);
     }
@@ -234,13 +234,13 @@ fn redstone_payload_fits_in_transaction() {
 
     // Generate 5-signer payload
     let signers_test: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
-    let mut builder = RedstonePayloadBuilder::new("ETH", 2000_0000_0000, 1700000000000);
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
     for signer in signers_test {
         builder = builder.add_signer(signer);
     }
     let payload = builder.build();
 
-    let ticker = symbol("ETH");
+    let ticker = symbol("NVDA");
     let (price_pda, _) = Pubkey::find_program_address(
         &[b"redstone_price", &ticker],
         &meridian::ID,

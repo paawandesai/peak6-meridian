@@ -60,7 +60,7 @@ fn setup_market_with_redstone() -> (MarketHarness, MarketArgs, Pubkey) {
 
     // Create a market
     let args = MarketArgs {
-        ticker: symbol("ETH"),
+        ticker: symbol("NVDA"),
         strike_cents: 2000_00, // $2000 strike
         trading_date: BASE_TRADING_DATE,
         close_ts: BASE_CLOSE_TS,
@@ -92,7 +92,7 @@ fn settle_market_succeeds_after_redstone_post() {
     let timestamp_ms = (BASE_CLOSE_TS as i64) * 1000 + 1000; // 1s after close
 
     // Post RedStone price
-    let mut builder = RedstonePayloadBuilder::new("ETH", value, timestamp_ms);
+    let mut builder = RedstonePayloadBuilder::new("NVDA", value, timestamp_ms);
     for signer in signing_signers {
         builder = builder.add_signer(signer);
     }
