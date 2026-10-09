@@ -133,19 +133,12 @@ pub fn handle_post_redstone_price(
         MeridianError::RedStonePackageTooLate
     );
 
-    // Check stored value: if in-window, only allow >= (refresh); if out-of-window, allow replacement
+    // Never replace stored value with older package (AB-03: prevents historical-market attack)
     if redstone_price.package_timestamp_ms > 0 {
-        let stored_in_window = redstone_price.package_timestamp_ms >= close_ts_ms
-            && redstone_price.package_timestamp_ms <= window_end_ms;
-
-        if stored_in_window {
-            // Stored value is in-window: only allow >= to prevent bricking (AB-03)
-            require!(
-                expected_timestamp >= redstone_price.package_timestamp_ms,
-                MeridianError::RedStonePackageOlderThanStored
-            );
-        }
-        // If stored is out-of-window, allow in-window replacement even if older
+        require!(
+            expected_timestamp >= redstone_price.package_timestamp_ms,
+            MeridianError::RedStonePackageOlderThanStored
+        );
     }
 
     // Update RedstonePrice account
