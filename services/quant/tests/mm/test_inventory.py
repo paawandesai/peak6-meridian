@@ -75,17 +75,49 @@ def test_skew_calculation() -> None:
     tracker.set(key, -50)
     assert tracker.get(key).skew_cents(skew_per_50=1) == -1
 
-    # +100 contracts → +2¢ skew
-    tracker.set(key, 100)
-    assert tracker.get(key).skew_cents(skew_per_50=1) == 2
-
-    # +25 contracts → rounds to 0¢ skew
+    # +25 contracts → 0¢ skew (25 // 50 = 0)
     tracker.set(key, 25)
     assert tracker.get(key).skew_cents(skew_per_50=1) == 0
 
-    # +75 contracts → rounds to +2¢ skew
+    # +49 contracts → 0¢ skew (49 // 50 = 0)
+    tracker.set(key, 49)
+    assert tracker.get(key).skew_cents(skew_per_50=1) == 0
+
+    # +51 contracts → +1¢ skew (51 // 50 = 1)
+    tracker.set(key, 51)
+    assert tracker.get(key).skew_cents(skew_per_50=1) == 1
+
+    # +75 contracts → +1¢ skew (75 // 50 = 1)
     tracker.set(key, 75)
+    assert tracker.get(key).skew_cents(skew_per_50=1) == 1
+
+    # +99 contracts → +1¢ skew (99 // 50 = 1)
+    tracker.set(key, 99)
+    assert tracker.get(key).skew_cents(skew_per_50=1) == 1
+
+    # +100 contracts → +2¢ skew (100 // 50 = 2)
+    tracker.set(key, 100)
     assert tracker.get(key).skew_cents(skew_per_50=1) == 2
+
+    # -49 contracts → -1¢ skew (-49 // 50 = -1 floor division)
+    tracker.set(key, -49)
+    assert tracker.get(key).skew_cents(skew_per_50=1) == -1
+
+    # -50 contracts → -1¢ skew (-50 // 50 = -1)
+    tracker.set(key, -50)
+    assert tracker.get(key).skew_cents(skew_per_50=1) == -1
+
+    # -51 contracts → -2¢ skew (-51 // 50 = -2 floor division)
+    tracker.set(key, -51)
+    assert tracker.get(key).skew_cents(skew_per_50=1) == -2
+
+    # -99 contracts → -2¢ skew (-99 // 50 = -2 floor division)
+    tracker.set(key, -99)
+    assert tracker.get(key).skew_cents(skew_per_50=1) == -2
+
+    # -100 contracts → -2¢ skew (-100 // 50 = -2)
+    tracker.set(key, -100)
+    assert tracker.get(key).skew_cents(skew_per_50=1) == -2
 
 
 def test_different_tickers_independent_inventory() -> None:

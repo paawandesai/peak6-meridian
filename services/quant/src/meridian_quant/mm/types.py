@@ -51,8 +51,9 @@ class Inventory:
         """Calculate skew in cents based on inventory (domain.md § Market maker defaults).
 
         Skew 1¢ per 50 contracts: positive inventory → widen bid, tighten ask.
+        Uses integer floor division (Python's // operator).
         """
-        return int(round(self.position / 50.0)) * skew_per_50
+        return (self.position // 50) * skew_per_50
 
 
 @dataclass
