@@ -16,6 +16,7 @@ export function market(overrides: Partial<MarketRow> = {}): MarketRow {
     outcome: "None",
     settlePriceScaled: 0n,
     pairsOutstanding: 3n,
+    settledAt: 0n,
     ...overrides,
   };
   // A settled market without explicit values gets a defined outcome and price, so its Settled
@@ -25,6 +26,7 @@ export function market(overrides: Partial<MarketRow> = {}): MarketRow {
         ...row,
         outcome: overrides.outcome ?? "Yes",
         settlePriceScaled: overrides.settlePriceScaled ?? 181_000_000_000_000_000_000n,
+        settledAt: overrides.settledAt ?? 2_000_000_300n,
       }
     : row;
 }

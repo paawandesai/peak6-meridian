@@ -145,6 +145,23 @@ describe("tradesFromEvents", () => {
     expect(no(trades)).toMatchObject({ qty: 0n, realized: 10n * 8n * CENT });
   });
 
+  it("Sell NO after settlement still books NO at 100 − p, not 0¢ (M2-07 AC1 regression)", () => {
+    const { trades } = tradesFromEvents(
+      [
+        mint("m", 10n),
+        fill("m", { taker: W, maker: OTHER, takerSide: "Ask", price: 58, qty: 10n }),
+        fill("s", { taker: W, maker: OTHER, takerSide: "Bid", price: 50, qty: 10n }),
+        redeem("s", 10n, 10n, 10_000_000n),
+      ],
+      W,
+      { [M]: "Yes" },
+      { [M]: 1_700_000_000 },
+    );
+    // Bought NO at 42¢, sold it at 50¢: +8¢ × 10 (same as unsettled).
+    expect(no(trades)).toMatchObject({ qty: 0n, realized: 10n * 8n * CENT });
+    expect(yes(trades)).toBeUndefined();
+  });
+
   it("a pair minted alone books 50¢ a side; a partial Buy NO leaves the rest at 50¢", () => {
     const alone = tradesFromEvents([mint("p", 5n)], W).trades;
     expect(yes(alone)).toMatchObject({ qty: 5n, cost: 5n * 50n * CENT });
@@ -159,10 +176,10 @@ describe("tradesFromEvents", () => {
 
   it("a winner redeem pays the winning side $1.00 and the losing side $0.00", () => {
     const events = [mint("a", 10n), redeem("r", 10n, 4n, 10_000_000n)];
-    const won = tradesFromEvents(events, W, { [M]: "Yes" }).trades;
+    const won = tradesFromEvents(events, W, { [M]: "Yes" }, { [M]: 1_700_000_000 }).trades;
     expect(yes(won)).toMatchObject({ qty: 0n, realized: 10n * 50n * CENT });
     expect(no(won)).toMatchObject({ qty: 6n, realized: -(4n * 50n * CENT) });
-    const lost = tradesFromEvents(events, W, { [M]: "No" }).trades;
+    const lost = tradesFromEvents(events, W, { [M]: "No" }, { [M]: 1_700_000_000 }).trades;
     expect(no(lost)?.realized).toBe(4n * 50n * CENT);
     expect(yes(lost)?.realized).toBe(-(10n * 50n * CENT));
   });
@@ -170,7 +187,7 @@ describe("tradesFromEvents", () => {
   it("settled equal-qty redeem books at 100¢/0¢ per outcome, not 50¢/50¢ (M2-07 AC1)", () => {
     // Mint at 50c/50c, redeem winner at 100c → realized = 50c profit (not 0 from pair-redeem)
     const events = [mint("m", 10n), redeem("r", 10n, 10n, 10n * CENT)];
-    const won = tradesFromEvents(events, W, { [M]: "Yes" }).trades;
+    const won = tradesFromEvents(events, W, { [M]: "Yes" }, { [M]: 1_700_000_000 }).trades;
     expect(yes(won)).toMatchObject({ qty: 0n, realized: 10n * 50n * CENT }); // 50c profit
     expect(no(won)).toMatchObject({ qty: 0n, realized: -(10n * 50n * CENT) }); // 50c loss
   });
