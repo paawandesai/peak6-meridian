@@ -2,6 +2,8 @@
  * Demo wallet: devnet-only Wallet Standard wallet (M4-07, D-055).
  * Auto-funded through /api/faucet, auto-signs without popups.
  */
+import bs58 from "bs58";
+import nacl from "tweetnacl";
 import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
 import { load, reset, save } from "./storage";
 
@@ -115,7 +117,7 @@ export class DemoWallet implements Wallet {
           const tx = VersionedTransaction.deserialize(transaction);
           tx.sign([this.#keypair]);
           const sig = await connection.sendRawTransaction(tx.serialize());
-          results.push({ signature: Buffer.from(sig, "utf8") });
+          results.push({ signature: bs58.decode(sig) });
         }
         return results;
       },
@@ -123,7 +125,7 @@ export class DemoWallet implements Wallet {
     "solana:signMessage": {
       signMessage: async (...inputs) => {
         return inputs.map(({ message }) => {
-          const signature = new Uint8Array(64);
+          const signature = nacl.sign.detached(message, this.#keypair.secretKey);
           return { signedMessage: message, signature };
         });
       },
@@ -131,13 +133,27 @@ export class DemoWallet implements Wallet {
   };
 
   async #autoFund(): Promise<void> {
+    const wallet = this.#keypair.publicKey.toBase58();
     try {
       const response = await fetch("/api/faucet", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: this.#keypair.publicKey.toBase58() }),
+        body: JSON.stringify({ wallet }),
       });
-      if (!response.ok && response.status !== 429) {
+      if (response.ok) {
+        // Faucet funded wallet with SOL + USDC
+        return;
+      } else if (response.status === 429) {
+        alert(
+          "Demo wallet: You've already claimed test funds recently. " +
+            "The faucet allows one claim per wallet per 24 hours.",
+        );
+      } else if (response.status === 503) {
+        alert(
+          "Demo wallet: The faucet is temporarily out of funds. " +
+            "Please try again later or use a different wallet.",
+        );
+      } else {
         console.warn(`Demo wallet: faucet returned ${response.status}`);
       }
     } catch (error) {
@@ -173,7 +189,17 @@ export function registerDemoWallet(): void {
   if (process.env.NEXT_PUBLIC_CLUSTER !== "devnet") return;
 
   const wallet = createOrLoadDemoWallet();
-  const w = window as unknown as { dispatchEvent: (e: Event) => void };
+  const w = window as unknown as {
+    dispatchEvent: (e: Event) => void;
+    addEventListener: (type: string, listener: (e: Event) => void) => void;
+  };
   const callback = (api: { register: (wallet: Wallet) => void }) => api.register(wallet);
+
+  // Listen for app-ready in case the app loads after registration
+  w.addEventListener("wallet-standard:app-ready", (event) => {
+    callback((event as CustomEvent<{ register: (wallet: Wallet) => void }>).detail);
+  });
+
+  // Dispatch registration in case the app is already ready
   w.dispatchEvent(new CustomEvent("wallet-standard:register-wallet", { detail: callback }));
 }
