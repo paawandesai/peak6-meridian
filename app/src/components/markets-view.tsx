@@ -42,12 +42,21 @@ function useOpenTimes(markets: readonly MarketRow[]): Record<string, number | nu
  * trading date's markets, YES / NO prices from the book, a state badge, the open and close time
  * in ET and a countdown to the next state change (D-050).
  */
-export function MarketsView({ nowSecs }: { readonly nowSecs?: number }) {
+export function MarketsView({
+  nowSecs,
+  tradeHref: tradeHrefProp,
+}: {
+  readonly nowSecs?: number;
+  readonly tradeHref?: ((market: MarketRow) => string) | null;
+}) {
   const reader = useReader();
   const ticking = useNow();
   // `null` until the clock has mounted (server render and first paint): the date-dependent parts
   // wait for it rather than treating a missing clock as the unix epoch.
   const clock = nowSecs ?? ticking;
+  // Use the prop if provided (for tests): undefined → default imported tradeHref, null → no links.
+  const tradeHrefFn =
+    tradeHrefProp === undefined ? tradeHref : tradeHrefProp === null ? undefined : tradeHrefProp;
   const state = useAsync(() => reader.listMarkets(), [reader]);
   const config = useAsync(() => reader.getConfig(), [reader]);
   const sources = useMarketSources();
@@ -100,7 +109,7 @@ export function MarketsView({ nowSecs }: { readonly nowSecs?: number }) {
           price={data.prices[group.ticker as keyof typeof data.prices]}
           data={strikeData}
           ctx={ctx}
-          tradeHref={tradeHref}
+          {...(tradeHrefFn === undefined ? {} : { tradeHref: tradeHrefFn })}
         />
       ))}
     </div>
