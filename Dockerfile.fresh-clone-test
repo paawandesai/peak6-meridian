@@ -1,9 +1,11 @@
-# Fresh-clone reproducibility test (M4-01 AC1)
+# Fresh-clone reproducibility test (M4-01 AC1 + AC2)
 # Tests that a fresh Ubuntu 24.04 environment can build and run Meridian
 #
-# AC1 requires: From a fresh Ubuntu 24.04 container with only git, running
+# AC1: From a fresh Ubuntu 24.04 container with only git, running
 # `make toolchain && make install && make build-local && make e2e` succeeds
 # within 20 minutes (1200 seconds) total.
+#
+# AC2: Validator :8899 and app :3000 both listening within 15 minutes (900s).
 #
 # Usage:
 #   docker build -f Dockerfile.fresh-clone-test .
@@ -30,3 +32,34 @@ RUN timeout 1200 bash -c 'set -e && \
     make e2e' || (echo "FAIL: AC1 sequence exceeded 20 minutes or failed" && exit 1)
 
 RUN echo "PASS: AC1 complete - full sequence in <20 minutes"
+
+# AC2: validate validator :8899 and app :3000 start within 15 minutes
+RUN timeout 900 bash -c ' \
+    set -e; \
+    echo "Starting make dev..."; \
+    make dev &>/tmp/dev.log & \
+    DEV_PID=$!; \
+    trap "kill -TERM -$DEV_PID 2>/dev/null || true; wait" EXIT; \
+    echo "Waiting for validator :8899 and app :3000..."; \
+    VALIDATOR_UP=false; \
+    APP_UP=false; \
+    for i in {1..900}; do \
+        if ! $VALIDATOR_UP && timeout 2 bash -c "cat < /dev/null > /dev/tcp/localhost/8899" 2>/dev/null; then \
+            echo "validator :8899 listening after $i seconds"; \
+            VALIDATOR_UP=true; \
+        fi; \
+        if ! $APP_UP && timeout 2 bash -c "cat < /dev/null > /dev/tcp/localhost/3000" 2>/dev/null; then \
+            echo "app :3000 listening after $i seconds"; \
+            APP_UP=true; \
+        fi; \
+        if $VALIDATOR_UP && $APP_UP; then \
+            echo "PASS: AC2 - both services up after $i seconds (<15 minutes)"; \
+            exit 0; \
+        fi; \
+        sleep 1; \
+    done; \
+    echo "FAIL: AC2 - services did not both start within 15 minutes"; \
+    [ -f /tmp/dev.log ] && tail -100 /tmp/dev.log; \
+    exit 1' || (echo "FAIL: AC2 exceeded timeout or failed" && exit 1)
+
+RUN echo "PASS: AC2 complete - validator and app up in <15 minutes"
