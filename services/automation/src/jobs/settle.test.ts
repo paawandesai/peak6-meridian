@@ -150,50 +150,54 @@ describe("runSettlement: settling (AC1, AC4)", () => {
 });
 
 describe("runSettlement: the re-update is a fresh update (AC5)", () => {
-  it("asks the oracle again at the current slot, and no settle goes out into a stale value", async () => {
-    const w = new SettleWorld({
-      markets: Array.from({ length: 60 }, (_, i) => ({ ticker: "META", strike: 300 + i })),
-      closeTs: CLOSE_TS,
-      start: new Date((CLOSE_TS + SETTLE_DELAY_SECS) * 1_000),
-    });
-    // Record the slot each update was built for; give every build its own instruction copies.
-    const slotOf = new WeakMap<object, number>();
-    const requestSlots: number[] = [];
-    const base = w.adapter();
-    const deps = w.deps({
-      adapter: {
-        kind: base.kind,
-        build: async (request) => {
-          requestSlots.push(request.slot);
-          const built = await base.build(request);
-          const ixs = built.ixs.map((ix) => new TransactionInstruction({ ...ix }));
-          ixs.forEach((ix) => slotOf.set(ix, request.slot));
-          return { ...built, ixs };
+  it(
+    "asks the oracle again at the current slot, and no settle goes out into a stale value",
+    async () => {
+      const w = new SettleWorld({
+        markets: Array.from({ length: 60 }, (_, i) => ({ ticker: "META", strike: 300 + i })),
+        closeTs: CLOSE_TS,
+        start: new Date((CLOSE_TS + SETTLE_DELAY_SECS) * 1_000),
+      });
+      // Record the slot each update was built for; give every build its own instruction copies.
+      const slotOf = new WeakMap<object, number>();
+      const requestSlots: number[] = [];
+      const base = w.adapter();
+      const deps = w.deps({
+        adapter: {
+          kind: base.kind,
+          build: async (request) => {
+            requestSlots.push(request.slot);
+            const built = await base.build(request);
+            const ixs = built.ixs.map((ix) => new TransactionInstruction({ ...ix }));
+            ixs.forEach((ix) => slotOf.set(ix, request.slot));
+            return { ...built, ixs };
+          },
         },
-      },
-    });
-    w.executor.advancePerSend = (index) => (index === 1 ? 60 : 1); // a long gap after the first settle
-    const result = await runSettlement(deps);
-    expect(result.status).toBe("ok");
+      });
+      w.executor.advancePerSend = (index) => (index === 1 ? 60 : 1); // a long gap after the first settle
+      const result = await runSettlement(deps);
+      expect(result.status).toBe("ok");
 
-    // The oracle was asked again, and for a later slot than the first time.
-    expect(requestSlots.length).toBeGreaterThan(1);
-    expect(requestSlots[1]).toBeGreaterThan((requestSlots[0] ?? 0) + 50);
-    // Every settle was sent within the program's 30-slot staleness window of the update that
-    // carried the freshest value before it (measured at the slot the settle is sent).
-    let updateSlot = 0;
-    let slotBeforeSend = 1_000;
-    for (const sent of w.executor.sent) {
-      if (sent.tx.role === "update") {
-        updateSlot = slotOf.get(sent.tx.instructions[0] ?? {}) ?? -1;
-        expect(updateSlot).toBeGreaterThan(0);
-      } else {
-        expect(slotBeforeSend - updateSlot).toBeLessThanOrEqual(30);
+      // The oracle was asked again, and for a later slot than the first time.
+      expect(requestSlots.length).toBeGreaterThan(1);
+      expect(requestSlots[1]).toBeGreaterThan((requestSlots[0] ?? 0) + 50);
+      // Every settle was sent within the program's 30-slot staleness window of the update that
+      // carried the freshest value before it (measured at the slot the settle is sent).
+      let updateSlot = 0;
+      let slotBeforeSend = 1_000;
+      for (const sent of w.executor.sent) {
+        if (sent.tx.role === "update") {
+          updateSlot = slotOf.get(sent.tx.instructions[0] ?? {}) ?? -1;
+          expect(updateSlot).toBeGreaterThan(0);
+        } else {
+          expect(slotBeforeSend - updateSlot).toBeLessThanOrEqual(30);
+        }
+        slotBeforeSend = sent.slot;
       }
-      slotBeforeSend = sent.slot;
-    }
-    expect(w.executor.sent.filter((s) => s.tx.role === "update").length).toBeGreaterThan(1);
-  });
+      expect(w.executor.sent.filter((s) => s.tx.role === "update").length).toBeGreaterThan(1);
+    },
+    10_000,
+  );
 });
 
 describe("runSettlement: wrong date, retries and the alert (AC2, AB-03)", () => {

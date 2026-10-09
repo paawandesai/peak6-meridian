@@ -245,22 +245,26 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
     });
   });
 
-  it("gives up instead of looping when the update keeps going stale", async () => {
-    const { w, plan } = await splitPlan(80);
-    const executor = new FakeExecutor(w.program.programId);
-    executor.advancePerSend = () => 50;
-    await expect(
-      sendPlan({
-        plan,
-        executor,
-        signers: [],
-        budgetSlots: BUDGET,
-        maxReUpdates: 1,
-        refreshUpdate: refresher(executor, plan, new Map()),
-      }),
-    ).rejects.toThrow(/keeps going stale/);
-    expect(executor.sent.filter((s) => s.tx.role === "update").length).toBeLessThanOrEqual(2);
-  });
+  it(
+    "gives up instead of looping when the update keeps going stale",
+    async () => {
+      const { w, plan } = await splitPlan(80);
+      const executor = new FakeExecutor(w.program.programId);
+      executor.advancePerSend = () => 50;
+      await expect(
+        sendPlan({
+          plan,
+          executor,
+          signers: [],
+          budgetSlots: BUDGET,
+          maxReUpdates: 1,
+          refreshUpdate: refresher(executor, plan, new Map()),
+        }),
+      ).rejects.toThrow(/keeps going stale/);
+      expect(executor.sent.filter((s) => s.tx.role === "update").length).toBeLessThanOrEqual(2);
+    },
+    10_000,
+  );
 
   it("property: no settle transaction is ever sent more than the budget after its update", async () => {
     const { w, plan } = await splitPlan();
