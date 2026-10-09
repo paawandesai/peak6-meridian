@@ -51,8 +51,8 @@ make e2e  # Create → mint → trade (4 paths) → settle → redeem
 
 **Live deployment:**
 - **App:** https://meridian-app.vercel.app _(when deployed)_
-- **Program ID:** `3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq`  
-  [View on Explorer](https://explorer.solana.com/address/3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq?cluster=devnet)
+- **Program ID:** `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`  
+  [View on Explorer](https://explorer.solana.com/address/H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm?cluster=devnet)
 - **Test-USDC:** Get from the faucet button in the app (1 claim per wallet per 24h)
 
 **Deploy to devnet** (requires keypairs per [docs/environment.md](docs/environment.md)):
