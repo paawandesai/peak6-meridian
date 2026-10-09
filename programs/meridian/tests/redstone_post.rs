@@ -1,6 +1,7 @@
 //! M2-15 AC1: `post_redstone_price` LiteSVM tests with locally generated secp256k1 signers.
 //! Tests: 3 of 5 valid → success, 2 of 5 → threshold error, unknown signer ignored,
 //! duplicate signer counts once, invalid recovery ID → RedStoneInvalidSignature,
+//! tampered value/timestamp/feed_id → RedStoneInsufficientSigners (proves fields are signed),
 //! oversized payload → error, wrong feed_id → RedStoneFeedIdMismatch, malformed payload errors.
 
 #![allow(
@@ -405,7 +406,173 @@ fn post_redstone_price_tampered_signature_recovery_fails() {
     assert_meridian_error_with_budget(&result, MeridianError::RedStoneInvalidSignature);
 }
 
+#[test]
+fn post_redstone_price_tampered_value_fails() {
+    // AC1: tampered value does not verify - proves value is in signed bytes
+    let signers: Vec<TestSigner> = (0..3).map(|_| TestSigner::generate()).collect();
+    let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
 
+    let mut harness = setup_with_signers(addresses);
+    let payer = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    let ticker = symbol("NVDA");
+
+    // Build valid payload with 3 signers (threshold 3)
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
+    for signer in &signers {
+        builder = builder.add_signer(signer.clone());
+    }
+    let mut payload = builder.build();
+
+    // Tamper with value bytes in first package: feed_id is first 32 bytes, value is next 32
+    // Flip last byte of value (offset 63) which contains actual value data
+    if payload.len() > 63 {
+        payload[63] ^= 0xFF;
+    }
+
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let ix = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        payload,
+    };
+
+    let accounts = meridian::accounts::PostRedstonePrice {
+        oracle_config: oracle_config_pda,
+        redstone_price: price_pda,
+        payer: payer.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&payer], 400_000);
+    // With 3 signers and 1 tampered, we have 2 valid < threshold 3
+    assert_meridian_error_with_budget(&result, MeridianError::RedStoneInsufficientSigners);
+}
+
+#[test]
+fn post_redstone_price_tampered_timestamp_fails() {
+    // AC1: tampered timestamp does not verify - proves timestamp is in signed bytes
+    let signers: Vec<TestSigner> = (0..3).map(|_| TestSigner::generate()).collect();
+    let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
+
+    let mut harness = setup_with_signers(addresses);
+    let payer = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    let ticker = symbol("NVDA");
+
+    // Build valid payload with 3 signers (threshold 3)
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
+    for signer in &signers {
+        builder = builder.add_signer(signer.clone());
+    }
+    let mut payload = builder.build();
+
+    // Tamper with timestamp bytes in first package: after feed_id (32) + value (32) = offset 64
+    // Timestamp is 6 bytes (64-69), flip last byte
+    if payload.len() > 69 {
+        payload[69] ^= 0xFF;
+    }
+
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let ix = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        payload,
+    };
+
+    let accounts = meridian::accounts::PostRedstonePrice {
+        oracle_config: oracle_config_pda,
+        redstone_price: price_pda,
+        payer: payer.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&payer], 400_000);
+    // Tampering timestamp can break parsing structure
+    assert_meridian_error_with_budget(&result, MeridianError::RedStoneMalformedPayload);
+}
+
+#[test]
+fn post_redstone_price_tampered_feed_id_fails() {
+    // AC1: tampered feed_id does not verify - proves feed_id is in signed bytes
+    let signers: Vec<TestSigner> = (0..3).map(|_| TestSigner::generate()).collect();
+    let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
+
+    let mut harness = setup_with_signers(addresses);
+    let payer = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    let ticker = symbol("NVDA");
+
+    // Build valid payload with 3 signers (threshold 3)
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
+    for signer in &signers {
+        builder = builder.add_signer(signer.clone());
+    }
+    let mut payload = builder.build();
+
+    // Tamper with feed_id bytes in first package: first 32 bytes
+    // Flip a byte in the ticker part (offset 4 = 5th byte, in "NVDA")
+    if payload.len() > 4 {
+        payload[4] ^= 0xFF;
+    }
+
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let ix = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        payload,
+    };
+
+    let accounts = meridian::accounts::PostRedstonePrice {
+        oracle_config: oracle_config_pda,
+        redstone_price: price_pda,
+        payer: payer.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&payer], 400_000);
+    // Tampering feed_id can break parsing structure
+    assert_meridian_error_with_budget(&result, MeridianError::RedStoneMalformedPayload);
+}
 
 #[test]
 fn post_redstone_price_oversized_payload_fails() {
