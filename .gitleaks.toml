@@ -37,9 +37,20 @@ commits = [
   "93e6a8e6710cdd2a4f14c575a29fa337183d9383", # MR !28 old head: fake KEY in market-data-server.test.ts
   "6d3fd0f3d822519e62283c574246b41296043902", # MR !27 old head: fake API keys in switchboard.test.ts
   "5eb5bbfab1b3ab4313e438057fef67e6be3fed5d", # MR !27 old head: public lookup-table address in a fixture
-  "5413bf8b39e129eb68a4ced830fc77f2af4b3dc9", # M2-15b: RedStone signer addresses in origin/m2-15b-deploy-oracle-config
-  "2f4fe2f5b1208de5b5d4065844657a6282bcb19a", # M2-15b: test fixtures in origin/m2-15b-deploy-oracle-config
-  "53ea7a3bc4ae44ef301f3e3a900857bae4a39e85", # M2-15: test fixtures in origin/m2-15-redstone-adapter
+]
+
+[[allowlists]]
+description = """PUBLIC RedStone signer EVM addresses (redstone-primary-prod nodes from @redstone-finance/sdk,
+used for signature verification; MR !78, M2-15b). Exempts only these 5 exact addresses, only in the
+deploy oracle-config source and test."""
+condition = "AND"
+paths = ['''^scripts/deploy/src/lib/oracle-config(\.test)?\.ts$''']
+regexes = [
+  '''^0x8cdBF4FE234F106eFB28D84Ef466bBaf8616f8D9$''', # keyrock-1
+  '''^0x8BB8F32Df04c8b654987DAaeD53D6B6091e3B774$''', # altair
+  '''^0xdEB22f54738d54976C4c0fe5ce6d408E40d88499$''', # wayfarer
+  '''^0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202$''', # morpheus
+  '''^0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE$''', # ciri
 ]
 
 [[allowlists]]
