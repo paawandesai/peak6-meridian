@@ -11,7 +11,7 @@ export type IntentLabel = "Buy YES" | "Buy NO" | "Sell YES" | "Sell NO";
 export const tradePath = (marketAddress: string): string => `/trade/${marketAddress}`;
 
 export const intentButton = (page: Page, intent: IntentLabel): Locator =>
-  page.getByRole("button", { name: new RegExp(`^${intent}`) });
+  page.getByRole("radio", { name: new RegExp(`^${intent}`) });
 
 export const priceInput = (page: Page): Locator => page.getByLabel(/price/i);
 export const qtyInput = (page: Page): Locator => page.getByLabel(/qty|quantity/i);
