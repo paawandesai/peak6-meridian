@@ -186,7 +186,9 @@ export function resetDemoWallet(): void {
 
 export function registerDemoWallet(): void {
   if (typeof window === "undefined") return;
-  if (process.env.NEXT_PUBLIC_CLUSTER !== "devnet") return;
+  // Allow demo wallet on devnet (production demo) and localnet (CI tests)
+  const cluster = process.env.NEXT_PUBLIC_CLUSTER;
+  if (cluster !== "devnet" && cluster !== "localnet") return;
 
   const wallet = createOrLoadDemoWallet();
   const w = window as unknown as {

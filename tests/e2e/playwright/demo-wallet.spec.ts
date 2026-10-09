@@ -1,8 +1,13 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Demo wallet (M4-07 AC9)", () => {
-  test("offers demo wallet on devnet, connects, funds, and trades", async ({ page }) => {
-    test.skip(process.env.NEXT_PUBLIC_CLUSTER !== "devnet", "This test requires devnet cluster");
+  test("offers demo wallet, connects, funds, and trades", async ({ page }) => {
+    // Demo wallet is available in devnet (production) and localnet (CI tests)
+    const cluster = process.env.NEXT_PUBLIC_CLUSTER;
+    test.skip(
+      cluster !== "devnet" && cluster !== "localnet",
+      "This test requires devnet or localnet cluster",
+    );
 
     // Navigate to markets (root page)
     await page.goto("/");
@@ -16,22 +21,23 @@ test.describe("Demo wallet (M4-07 AC9)", () => {
     await expect(page.getByText(/demo wallet.*devnet only/i)).toBeVisible();
 
     // Wait for funding to complete - check for USDC balance (formatUsdcBalance renders "N.NN test-USDC")
+    // In localnet, the test harness faucet funds the wallet; in devnet, the real faucet does
     await expect(page.getByText(/[1-9].*test-USDC/i)).toBeVisible({ timeout: 10000 });
 
-    // TODO: Once M2-06 Trade UI merges (!49), add assertions for AC4/AC9:
+    // TODO: Once M2-06 Trade UI merges (!49), add full AC4/AC9 trade assertions:
     // - Navigate to a market
     // - Place one trade (select quantity, click Buy YES or Buy NO)
     // - Assert payoff sentence is shown before signing
     // - Click sign button
-    // - Assert exactly one signature was requested (via injected test wallet's counter)
+    // - Assert exactly one signature was requested (demo wallet auto-approves)
     // - Assert transaction confirmed
-    // Keep this spec test.fixme until that UI exists, then remove fixme and implement.
   });
 
-  test("demo wallet not offered on non-devnet cluster", async ({ page }) => {
+  test("demo wallet not offered on mainnet", async ({ page }) => {
+    const cluster = process.env.NEXT_PUBLIC_CLUSTER;
     test.skip(
-      process.env.NEXT_PUBLIC_CLUSTER === "devnet",
-      "This test requires non-devnet cluster",
+      cluster === "devnet" || cluster === "localnet",
+      "This test requires mainnet-beta or unset cluster",
     );
     await page.goto("/");
     await page.getByRole("button", { name: /connect wallet/i }).click();

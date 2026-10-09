@@ -58,7 +58,7 @@ describe("demo-wallet registration guard (AC6)", () => {
     );
   });
 
-  it("does not register when NEXT_PUBLIC_CLUSTER is localnet", () => {
+  it("registers the wallet when NEXT_PUBLIC_CLUSTER is localnet (for CI tests)", () => {
     process.env.NEXT_PUBLIC_CLUSTER = "localnet";
     const dispatchEvent = vi.fn();
     vi.stubGlobal("window", {
@@ -68,7 +68,11 @@ describe("demo-wallet registration guard (AC6)", () => {
 
     registerDemoWallet();
 
-    expect(dispatchEvent).not.toHaveBeenCalled();
+    expect(dispatchEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "wallet-standard:register-wallet",
+      }),
+    );
   });
 
   it("does not register when NEXT_PUBLIC_CLUSTER is mainnet-beta", () => {
