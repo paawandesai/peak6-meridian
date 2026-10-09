@@ -79,6 +79,20 @@ def test_short_service_token_is_refused(tmp_path: Path) -> None:
         )
 
 
+def test_health_endpoint_returns_ok(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    status, payload = app.handle("GET", "/health", AUTH, b"")
+    assert status == 200
+    assert payload == {"service": "ops-agent", "status": "ok"}
+
+
+def test_health_endpoint_rejects_invalid_method(tmp_path: Path) -> None:
+    app = make_app(tmp_path)
+    status, payload = app.handle("POST", "/health", AUTH, b"")
+    assert status == 405
+    assert payload == {"error": "use GET"}
+
+
 def test_incident_with_a_model_draft_appears_in_drafts(tmp_path: Path) -> None:
     reply = json.dumps({"market": MARKETS[0], "proposed_price_cents": 25011, "note": "agree"})
     app = make_app(tmp_path, ScriptedLLM([reply]))

@@ -1,0 +1,1 @@
+web: python -m meridian_ops_agent.server

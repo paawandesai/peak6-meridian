@@ -116,6 +116,13 @@ def handle_request(
     service: Service, method: str, path: str, authorization: str | None
 ) -> tuple[int, bytes]:
     """Returns (status, JSON body)."""
+    if path == "/health":
+        if method != "GET":
+            return 405, b'{"error":"method not allowed"}'
+        if not _authorized(authorization, service.token):
+            return 401, b'{"error":"unauthorized"}'
+        health = {"service": "quant", "status": "ok"}
+        return 200, json.dumps(health).encode()
     if path != "/fair-values":
         return 404, b'{"error":"not found"}'
     if method != "GET":
@@ -142,3 +149,46 @@ def make_server(service: Service, host: str, port: int) -> ThreadingHTTPServer:
             return  # no access log: request lines and headers can carry secrets
 
     return ThreadingHTTPServer((host, port), Handler)
+
+
+def main() -> None:  # pragma: no cover - process wiring, exercised by deployment
+    import os
+
+    import httpx
+
+    from meridian_quant.prices import fetch_daily_closes, fetch_spot
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    # Minimal Sources implementation for deployment (M3-08)
+    class LiveSources:
+        def __init__(self, finnhub_key: str, tiingo_key: str) -> None:
+            self._finnhub_key = finnhub_key
+            self._tiingo_key = tiingo_key
+            self._client = httpx.Client()
+
+        def markets(self) -> list[MarketInfo]:
+            # M3-08 placeholder: returns empty list until on-chain market fetching is implemented
+            return []
+
+        def spot(self, ticker: str) -> Spot:
+            return fetch_spot(self._client, ticker, self._finnhub_key)
+
+        def closes(self, ticker: str) -> list[Decimal]:
+            from datetime import date
+
+            return fetch_daily_closes(self._client, ticker, self._tiingo_key, date.today())
+
+    sources = LiveSources(
+        finnhub_key=os.environ["FINNHUB_API_KEY"], tiingo_key=os.environ["TIINGO_API_KEY"]
+    )
+    service = Service(sources=sources, token=os.environ["SERVICE_TOKEN"])
+    host = os.environ.get("QUANT_HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", "4100"))
+    server = make_server(service, host, port)
+    log.info("quant service listening on %s:%d", host, port)
+    server.serve_forever()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

@@ -99,6 +99,27 @@ def test_missing_closes_or_spot_omits_the_market_instead_of_defaulting() -> None
     assert get(service(FakeSources(spot_ok=False)), AUTH) == (200, [])
 
 
+def test_health_endpoint_returns_ok() -> None:
+    status, body = handle_request(service(), "GET", "/health", AUTH)
+    assert status == 200
+    assert json.loads(body) == {"service": "quant", "status": "ok"}
+
+
+def test_health_endpoint_rejects_invalid_method() -> None:
+    status, body = handle_request(service(), "POST", "/health", AUTH)
+    assert status == 405
+    assert json.loads(body) == {"error": "method not allowed"}
+
+
+@pytest.mark.parametrize(
+    "auth", [None, "", "Bearer", "Bearer wrong", "Basic local-dev-token", TOKEN]
+)
+def test_health_endpoint_rejects_missing_or_invalid_bearer(auth: str | None) -> None:
+    status, body = handle_request(service(), "GET", "/health", auth)
+    assert status == 401
+    assert json.loads(body) == {"error": "unauthorized"}
+
+
 def test_a_ticker_is_fetched_once_per_request() -> None:
     sources = FakeSources()
     get(service(sources), AUTH)
