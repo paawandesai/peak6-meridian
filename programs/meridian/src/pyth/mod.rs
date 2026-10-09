@@ -263,6 +263,7 @@ mod tests {
             value_scaled: 680_000_000_000_000_000_000,
             publish_time: 1_791_316_800,
             confidence: 1_000_000,
+            posted_slot: 90,
         };
 
         // Correct feed ID passes
@@ -293,6 +294,7 @@ mod tests {
             value_scaled: 680_000_000_000_000_000_000,
             publish_time: 1_791_316_799, // 1 second before close
             confidence: 1_000_000,
+            posted_slot: 90,
         };
 
         let result = check_pyth_reading(
@@ -313,23 +315,24 @@ mod tests {
             value_scaled: 680_000_000_000_000_000_000,
             publish_time: close_ts,
             confidence: 1_000_000,
+            posted_slot: 90,
         };
 
-        // Fresh price (within 12 seconds) passes
+        // Fresh price (within 30 slots) passes
         let result = check_pyth_reading(
             &reading,
             &[0xaa; 32],
-            &clock(100, close_ts + 12),
+            &clock(119, close_ts + 12), // 119 - 90 = 29 slots
             close_ts,
-            30, // 30 slots = 12 seconds
+            30,
         );
         assert!(result.is_ok());
 
-        // Stale price (> 12 seconds) fails
+        // Stale price (> 30 slots) fails
         let result = check_pyth_reading(
             &reading,
             &[0xaa; 32],
-            &clock(100, close_ts + 13),
+            &clock(121, close_ts + 13), // 121 - 90 = 31 slots
             close_ts,
             30,
         );
@@ -343,6 +346,7 @@ mod tests {
             value_scaled: 0,
             publish_time: 1_791_316_800,
             confidence: 1_000_000,
+            posted_slot: 90,
         };
 
         let result = check_pyth_reading(
@@ -359,6 +363,7 @@ mod tests {
             value_scaled: -100,
             publish_time: 1_791_316_800,
             confidence: 1_000_000,
+            posted_slot: 90,
         };
 
         let result = check_pyth_reading(
@@ -383,6 +388,7 @@ mod tests {
                 value_scaled: value,
                 publish_time,
                 confidence: 1_000_000,
+                posted_slot: 90,
             };
 
             let current_time = publish_time + 10;
@@ -409,30 +415,31 @@ mod tests {
         fn prop_staleness_check_is_monotonic(
             value in 1i128..10i128.pow(26),
             publish_time in 1_700_000_000i64..1_800_000_000i64,
-            age_seconds in 0i64..20,
+            age_slots in 0u64..50,
         ) {
             // If a price passes staleness at age X, it passes at age X-1
+            let posted_slot = 100u64;
             let reading = PythReading {
                 feed_id: [0xaa; 32],
                 value_scaled: value,
                 publish_time,
                 confidence: 1_000_000,
+                posted_slot,
             };
 
-            let max_staleness_slots = 30u64; // 12 seconds max age
-            let current_time = publish_time + age_seconds;
+            let max_staleness_slots = 30u64;
+            let current_slot = posted_slot + age_slots;
 
             let result = check_pyth_reading(
                 &reading,
                 &[0xaa; 32],
-                &clock(100, current_time),
+                &clock(current_slot, publish_time + 10),
                 publish_time,
                 max_staleness_slots,
             );
 
-            // If age <= 12 seconds, should pass
-            // If age > 12 seconds, should fail
-            let should_pass = age_seconds <= 12;
+            // If age <= 30 slots, should pass; otherwise fail
+            let should_pass = age_slots <= 30;
             prop_assert_eq!(result.is_ok(), should_pass);
         }
 
@@ -448,6 +455,7 @@ mod tests {
                 value_scaled: value,
                 publish_time,
                 confidence: 1_000_000,
+                posted_slot: 90,
             };
 
             let result = check_pyth_reading(
@@ -474,6 +482,7 @@ mod tests {
                 value_scaled: value,
                 publish_time,
                 confidence: 1_000_000,
+                posted_slot: 90,
             };
 
             let result = check_pyth_reading(
@@ -486,5 +495,110 @@ mod tests {
 
             prop_assert!(result.is_ok());
         }
+    }
+
+    // Fixture tests following oracle.rs pattern
+    const FIXTURE: &str =
+        include_str!("../../tests/fixtures/pyth/price_update_v2_aapl.json");
+    const AAPL_FEED_ID: [u8; 32] = [
+        0x49, 0xf6, 0xb6, 0x5c, 0xb1, 0xde, 0x6b, 0x10, 0xea, 0xf7, 0x5e, 0x7c, 0x03, 0xca,
+        0x02, 0x9c, 0x30, 0x6d, 0x03, 0x57, 0xe9, 0x1b, 0x53, 0x11, 0xb1, 0x75, 0x08, 0x4a,
+        0x5a, 0xd5, 0x56, 0x88,
+    ];
+
+    /// Parse the fixture account JSON
+    fn fixture() -> (Pubkey, Vec<u8>) {
+        use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+        let json: serde_json::Value = serde_json::from_str(FIXTURE).unwrap();
+        let account = &json["account"];
+        let data = account["data"][0].as_str().unwrap();
+        let owner = account["owner"].as_str().unwrap().parse().unwrap();
+        (owner, BASE64_STANDARD.decode(data).unwrap())
+    }
+
+    #[test]
+    fn recorded_fixture_parses() {
+        let (owner, data) = fixture();
+        assert_eq!(owner, PYTH_RECEIVER_PID);
+        let reading = parse_pyth_price(&data).unwrap();
+        // Expected: 15000 * 10^(18-(-2)) = 15000 * 10^20 = 1.5e24
+        assert_eq!(reading.value_scaled, 1_500_000_000_000_000_000_000_000);
+        assert_eq!(reading.publish_time, 1791316801);
+        assert_eq!(reading.confidence, 5);
+        assert_eq!(reading.posted_slot, 412345678);
+        assert_eq!(reading.feed_id, AAPL_FEED_ID);
+    }
+
+    #[test]
+    fn recorded_fixture_passes_all_checks_and_fails_each_one() {
+        let (_, data) = fixture();
+        let reading = parse_pyth_price(&data).unwrap();
+        let close_ts = 1791316800i64; // 1 second before fixture publish_time
+
+        // Should pass: correct feed_id, after close, within staleness
+        let ok = check_pyth_reading(
+            &reading,
+            &AAPL_FEED_ID,
+            &clock(reading.posted_slot + 20, reading.publish_time + 5),
+            close_ts,
+            30,
+        );
+        assert_eq!(ok.unwrap().value_scaled, reading.value_scaled);
+
+        // Fail: stale (> 30 slots old)
+        let stale = check_pyth_reading(
+            &reading,
+            &AAPL_FEED_ID,
+            &clock(reading.posted_slot + 31, reading.publish_time + 15),
+            close_ts,
+            30,
+        );
+        assert!(stale.is_err());
+
+        // Fail: wrong feed_id
+        let wrong_hash = check_pyth_reading(
+            &reading,
+            &[0xcd; 32],
+            &clock(reading.posted_slot + 20, reading.publish_time + 5),
+            close_ts,
+            30,
+        );
+        assert!(wrong_hash.is_err());
+
+        // Fail: published before close_ts
+        let early = check_pyth_reading(
+            &reading,
+            &AAPL_FEED_ID,
+            &clock(reading.posted_slot + 20, reading.publish_time + 5),
+            reading.publish_time + 1,
+            30,
+        );
+        assert!(early.is_err());
+
+        // Fail: future posted_slot
+        let future = check_pyth_reading(
+            &reading,
+            &AAPL_FEED_ID,
+            &clock(reading.posted_slot - 1, reading.publish_time + 5),
+            close_ts,
+            30,
+        );
+        assert!(future.is_err());
+    }
+
+    #[test]
+    fn malformed_pyth_accounts_are_rejected() {
+        let (_, data) = fixture();
+
+        // Too short
+        assert!(parse_pyth_price(&data[..data.len() - 1]).is_err());
+
+        // Wrong discriminator
+        let mut wrong_disc = data;
+        wrong_disc[0] ^= 1;
+        assert!(parse_pyth_price(&wrong_disc).is_err());
+
+        // Empty
+        assert!(parse_pyth_price(&[]).is_err());
     }
 }
