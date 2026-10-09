@@ -122,6 +122,7 @@ function options(rpcUrl: string, overrides: Partial<Options> = {}): Options {
     queue: FIXTURE_QUEUE,
     outPath: join(work, "record.json"),
     feedsPath: undefined,
+    oracleConfigPath: undefined,
     skipBuild: true,
     allowUpgrade: false,
     ...overrides,
@@ -461,6 +462,21 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
     },
     5 * MINUTE,
   );
+
+  it("M2-15b --oracle-config fails closed when set_oracle_config instruction not available", async () => {
+    const configPath = join(work, "oracle-config-fail-closed.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        signers: ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"],
+        signerThreshold: 1,
+        maxPackageDelaySecs: 600,
+      }),
+    );
+    await expect(run({ oracleConfigPath: configPath })).rejects.toThrow(
+      /--oracle-config is not yet implemented.*depends on !75/,
+    );
+  });
 
   it(
     "AC1 a changed .so fails without --allow-upgrade (both hashes printed, no tx) and upgrades exactly once with it; every CLI call pins --url and --keypair",
