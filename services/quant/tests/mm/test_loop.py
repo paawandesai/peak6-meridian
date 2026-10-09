@@ -551,3 +551,84 @@ async def test_pull_condition_zeros_coverage(mm_config: MMConfig) -> None:
 
     # Verify: coverage metric is 0.0 (not stale from before pull)
     assert mm.book_coverage == 0.0, f"Expected book_coverage=0.0 after pull, got {mm.book_coverage}"
+
+
+@pytest.mark.asyncio
+async def test_empty_fair_values_pulls_all_quotes(mm_config: MMConfig) -> None:
+    """Empty/failed fair values pull all quotes (AC2).
+
+    When _fetch_fair_values returns [] (HTTP error or all tickers skipped),
+    MM must cancel all resting quotes per domain.md § Market maker and US-16.
+    """
+    # Fixed time: 2026-10-08 14:00 ET (18:00 UTC)
+    now = datetime(2026, 10, 8, 18, 0, tzinfo=UTC)
+
+    # Market closing in 1 hour (not near close)
+    close_ts = int((now + timedelta(hours=1)).timestamp())
+
+    markets = [
+        MarketState(
+            market="AAPL_20261008_23000",
+            ticker="AAPL",
+            strike_cents=23000,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        )
+    ]
+
+    # Start with valid fair values
+    fair_values = [
+        FairValue(
+            market="AAPL_20261008_23000",
+            ticker="AAPL",
+            strike_cents=23000,
+            fair_cents=50,
+            sigma=0.2,
+            spot=230.0,
+            as_of=now,
+            stale=False,
+        )
+    ]
+
+    market_source = FakeMarketSource(markets)
+    fv_source = FakeFairValueSource(fair_values)
+    order_client = FakeOrderClient()
+
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=market_source,
+        fair_value_source=fv_source,
+        order_client=order_client,
+        clock=lambda: now,
+    )
+
+    # Seed inventory
+    mm_owner = str(mm.keypair.pubkey())
+    order_client.set_yes_balance(markets[0].market, mm_owner, 50)
+    order_client.set_no_balance(markets[0].market, mm_owner, 50)
+
+    # Run once with valid fair values - quotes should be placed
+    await mm._run_once()
+
+    # Verify quotes are placed (bid + ask)
+    orders = await order_client.fetch_resting_orders(markets[0].market)
+    mm_orders = [o for o in orders if o.owner == mm_owner]
+    assert len(mm_orders) == 2, f"Expected 2 orders after first run, got {len(mm_orders)}"
+
+    # Now simulate empty fair values (HTTP error or all tickers skipped)
+    fv_source._fair_values = []
+
+    # Run again - should cancel all quotes
+    await mm._run_once()
+
+    # Verify: all MM quotes are cancelled
+    orders = await order_client.fetch_resting_orders(markets[0].market)
+    mm_orders = [o for o in orders if o.owner == mm_owner]
+    assert len(mm_orders) == 0, f"Expected 0 orders after empty FVs, got {len(mm_orders)}"
+
+    # Verify: coverage is zeroed
+    assert mm.book_coverage == 0.0, (
+        f"Expected book_coverage=0.0 after empty FVs, got {mm.book_coverage}"
+    )

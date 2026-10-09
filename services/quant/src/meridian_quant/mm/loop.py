@@ -104,7 +104,10 @@ class MarketMakerLoop:
             # Fetch fair values from the quant service
             fair_values = await self._fetch_fair_values()
             if not fair_values:
-                logger.warning("No fair values available, skipping iteration")
+                logger.warning("No fair values available, pulling all quotes")
+                await self._cancel_all_quotes()
+                await self._settle_funds()
+                self._coverage = 0.0
                 return
 
             # Get open markets first (needed for close_ts check)
