@@ -4,13 +4,13 @@
 
 **Command:** `E2E_REQUIRE_VALIDATOR=1 E2E_PREBUILT=1 make e2e`  
 **Date:** 2026-10-09  
-**Duration:** 165 seconds  
+**Duration:** 242 seconds (lifecycle 162s + security vitest 80s)  
 **Validator:** Local solana-test-validator with prebuilt target/deploy/meridian.so
 
 ## Results Summary
 
 **Lifecycle Test:** ✓ PASS (all 27 steps)  
-**Security Tests:** 13 passed, 3 skipped  
+**Security Tests:** 19 passed, 5 skipped (5 test files: ab_01 through ab_05)  
 **Outcome:** All 22 ABs have regression tests verified
 
 ## AB Coverage Detail
