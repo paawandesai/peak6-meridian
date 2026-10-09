@@ -120,8 +120,11 @@ class MarketMakerLoop:
                 self._coverage = 0.0
                 return
 
+            # Empty list means no markets to quote (success case, not failure)
+            # The fetch succeeded, so we know this is legitimately empty, not an RPC error.
+            # In this case, cancel any stale quotes but don't log as failure.
             if not open_markets:
-                logger.warning("No open markets (RPC error or truly empty), pulling all quotes")
+                logger.info("No open markets today, canceling any stale quotes")
                 await self._cancel_all_quotes()  # Will fetch markets internally
                 await self._settle_funds()  # Will fetch markets internally
                 self._coverage = 0.0
@@ -428,7 +431,11 @@ class MarketMakerLoop:
 
         Old quotes are already cancelled in _run_once before this is called,
         so this just places the new bid and ask.
+
+        Atomicity: if Ask placement fails after Bid succeeds, cancel the Bid
+        to avoid leaving a one-sided quote.
         """
+        bid_placed = False
         try:
             # Place new bid
             await self._order_client.place_order(
@@ -438,6 +445,8 @@ class MarketMakerLoop:
                 qty=quote.size,
                 owner=self._mm_owner,
             )
+            bid_placed = True
+
             # Place new ask
             await self._order_client.place_order(
                 market=market.market,
@@ -448,6 +457,20 @@ class MarketMakerLoop:
             )
         except Exception:
             logger.exception(f"Failed to place quote for {market.ticker}")
+            # If Bid placed but Ask failed, cancel the Bid (avoid one-sided quote)
+            if bid_placed:
+                try:
+                    logger.warning(f"Canceling Bid for {market.ticker} after Ask placement failed")
+                    # Cancel listing for this market to remove the orphaned Bid
+                    orders = await self._order_client.fetch_resting_orders(market.market)
+                    mm_orders = [o for o in orders if o.owner == self._mm_owner]
+                    for order in mm_orders:
+                        try:
+                            await self._order_client.cancel_order(market.market, order.order_id, self._mm_owner)
+                        except Exception:
+                            logger.exception(f"Failed to cancel orphaned Bid {order.order_id}")
+                except Exception:
+                    logger.exception(f"Failed to clean up orphaned Bid for {market.ticker}")
 
     async def _cancel_all_quotes(self, markets: list[MarketState] | None = None) -> set[str]:
         """Cancel all resting MM orders (AC2: actually cancels orders).
