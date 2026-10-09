@@ -152,4 +152,21 @@ pub mod meridian {
             slot,
         )
     }
+
+    /// Admin sets RedStone signer set and thresholds (M2-15, D-054).
+    pub fn set_oracle_config(
+        ctx: Context<SetOracleConfig>,
+        params: SetOracleConfigParams,
+    ) -> Result<()> {
+        instructions::set_oracle_config::handle_set_oracle_config(ctx, params)
+    }
+
+    /// Permissionless RedStone package verification and price posting (M2-15, D-054).
+    pub fn post_redstone_price(
+        ctx: Context<PostRedstonePrice>,
+        symbol: [u8; SYMBOL_LEN],
+        payload: Vec<u8>,
+    ) -> Result<()> {
+        instructions::post_redstone_price::handle_post_redstone_price(ctx, symbol, payload)
+    }
 }
