@@ -98,8 +98,6 @@ Your position appears in the Portfolio page.
 - Click "Redeem" on winning positions
 - Winners receive $1.00 per contract; losers get $0
 
-Screenshots and walkthrough video: [docs/demo.md](docs/demo.md)
-
 ## Testing
 
 **Unit and integration tests:**
@@ -183,7 +181,7 @@ Known limitations:
 - Oracle outages halt settlement
 - No mainnet deployment planned
 
-See [docs/threat-model.md](docs/threat-model.md) for complete security analysis.
+See [docs/threat-model.md](docs/threat-model.md) for complete security analysis and [docs/brief.md](docs/brief.md) for project constraints.
 
 ## License
 
