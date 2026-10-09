@@ -15,9 +15,12 @@ import asyncio
 import json
 import logging
 
+from aiohttp import web
 from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
+
+from meridian_quant import health
 
 from .chain import ChainMarketSource, ChainOrderClient
 from .config import MMConfig
@@ -30,8 +33,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def health_handler(request: web.Request) -> web.Response:
+    """HTTP handler for /health endpoint."""
+    mm_loop = request.app["mm_loop"]
+    health_data = health(mm_loop)
+    return web.json_response(health_data)
+
+
 async def main() -> None:
-    """Start the market maker loop."""
+    """Start the market maker loop and HTTP health server."""
     # Load config from environment (BaseSettings automatically reads env vars)
     config = MMConfig()  # type: ignore[call-arg]
     logger.info("Market maker starting with config: program_id=%s", config.program_id)
@@ -52,7 +62,7 @@ async def main() -> None:
     usdc_mint = Pubkey.from_string(config.usdc_mint)
     order_client = ChainOrderClient(rpc_client, program_id, keypair, usdc_mint)
 
-    # Create and start MM loop
+    # Create MM loop
     mm_loop = MarketMakerLoop(
         config=config,
         market_source=market_source,
@@ -60,8 +70,22 @@ async def main() -> None:
         order_client=order_client,
     )
 
+    # Create HTTP server for /health endpoint
+    app = web.Application()
+    app["mm_loop"] = mm_loop
+    app.router.add_get("/health", health_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", 8080)
+
+    logger.info("Starting HTTP health server on :8080")
+    await site.start()
+
     logger.info("Starting market maker loop (interval: %.1fs)", config.loop_interval_secs)
     await mm_loop.start()
+
+    # Cleanup
+    await runner.cleanup()
 
 
 if __name__ == "__main__":
