@@ -4,12 +4,17 @@ Abuse case: MM never exceeds per-owner resting-order cap (8) or inventory cap (2
 Prices always in 1-99.
 """
 
-from datetime import UTC, datetime
+import base58
+import pytest
+from datetime import UTC, datetime, timedelta
+from solders.keypair import Keypair  # type: ignore[import-untyped]
 
-from meridian_quant.mm.config import MAX_PRICE_CENTS, MIN_PRICE_CENTS
+from meridian_quant.mm.config import MAX_PRICE_CENTS, MIN_PRICE_CENTS, MMConfig
+from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.inventory import InventoryTracker
+from meridian_quant.mm.loop import MarketMakerLoop
 from meridian_quant.mm.quoter import generate_quote
-from meridian_quant.mm.types import FairValue, Inventory, MarketKey
+from meridian_quant.mm.types import FairValue, Inventory, MarketKey, MarketState
 
 
 def test_ab10_inventory_cap_enforced() -> None:
@@ -31,49 +36,114 @@ def test_ab10_inventory_cap_enforced() -> None:
     assert not tracker.can_add(key, -1, max_inv)
 
 
-def test_ab10_order_cap_per_owner() -> None:
-    """MM never exceeds 8 resting orders per owner (domain.md § Limits)."""
-    # MM places 2 orders per market (bid + ask)
-    # With max 8 orders, MM can quote at most 4 markets simultaneously
+@pytest.mark.asyncio
+async def test_ab10_order_cap_per_owner() -> None:
+    """MM never exceeds 8 resting orders per owner (domain.md § Limits).
 
-    # Create 5 markets
+    Drive the actual MM loop with 5 open markets and verify it never places
+    more than 8 resting orders (4 two-sided quotes).
+    """
+    now = datetime.now(UTC)
+    close_ts = int((now + timedelta(hours=1)).timestamp())
+
+    # 5 open markets - MM should only quote 4 (8 orders max)
     markets = [
-        MarketKey(ticker="AAPL", trading_date=20261008, strike_cents=23000),
-        MarketKey(ticker="AAPL", trading_date=20261008, strike_cents=23500),
-        MarketKey(ticker="AAPL", trading_date=20261008, strike_cents=24000),
-        MarketKey(ticker="MSFT", trading_date=20261008, strike_cents=42000),
-        MarketKey(ticker="NVDA", trading_date=20261008, strike_cents=13500),
+        MarketState(
+            market="AAPL_20261008_23000",
+            ticker="AAPL",
+            strike_cents=23000,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        ),
+        MarketState(
+            market="AAPL_20261008_23500",
+            ticker="AAPL",
+            strike_cents=23500,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        ),
+        MarketState(
+            market="AAPL_20261008_24000",
+            ticker="AAPL",
+            strike_cents=24000,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        ),
+        MarketState(
+            market="MSFT_20261008_42000",
+            ticker="MSFT",
+            strike_cents=42000,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        ),
+        MarketState(
+            market="NVDA_20261008_13500",
+            ticker="NVDA",
+            strike_cents=13500,
+            trading_date=20261008,
+            close_ts=close_ts,
+            is_open=True,
+            pairs_outstanding=100,
+        ),
     ]
 
-    # Generate quotes for each market
-    quotes_generated = []
-    for key in markets:
-        fv = FairValue(
-            market=f"{key.ticker}_{key.trading_date}_{key.strike_cents}",
-            ticker=key.ticker,
-            strike_cents=key.strike_cents,
+    fair_values = [
+        FairValue(
+            market=m.market,
+            ticker=m.ticker,
+            strike_cents=m.strike_cents,
             fair_cents=50,
             sigma=0.2,
             spot=230.0,
-            as_of=datetime.now(UTC),
+            as_of=now,
         )
-        inv = Inventory(market_key=key, position=0)
-        quote = generate_quote(fv, inv, spread_cents=2, size=10, skew_per_50=1)
-        quotes_generated.append(quote)
+        for m in markets
+    ]
 
-    # Count total orders that would be placed (2 per quote: bid + ask)
-    total_orders = len(quotes_generated) * 2
+    # Create MM loop with fakes
+    keypair = Keypair()
+    config = MMConfig(
+        market_maker_keypair=base58.b58encode(bytes(keypair)).decode("ascii"),
+        program_id="11111111111111111111111111111112",
+        service_token="test_token",
+    )
 
-    # If MM were to place all quotes, it would exceed cap
-    assert total_orders == 10  # 5 markets x 2 = 10 orders
-    assert total_orders > 8    # Would exceed the cap
+    market_source = FakeMarketSource(markets)
+    fv_source = FakeFairValueSource(fair_values)
+    order_client = FakeOrderClient()
 
-    # MM must limit to at most 4 markets (8 orders) at a time
-    max_markets_quoted = 8 // 2
-    assert max_markets_quoted == 4
+    mm = MarketMakerLoop(
+        config,
+        market_source=market_source,
+        fair_value_source=fv_source,
+        order_client=order_client,
+        clock=lambda: now,
+    )
 
-    # In practice: loop._quote_all_strikes should track resting order count
-    # and skip markets when count ≥ max_orders_per_owner (tested in test_loop.py)
+    # Run loop once
+    await mm._run_once()
+
+    # Count total orders placed across all markets
+    mm_owner = str(mm.keypair.pubkey())
+    total_orders = 0
+    for market in markets:
+        count = order_client.count_orders_by_owner(market.market, mm_owner)
+        total_orders += count
+
+    # AB-10: Never exceed 8 orders per owner per market
+    # (domain.md § Limits)
+    assert total_orders <= 8, f"MM placed {total_orders} orders, exceeding cap of 8"
+
+    # With 5 markets and 8 order cap, should quote exactly 4 markets (8 orders)
+    assert total_orders == 8, f"Expected 8 orders (4 markets), got {total_orders}"
 
 
 def test_ab10_prices_always_in_range() -> None:

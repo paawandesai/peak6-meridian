@@ -187,6 +187,17 @@ class MarketMakerLoop:
         markets: list[MarketState],
     ) -> None:
         """Generate and place quotes for all open strikes."""
+        # Count current resting orders across all markets (AB-10)
+        current_order_count = 0
+        for market in markets:
+            if market.is_open:
+                try:
+                    orders = await self._order_client.fetch_resting_orders(market.market)
+                    mm_orders = [o for o in orders if o.owner == self._mm_owner]
+                    current_order_count += len(mm_orders)
+                except Exception:
+                    logger.exception(f"Failed to fetch orders for {market.ticker}")
+
         for fv in fair_values:
             market = next(
                 (m for m in markets if m.strike_cents == fv.strike_cents and m.ticker == fv.ticker),
@@ -224,6 +235,15 @@ class MarketMakerLoop:
                 )
                 continue
 
+            # Check total order cap: placing a two-sided quote adds 2 orders (AB-10)
+            if current_order_count + 2 > self.config.max_orders_per_owner:
+                logger.warning(
+                    f"Skipping {fv.ticker} ${fv.strike_cents/100:.0f}: "
+                    f"would exceed max_orders_per_owner ({self.config.max_orders_per_owner}), "
+                    f"current={current_order_count}"
+                )
+                continue
+
             # Generate quote with skew
             quote = generate_quote(
                 fair_value=fv,
@@ -235,6 +255,8 @@ class MarketMakerLoop:
 
             # Place orders (would check existing orders and update/replace as needed)
             await self._place_quote(market, quote)
+            # Update count after placing (2 orders: bid + ask)
+            current_order_count += 2
 
     async def _place_quote(self, market: MarketState, quote: Quote) -> None:
         """Place a two-sided quote (AC1: actually places orders)."""
