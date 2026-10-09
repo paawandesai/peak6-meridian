@@ -82,21 +82,29 @@ export function TradeView(props: Props) {
     () => (fullBook === null || walletKey === "" ? [] : ownOrders(fullBook, walletKey)),
     [fullBook, walletKey],
   );
-  // Fail closed: if wallet is loading or errored, block all intents until ready.
-  // Defaulting to 0 would bypass the position constraint when a wallet *is* connected but slow/failed.
-  // When no wallet is connected (walletData === null after ready), holdings of 0 is safe.
+  // Fail closed: block all intents if a connected wallet's data is still loading or errored.
+  // When no wallet is connected (wallet prop is null), holdings default to 0 (safe: nothing to hold).
+  // When wallet IS connected but walletView isn't ready yet, holdings must be null (fail closed).
   const holdings: Holdings | null =
-    walletView.state.status === "ready"
+    wallet === null
       ? {
-          yes: walletData?.yes ?? 0n,
-          no: walletData?.no ?? 0n,
-          freeYes: walletData?.freeYes ?? 0n,
-          // Only a Buy NO rest (YES Ask while holding NO) is the exception; a Sell YES rest is not.
-          hasRestingAsk: own.some((order) => order.side === "Ask") && (walletData?.no ?? 0n) > 0n,
-          // Any resting asks (Sell YES or Buy NO) escrow YES; count as held for Buy NO constraint.
-          escrowedYesFromAsks: own.some((order) => order.side === "Ask"),
+          yes: 0n,
+          no: 0n,
+          freeYes: 0n,
+          hasRestingAsk: false,
+          escrowedYesFromAsks: false,
         }
-      : null;
+      : walletView.state.status === "ready" && walletData !== null
+        ? {
+            yes: walletData.yes,
+            no: walletData.no,
+            freeYes: walletData.freeYes,
+            // Only a Buy NO rest (YES Ask while holding NO) is the exception; a Sell YES rest is not.
+            hasRestingAsk: own.some((order) => order.side === "Ask") && walletData.no > 0n,
+            // Any resting asks (Sell YES or Buy NO) escrow YES; count as held for Buy NO constraint.
+            escrowedYesFromAsks: own.some((order) => order.side === "Ask"),
+          }
+        : null;
   const refresh = (): void => {
     book.refresh();
     walletView.refresh();
