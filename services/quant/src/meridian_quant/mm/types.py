@@ -31,11 +31,20 @@ class Quote(BaseModel):
     size: int  # contracts per side
 
 
+@dataclass(frozen=True)
+class MarketKey:
+    """Unique market identifier (ticker + trading_date + strike)."""
+
+    ticker: str
+    trading_date: int  # YYYYMMDD
+    strike_cents: int
+
+
 @dataclass
 class Inventory:
-    """Per-strike inventory tracking."""
+    """Per-market inventory tracking (Finding #5: key by market, not just strike)."""
 
-    strike_cents: int
+    market_key: MarketKey
     position: int  # signed: positive = long YES, negative = short YES
 
     def skew_cents(self, skew_per_50: int) -> int:

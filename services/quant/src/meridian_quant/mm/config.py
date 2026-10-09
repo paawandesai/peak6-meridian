@@ -7,14 +7,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class MMConfig(BaseSettings):
     """Market maker configuration from environment."""
 
-    model_config = SettingsConfigDict(env_prefix="MM_", case_sensitive=False)
+    model_config = SettingsConfigDict(case_sensitive=False)
 
-    # Solana connection
-    rpc_url: str = Field(default="http://localhost:8899")
-    ws_url: str = Field(default="ws://localhost:8900")
+    # Solana connection (Finding #6: no MM_ prefix per environment.md)
+    rpc_url: str = Field(default="http://localhost:8899", alias="SOLANA_RPC_URL")
+    ws_url: str = Field(default="ws://localhost:8900", alias="SOLANA_WS_URL")
 
-    # Market maker keypair (base58 encoded)
-    market_maker_keypair: str = Field(...)
+    # Market maker keypair (JSON array per environment.md, Finding #6)
+    market_maker_keypair: str = Field(..., alias="MARKET_MAKER_KEYPAIR")
 
     # Program and config
     program_id: str = Field(...)
