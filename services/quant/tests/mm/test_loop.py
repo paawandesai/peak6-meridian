@@ -14,7 +14,13 @@ from meridian_quant.mm.config import MMConfig
 from meridian_quant.mm.fakes import FakeFairValueSource, FakeMarketSource, FakeOrderClient
 from meridian_quant.mm.loop import MarketMakerLoop
 from meridian_quant.mm.quoter import generate_quote
-from meridian_quant.mm.types import FairValue, Inventory, MarketKey, MarketState
+from meridian_quant.mm.types import (
+    FairValue,
+    Inventory,
+    MarketKey,
+    MarketState,
+    RestingOrder,
+)
 
 
 @pytest.fixture
@@ -792,7 +798,7 @@ async def test_missing_ata_vs_rpc_timeout(mm_config: MMConfig) -> None:
 @pytest.mark.asyncio
 async def test_fetch_resting_orders_failure_skips_quoting(mm_config: MMConfig) -> None:
     """AB-10/AC3: fetch_resting_orders failure skips quoting that market.
-    
+
     Scenario: 7 resting orders exist, fetch_resting_orders raises.
     Expected: No new quotes placed (fail closed).
     """
@@ -807,9 +813,9 @@ async def test_fetch_resting_orders_failure_skips_quoting(mm_config: MMConfig) -
         is_open=True,
         pairs_outstanding=100,
     )
-    
+
     market_source = FakeMarketSource([market])
-    
+
     fv = FairValue(
         market="AAPL_20261008_23000",
         ticker="AAPL",
@@ -820,29 +826,31 @@ async def test_fetch_resting_orders_failure_skips_quoting(mm_config: MMConfig) -
         as_of=datetime.now(UTC),
     )
     fv_source = FakeFairValueSource([fv])
-    
+
     # Create order client that raises on fetch_resting_orders
     class FailingFetchOrderClient(FakeOrderClient):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.fetch_called = False
             self.place_called = False
-            
-        async def fetch_resting_orders(self, market: str):
+
+        async def fetch_resting_orders(self, market: str) -> list[RestingOrder]:
             self.fetch_called = True
             # Simulate 7 orders exist but fetch fails
             raise Exception("Simulated RPC error")
-        
-        async def place_order(self, market: str, side: str, price: int, qty: int, owner: str):
+
+        async def place_order(
+            self, market: str, side: str, price: int, qty: int, owner: str
+        ) -> int:
             self.place_called = True
-            await super().place_order(market, side, price, qty, owner)
-    
+            return await super().place_order(market, side, price, qty, owner)
+
     order_client = FailingFetchOrderClient()
     mm = MarketMakerLoop(mm_config, market_source, fv_source, order_client)
-    
+
     # Run loop
     await mm._run_once()
-    
+
     # Assert: fetch was called but no quotes placed (fail closed)
     assert order_client.fetch_called, "fetch_resting_orders should have been called"
     assert not order_client.place_called, "Should NOT place quotes when fetch fails (AB-10)"
