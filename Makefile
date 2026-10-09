@@ -14,7 +14,7 @@ PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
 	client lint lint-rust lint-js-py typecheck test test-rust-unit test-js-py-unit test-security \
-	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet test-deploy-devnet e2e dev demo-ops
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet deploy-vercel deploy-railway test-deploy-devnet e2e dev demo-ops
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -138,6 +138,14 @@ e2e:
 
 dev:
 	scripts/dev.sh
+
+## M2-11: deploy the app to Vercel / the automation service to Railway. Run by the `deploy:*` CI
+## jobs on main with the protected tokens; locally add DEPLOY_ARGS=--dry-run to list the variables.
+deploy-vercel:
+	pnpm --filter deploy run deploy-platform vercel $(DEPLOY_ARGS)
+
+deploy-railway:
+	pnpm --filter deploy run deploy-platform railway $(DEPLOY_ARGS)
 
 ## M3-07: Ops-agent override demo with fault injection (local validator only).
 ## Requires: local validator running, FAULT_INJECT_SOURCE=tiingo|twelvedata.

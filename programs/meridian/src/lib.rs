@@ -15,7 +15,7 @@ pub mod state;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("3RovidBTwYzUfhniunxsUgnLzsbWz6qt3PGpvD23HDZq");
+declare_id!("H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm");
 
 #[program]
 pub mod meridian {
