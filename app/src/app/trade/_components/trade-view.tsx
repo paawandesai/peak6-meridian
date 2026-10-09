@@ -85,6 +85,7 @@ export function TradeView(props: Props) {
   const holdings: Holdings = {
     yes: walletData?.yes ?? 0n,
     no: walletData?.no ?? 0n,
+    freeYes: walletData?.freeYes ?? 0n,
     // Only a Buy NO rest (YES Ask while holding NO) is the exception; a Sell YES rest is not.
     hasRestingAsk: own.some((order) => order.side === "Ask") && (walletData?.no ?? 0n) > 0n,
     // Any resting asks (Sell YES or Buy NO) escrow YES; count as held for Buy NO constraint.

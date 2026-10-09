@@ -10,6 +10,8 @@ export type Holdings = {
   readonly yes: bigint;
   /** NO tokens in the wallet. */
   readonly no: bigint;
+  /** YES tokens in OpenOrders (post-fill credit). User must Withdraw before trading. */
+  readonly freeYes: bigint;
   /** The wallet has a resting YES ask on this book (a limit Buy NO waiting to fill). */
   readonly hasRestingAsk: boolean;
   /** The wallet has YES escrowed in resting asks (Sell YES or Buy NO). Count as YES held. */
@@ -55,9 +57,13 @@ export function gateFor(intent: Intent, holdings: Holdings): IntentGate {
       exitQty: holdings.no,
     };
   }
-  if (intent === "BUY_NO" && (holdings.yes > 0n || holdings.escrowedYesFromAsks)) {
+  if (
+    intent === "BUY_NO" &&
+    (holdings.yes > 0n || holdings.freeYes > 0n || holdings.escrowedYesFromAsks)
+  ) {
+    const totalYes = holdings.yes + holdings.freeYes;
     // If YES is only in escrow (resting asks), user must cancel, not sell
-    if (holdings.yes === 0n && holdings.escrowedYesFromAsks) {
+    if (totalYes === 0n && holdings.escrowedYesFromAsks) {
       return {
         blocked: true,
         kind: "hold-yes",
@@ -67,10 +73,22 @@ export function gateFor(intent: Intent, holdings: Holdings): IntentGate {
         exitQty: 0n,
       };
     }
+    // If YES is only in OpenOrders (freeYes), user must Withdraw first
+    if (holdings.yes === 0n && holdings.freeYes > 0n) {
+      return {
+        blocked: true,
+        kind: "hold-yes",
+        text: `You hold ${holdings.freeYes} YES in OpenOrders. Withdraw first to buy NO.`,
+        exit: null,
+        exitLabel: null,
+        exitQty: 0n,
+      };
+    }
+    // YES is in wallet; offer Sell YES exit
     return {
       blocked: true,
       kind: "hold-yes",
-      text: `You hold ${holdings.yes} YES on this strike. Sell YES first to buy NO.`,
+      text: `You hold ${totalYes} YES on this strike. Sell YES first to buy NO.`,
       exit: "SELL_YES",
       exitLabel: "Sell YES",
       exitQty: holdings.yes,

@@ -380,6 +380,18 @@ describe("position constraint (AC3, UI-04 AC2)", () => {
     // The resting ask can be cancelled from the list below.
     expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
   });
+
+  it("freeYes (OpenOrders credit) blocks Buy NO, instructs to Withdraw (AC3)", async () => {
+    // When YES is only in OpenOrders (freeYes, post-fill credit), cannot Sell YES.
+    // User must Withdraw first (Withdraw button already on page).
+    const wallet: WalletView = { ...EMPTY_WALLET, freeYes: 6n };
+    renderView({ wallet });
+    await screen.findByTestId("simulated").catch(() => undefined);
+    await pick("Buy NO");
+    const block = await screen.findByTestId("constraint-block");
+    expect(block).toHaveTextContent("You hold 6 YES in OpenOrders. Withdraw first to buy NO.");
+    expect(within(block).queryByRole("button")).toBeNull(); // no Sell YES button, Withdraw is separate
+  });
 });
 
 describe("the book (UI-04 AC4, AC9)", () => {
