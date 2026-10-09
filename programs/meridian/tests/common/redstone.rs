@@ -5,7 +5,8 @@ use k256::ecdsa::{SigningKey, Signature, signature::Signer as _};
 use sha3::{Digest, Keccak256};
 
 /// RedStone marker bytes (appended to the end of every payload).
-const REDSTONE_MARKER: &[u8] = b"\x00\x00\x02\xed\x57\x19\x91\x00";
+/// Must match programs/meridian/src/redstone/parser.rs REDSTONE_MARKER
+const REDSTONE_MARKER: &[u8] = b"\x00\x00\x02\xed\x57\x19\x9a\x00\x00";
 
 /// RedStone test signer: locally generated secp256k1 keypair (dev-only).
 pub struct TestSigner {
@@ -161,7 +162,7 @@ mod tests {
             .build();
 
         // Verify marker is at the end
-        assert_eq!(&payload[payload.len() - 8..], REDSTONE_MARKER);
+        assert_eq!(&payload[payload.len() - 9..], REDSTONE_MARKER);
 
         // Verify minimum size (data + metadata fields + 2 signatures)
         assert!(payload.len() > 100);
