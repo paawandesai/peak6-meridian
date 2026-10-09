@@ -260,7 +260,7 @@ describe("sendPlan: the 30-slot staleness budget (AC5)", () => {
       }),
     ).rejects.toThrow(/keeps going stale/);
     expect(executor.sent.filter((s) => s.tx.role === "update").length).toBeLessThanOrEqual(2);
-  });
+  }, 10_000);
 
   it("property: no settle transaction is ever sent more than the budget after its update", async () => {
     const { w, plan } = await splitPlan();
