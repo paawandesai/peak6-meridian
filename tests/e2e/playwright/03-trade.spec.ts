@@ -50,10 +50,10 @@ const STEPS: readonly Step[] = [
   },
   {
     intent: "Sell YES",
-    qty: 2,
+    qty: 5,
     priceCents: 55,
-    maker: { intent: "BUY_YES", kind: "limit", priceCents: 55, qty: 2n },
-    yesDelta: -2n,
+    maker: { intent: "BUY_YES", kind: "limit", priceCents: 55, qty: 5n },
+    yesDelta: -5n,
     noDelta: 0n,
   },
   {
