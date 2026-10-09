@@ -1,7 +1,7 @@
 /**
  * Portfolio shows the positions the trade spec created. Written against design.md v2 §5 Portfolio
- * and M2-07; fixme until /portfolio merges.
- * TODO(M2-07): remove `fixme` once /portfolio is on main, check support/ui.ts locators.
+ * and M2-07 (!43); fixme until /portfolio merges.
+ * TODO(!43 M2-07): remove `fixme` once !43 merges to main, check support/ui.ts locators.
  */
 import { openChain, seededMarket, tokenAccounts, tokenBalance } from "./support/chain";
 import { expect, test } from "./support/fixtures";

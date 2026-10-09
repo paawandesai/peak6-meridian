@@ -2,7 +2,7 @@
  * Redeem after local settlement: a META strike that closes ~40 s after creation is minted by the
  * wallet, settled YES with the local oracle ($2,000 against a strike of about $1,360), and the
  * winner redeemed from Portfolio with one signature. Pays $1.00 per YES token (M2-07 AC2).
- * TODO(M2-07): remove `fixme` once /portfolio (winner Redeem) is on main, check support/ui.ts.
+ * TODO(!43 M2-07): remove `fixme` once !43 /portfolio merges to main, check support/ui.ts.
  */
 import {
   createShortMarket,

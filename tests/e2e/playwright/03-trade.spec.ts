@@ -1,7 +1,7 @@
 /**
  * The four intents from the UI, one signature request each (AC2). Written against design.md v2 and
- * M2-06; fixme until the Trade page (/trade/[market]) merges.
- * TODO(M2-06): remove `fixme` once /trade/[market] is on main, check support/ui.ts locators.
+ * M2-06 (!49); fixme until the Trade page (/trade/[market]) merges.
+ * TODO(!49 M2-06): remove `fixme` once !49 merges to main, check support/ui.ts locators.
  */
 import {
   type Chain,
