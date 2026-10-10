@@ -47,23 +47,6 @@ function createRequest(url: string): NextRequest {
   return new NextRequest(new URL(url, "http://localhost:3000"));
 }
 
-const mockMarket: MarketInvariant = {
-  address: "market1",
-  ticker: "AAPL",
-  strikeCents: 18000,
-  vaultBase: "1000000",
-  pairsOutstanding: "1",
-  expectedVaultBase: "1000000",
-  invariantPass: true,
-  closeTs: 1728586800,
-  settledAt: 0,
-  oracleAsOf: 0,
-  createdAt: 1728500000,
-  settleSlot: 0,
-  outcome: "None",
-  settled: false,
-};
-
 describe("GET /api/status", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -131,13 +114,16 @@ describe("GET /api/status", () => {
     expect(data.s).toBe("ok");
     expect(data.date).toBe(20241010);
     expect(data.markets).toHaveLength(1);
-    expect(data.markets![0]).toMatchObject({
-      address: "market1",
-      ticker: "AAPL",
-      outcome: "None",
-      settled: false,
-      createdAt: 1728500000,
-    });
+    expect(data.markets).toBeDefined();
+    if (data.markets) {
+      expect(data.markets[0]).toMatchObject({
+        address: "market1",
+        ticker: "AAPL",
+        outcome: "None",
+        settled: false,
+        createdAt: 1728500000,
+      });
+    }
   });
 
   it("uses active date when no date param provided", async () => {
@@ -227,12 +213,12 @@ describe("GET /api/status", () => {
     mockLoadStatusData.mockImplementation(async (conn, dateMarkets, progId, nowSecs) => {
       vaultRpcCount = 1; // getMultipleParsedAccounts for vaults (chunked if needed)
       // loadMarketFacts skips open markets (nowSecs < closeTs) per P1-6 optimization
-      sigScanCount = dateMarkets.filter(
-        (m: any) => m.settled || nowSecs >= Number(m.closeTs)
+      sigScanCount = (dateMarkets as typeof markets).filter(
+        (m) => m.settled || nowSecs >= Number(m.closeTs)
       ).length;
       return {
         markets: dateMarkets,
-        vaults: new Map(dateMarkets.map((m: any) => [m.address, 1000000n])),
+        vaults: new Map((dateMarkets as typeof markets).map((m) => [m.address, 1000000n])),
         facts: new Map(),
       };
     });
@@ -293,7 +279,10 @@ describe("GET /api/status", () => {
     const res = await GET(req);
     const data = await res.json();
 
-    expect(data.markets![0].vaultBase).toBe("0"); // null vault becomes "0"
-    expect(data.markets![0].invariantPass).toBe(false);
+    expect(data.markets).toBeDefined();
+    if (data.markets) {
+      expect(data.markets[0].vaultBase).toBe("0"); // null vault becomes "0"
+      expect(data.markets[0].invariantPass).toBe(false);
+    }
   });
 });
