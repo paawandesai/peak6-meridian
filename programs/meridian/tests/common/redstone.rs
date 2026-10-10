@@ -154,7 +154,11 @@ impl RedstonePayloadBuilder {
 
     /// Builds a payload with multiple data points per package (for testing multi-feed packages).
     /// Each signer signs all data points together.
-    pub fn build_multi_datapoint(data_points: &[(& str, u128)], timestamp_ms: i64, signers: &[TestSigner]) -> Vec<u8> {
+    pub fn build_multi_datapoint(
+        data_points: &[(&str, u128)],
+        timestamp_ms: i64,
+        signers: &[TestSigner],
+    ) -> Vec<u8> {
         let mut payload = Vec::new();
 
         // Build each data package (one per signer, each signs all data points)

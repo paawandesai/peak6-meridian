@@ -11,3 +11,6 @@ export {
   type StateBadgeProps,
 } from "./state-badge";
 export { TxStatus, txStatusText, type TxStatusProps } from "./tx-status";
+export { DemoWalletCTA } from "./demo-wallet-cta";
+export { PortfolioFilters, type PortfolioFiltersProps, type PortfolioTotals } from "./portfolio-filters";
+export { SettledRow, type SettledRowProps } from "./settled-row";
