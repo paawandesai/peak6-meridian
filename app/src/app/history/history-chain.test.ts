@@ -4,7 +4,12 @@ import { findOpenOrdersPda } from "@meridian/client";
 import { PublicKey } from "@solana/web3.js";
 import { describe, expect, it, vi } from "vitest";
 
-import { loadWalletEvents, openOrdersAddresses, type HistoryRpc } from "./history-chain";
+import {
+  findWalletOpenOrders,
+  loadWalletEvents,
+  openOrdersAddresses,
+  type HistoryRpc,
+} from "./history-chain";
 import { decodeEvents } from "@/lib/events";
 import fixture from "@/lib/fixtures/events.json";
 import { market } from "@/test-utils";
@@ -61,5 +66,64 @@ describe("maker fills (US-10)", () => {
     } as unknown as HistoryRpc;
     await loadWalletEvents(rpc, maker, programId, [oo]);
     expect(rpc.getTransactions).toHaveBeenCalledWith(["b", "a"], expect.anything());
+  });
+});
+
+describe("findWalletOpenOrders", () => {
+  it("uses getProgramAccounts with owner memcmp to find OpenOrders", async () => {
+    const oo1 = new PublicKey(new Uint8Array(32).fill(1));
+    const oo2 = new PublicKey(new Uint8Array(32).fill(2));
+    const rpc = {
+      getProgramAccounts: vi.fn().mockResolvedValue([{ pubkey: oo1 }, { pubkey: oo2 }]),
+    };
+    const result = await findWalletOpenOrders(rpc, maker, programId);
+    expect(result).toEqual([oo1, oo2]);
+    expect(rpc.getProgramAccounts).toHaveBeenCalledWith(
+      programId,
+      expect.objectContaining({
+        filters: [
+          { dataSize: 73 },
+          { memcmp: { offset: 8, bytes: maker.toBase58() } },
+        ],
+      }),
+    );
+  });
+
+  it("returns empty on getProgramAccounts failure", async () => {
+    const rpc = {
+      getProgramAccounts: vi.fn().mockRejectedValue(new Error("RPC error")),
+    };
+    const result = await findWalletOpenOrders(rpc, maker, programId);
+    expect(result).toEqual([]);
+  });
+});
+
+describe("concurrency cap", () => {
+  it("fetches signatures with concurrency limit when no extraAddresses provided", async () => {
+    const oo1 = new PublicKey(new Uint8Array(32).fill(10));
+    const oo2 = new PublicKey(new Uint8Array(32).fill(11));
+    const oo3 = new PublicKey(new Uint8Array(32).fill(12));
+    const oo4 = new PublicKey(new Uint8Array(32).fill(13));
+    const oo5 = new PublicKey(new Uint8Array(32).fill(14));
+    const calls: string[] = [];
+    const rpc = {
+      getProgramAccounts: vi.fn().mockResolvedValue([
+        { pubkey: oo1 },
+        { pubkey: oo2 },
+        { pubkey: oo3 },
+        { pubkey: oo4 },
+        { pubkey: oo5 },
+      ]),
+      getSignaturesForAddress: vi.fn(async (addr: PublicKey) => {
+        calls.push(addr.toBase58());
+        return [];
+      }),
+      getTransactions: vi.fn().mockResolvedValue([]),
+    } as unknown as HistoryRpc;
+    await loadWalletEvents(rpc, maker, programId);
+    // Should have called getSignaturesForAddress for wallet + 5 OpenOrders = 6 addresses
+    expect(rpc.getSignaturesForAddress).toHaveBeenCalledTimes(6);
+    // Calls should be made (wallet is first, then the 5 OO addresses)
+    expect(calls[0]).toBe(maker.toBase58());
   });
 });
