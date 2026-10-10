@@ -203,20 +203,22 @@ async function chainTime(connection: Connection): Promise<number> {
   return time;
 }
 
+/** Where the create-markets CLI runs: the stack's RPC, its throwaway admin key and the program. */
+export type CreateMarketsTarget = Pick<StackState, "rpcUrl" | "adminKeypairPath" | "programId">;
+
 /**
- * A strike that closes `closeInSecs` after this call, so the redeem step can settle it locally
- * without waiting for the 8 h seed markets: the create-markets CLI with a previous close of
- * $1,360.00 for META (the seed uses $680.00), whose strikes do not overlap the seed's.
+ * Runs the create-markets CLI (the real morning job) against the local validator with a
+ * throwaway previous-closes file; returns its stdout ("created <SYMBOL> <strike> <sig>" lines).
  */
-export async function createShortMarket(
-  chain: Chain,
-  state: StackState,
-  closeInSecs: number,
-): Promise<{ market: MarketAddresses; strikeCents: bigint; closeTs: number }> {
-  const dir = mkdtempSync(join(tmpdir(), "meridian-pw-short-"));
+function runCreateMarkets(
+  target: CreateMarketsTarget,
+  prevCloses: { readonly tradingDate: string; readonly closes: Record<string, number> },
+  args: readonly string[],
+): string {
+  const dir = mkdtempSync(join(tmpdir(), "meridian-pw-markets-"));
   const file = join(dir, "prev_closes.json");
-  writeFileSync(file, JSON.stringify({ tradingDate: "2026-10-06", closes: { META: 136_000 } }));
-  const out = execFileSync(
+  writeFileSync(file, JSON.stringify(prevCloses));
+  return execFileSync(
     "pnpm",
     [
       "--filter",
@@ -226,26 +228,52 @@ export async function createShortMarket(
       CREATE_MARKETS_CLI,
       "--prev-closes",
       file,
-      "--close-in-secs",
-      String(closeInSecs),
+      ...args,
       "--program-id",
-      state.programId,
+      target.programId,
     ],
     {
       cwd: ROOT,
       encoding: "utf8",
       env: {
         ...process.env,
-        ANCHOR_PROVIDER_URL: state.rpcUrl,
-        ANCHOR_WALLET: state.adminKeypairPath,
+        ANCHOR_PROVIDER_URL: target.rpcUrl,
+        ANCHOR_WALLET: target.adminKeypairPath,
+        SOLANA_CLUSTER: "localnet",
       },
     },
+  );
+}
+
+/**
+ * Trading date of the lifecycle seed's `--close-in-secs` markets (tests/fixtures/prev_closes.json).
+ * They close at "now + N", not at the session close, so every page files them as test markets
+ * (P0-1); the specs only use this date for the short redeem market below.
+ */
+export const TEST_MARKET_DATE = "2026-10-06";
+
+/**
+ * A strike that closes `closeInSecs` after this call, so the redeem step can settle it locally
+ * without waiting for a session close: the create-markets CLI with a previous close of $1,360.00
+ * for META (the seed uses $680.00), whose strikes do not overlap the seed's. It is a test market
+ * (its close is not the session close), so the UI lists it only behind "Show test markets".
+ */
+export async function createShortMarket(
+  chain: Chain,
+  state: StackState,
+  closeInSecs: number,
+): Promise<{ market: MarketAddresses; strikeCents: bigint; closeTs: number }> {
+  const out = runCreateMarkets(
+    state,
+    { tradingDate: TEST_MARKET_DATE, closes: { META: 136_000 } },
+    ["--close-in-secs", String(closeInSecs)],
   );
   const created = [...out.matchAll(/^created META (\d+) \S+$/gm)];
   const strike = created[0]?.[1];
   if (strike === undefined) throw new Error(`create-markets created no META market:\n${out}`);
   const strikeCents = BigInt(strike);
-  const market = seededMarket(chain, state, "META", strikeCents);
+  const tradingDate = Number(TEST_MARKET_DATE.replaceAll("-", ""));
+  const market = marketAddresses({ symbol: "META", tradingDate, strikeCents }, chain.programId);
   const account = await chain.program.account.market.fetch(market.market);
   return { market, strikeCents, closeTs: Number(account.closeTs.toString()) };
 }
@@ -266,10 +294,25 @@ export function nextOpenSession(nowMs: number, marginSecs: number): string {
 }
 
 /**
- * A real session market (close_ts = the session's ET close, so the Trade page lists it; the
- * `--close-in-secs` seed markets are test markets it hides, P0-1): the create-markets CLI for
- * `symbol` at `prevCloseCents` on the next open session. Idempotent; returns the strike that
- * equals the previous close (the ladder always contains it).
+ * Real session ladders (close_ts = the session's ET close, so Markets, Trade and Portfolio list
+ * them by default; P0-1) for every symbol in `closes`, on the next session whose close is at least
+ * `marginSecs` away: the create-markets CLI without `--close-in-secs`. Idempotent. Returns the
+ * session's trading date as `YYYYMMDD`.
+ */
+export function createSessionLadders(
+  target: CreateMarketsTarget,
+  closes: Record<string, number>,
+  marginSecs: number,
+): number {
+  const isoDate = nextOpenSession(Date.now(), marginSecs);
+  runCreateMarkets(target, { tradingDate: isoDate, closes }, ["--date", isoDate]);
+  return Number(isoDate.replaceAll("-", ""));
+}
+
+/**
+ * One real session market for `symbol` at `prevCloseCents` on the next open session (see
+ * `createSessionLadders`). Idempotent; returns the strike that equals the previous close (the
+ * ladder always contains it).
  */
 export function createSessionMarket(
   chain: Chain,
@@ -277,40 +320,7 @@ export function createSessionMarket(
   symbol: string,
   prevCloseCents: number,
 ): { market: MarketAddresses; tradingDate: number; strikeCents: bigint } {
-  const isoDate = nextOpenSession(Date.now(), 1_800);
-  const dir = mkdtempSync(join(tmpdir(), "meridian-pw-session-"));
-  const file = join(dir, "prev_closes.json");
-  writeFileSync(
-    file,
-    JSON.stringify({ tradingDate: isoDate, closes: { [symbol]: prevCloseCents } }),
-  );
-  execFileSync(
-    "pnpm",
-    [
-      "--filter",
-      "automation",
-      "exec",
-      "tsx",
-      CREATE_MARKETS_CLI,
-      "--prev-closes",
-      file,
-      "--date",
-      isoDate,
-      "--program-id",
-      state.programId,
-    ],
-    {
-      cwd: ROOT,
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        ANCHOR_PROVIDER_URL: state.rpcUrl,
-        ANCHOR_WALLET: state.adminKeypairPath,
-        SOLANA_CLUSTER: "localnet",
-      },
-    },
-  );
-  const tradingDate = Number(isoDate.replaceAll("-", ""));
+  const tradingDate = createSessionLadders(state, { [symbol]: prevCloseCents }, 1_800);
   const strikeCents = BigInt(prevCloseCents);
   return {
     market: marketAddresses({ symbol, tradingDate, strikeCents }, chain.programId),

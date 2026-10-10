@@ -9,10 +9,13 @@ test.describe("Demo wallet (M4-07)", () => {
     // Navigate to markets (root page)
     await page.goto("/");
 
-    // Connect demo wallet
+    // The demo wallet is offered twice: the header CTA (P0-6) and an entry in the connect modal
+    // (M4-07). Both share the "Try the demo" name, so each is located by where it lives.
+    await expect(page.getByTestId("demo-wallet-cta")).toHaveText("Try the demo wallet (devnet)");
     await page.getByRole("button", { name: /connect wallet/i }).click();
-    await expect(page.getByRole("button", { name: /try the demo/i })).toBeVisible();
-    await page.getByRole("button", { name: /try the demo/i }).click();
+    const modalEntry = page.getByRole("dialog").getByRole("button", { name: /try the demo/i });
+    await expect(modalEntry).toBeVisible();
+    await modalEntry.click();
 
     // Verify banner is shown
     await expect(page.getByText(/demo wallet.*devnet only/i)).toBeVisible();
@@ -21,8 +24,11 @@ test.describe("Demo wallet (M4-07)", () => {
     await expect(page.getByText(/[1-9].*test-USDC/i)).toBeVisible({ timeout: 10000 });
 
     // AC9: Navigate to a market and place a trade
-    // Click on the first market row to navigate to the trade page
-    await page.locator("table tbody tr").first().click();
+    // Follow the first strike's Trade link (a session market, see global-setup) to its trade page
+    await page
+      .getByRole("link", { name: /^\$[\d,]+ Trade$/ })
+      .first()
+      .click();
     await expect(page).toHaveURL(/\/trade\//);
 
     // Place a Buy YES trade (AC9)

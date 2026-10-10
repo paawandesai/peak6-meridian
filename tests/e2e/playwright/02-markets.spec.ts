@@ -2,7 +2,7 @@ import { expect, test } from "./support/fixtures";
 
 const MAG7 = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"];
 
-test("Markets lists a ladder per ticker with strike rows from the seeded chain", async ({
+test("Markets lists a session ladder per ticker with strike rows from the seeded chain", async ({
   page,
 }) => {
   await page.goto("/");
@@ -14,6 +14,9 @@ test("Markets lists a ladder per ticker with strike rows from the seeded chain",
   }
   // META's previous close is $680.00, so its 0% strike is $680 (tests/fixtures/prev_closes.json).
   await expect(page.getByRole("region", { name: "META" })).toContainText("680");
+  // The ladders above are the session markets global-setup creates; the lifecycle seed's
+  // `--close-in-secs` markets stay behind the test-market toggle (P0-1), never mixed in.
+  await expect(page.getByTestId("test-market-toggle")).toHaveText(/^Show test markets \(\d+\)$/);
 });
 
 test("the header shows the ET clock and the next close", async ({ page }) => {
