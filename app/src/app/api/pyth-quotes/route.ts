@@ -16,8 +16,16 @@ import { type PythQuotesResponse, type PythQuote } from "@/lib/pyth-quotes";
 export const dynamic = "force-dynamic";
 
 const CACHE_TTL_MS = 2_000;
-let cache: { data: PythQuotesResponse; at: number } | null = null;
-let inFlight: Promise<PythQuotesResponse> | null = null;
+/** Cache keyed by sorted ticker list to prevent cross-contamination (Markets/Trade use different sets). */
+const cache = new Map<string, { data: PythQuotesResponse; at: number }>();
+/** In-flight requests keyed by sorted ticker list. */
+const inFlight = new Map<string, Promise<PythQuotesResponse>>();
+
+/** Clears cache and in-flight maps (for tests). */
+export function clearCache(): void {
+  cache.clear();
+  inFlight.clear();
+}
 
 const tickersParam = z
   .string()
@@ -176,29 +184,35 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Pyth API not configured" }, { status: 503 });
   }
 
+  // Key by sorted ticker list to prevent cross-contamination (Markets uses all MAG7, Trade uses subsets)
+  const cacheKey = [...parsed.data].sort().join(",");
+
   // Check cache first (2s TTL)
   const now = Date.now();
-  if (cache !== null && now - cache.at < CACHE_TTL_MS) {
-    return NextResponse.json(cache.data, { headers: { "Cache-Control": "no-store" } });
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined && now - cached.at < CACHE_TTL_MS) {
+    return NextResponse.json(cached.data, { headers: { "Cache-Control": "no-store" } });
   }
 
-  // Share in-flight requests
-  if (inFlight === null) {
-    inFlight = fetchAllQuotes(parsed.data, apiToken);
-    inFlight
+  // Share in-flight requests for the same ticker set
+  let promise = inFlight.get(cacheKey);
+  if (promise === undefined) {
+    promise = fetchAllQuotes(parsed.data, apiToken);
+    inFlight.set(cacheKey, promise);
+    promise
       .then((data) => {
-        cache = { data, at: Date.now() };
+        cache.set(cacheKey, { data, at: Date.now() });
       })
       .catch(() => {
         // Failed fetch is not cached
       })
       .finally(() => {
-        inFlight = null;
+        inFlight.delete(cacheKey);
       });
   }
 
   try {
-    const body = await inFlight;
+    const body = await promise;
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Failed to fetch Pyth quotes:", error);

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { GET } from "./route";
+import { GET, clearCache } from "./route";
 
 const pro = (id: number, price: string, exponent = -5, confidence?: string) => ({
   parsed: {
@@ -18,6 +18,7 @@ describe("/api/pyth-quotes", () => {
   beforeEach(() => {
     process.env = { ...ORIG_ENV, PYTH_API_TOKEN: "test-token" };
     vi.clearAllMocks();
+    clearCache();
   });
 
   afterEach(() => {
