@@ -1,7 +1,8 @@
 /** Read-only chain access for the app: markets via `@meridian/client`, test-USDC balance via RPC. */
 import { AnchorProvider } from "@coral-xyz/anchor";
 import { createMeridianProgram, findConfigPda, symbolFromBytes } from "@meridian/client";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { type Connection, PublicKey } from "@solana/web3.js";
+import { dedupe, sharedConnection } from "./rpc";
 import { z } from "zod";
 
 import type { PublicConfig } from "./config";
@@ -124,14 +125,32 @@ const readOnlyWallet = {
   signAllTransactions: () => Promise.reject(new Error("read-only client cannot sign")),
 };
 
+/** Short cache for the market list and config: navigation remounts every reader of them at once. */
+const READ_TTL_MS = 2_000;
+const readers = new Map<string, MeridianReader>();
+
+/** One reader per RPC URL + program, so remounted `Providers` share its cache and connection. */
 export function createReader(config: PublicConfig): MeridianReader {
-  const connection = new Connection(config.rpcUrl, "confirmed");
+  const key = `${config.rpcUrl}|${config.programId.toBase58()}|${config.usdcMint?.toBase58() ?? ""}`;
+  let reader = readers.get(key);
+  if (reader === undefined) {
+    reader = buildReader(config);
+    readers.set(key, reader);
+  }
+  return reader;
+}
+
+function buildReader(config: PublicConfig): MeridianReader {
+  const connection = sharedConnection(config.rpcUrl);
   const provider = new AnchorProvider(connection, readOnlyWallet, { commitment: "confirmed" });
   const program = createMeridianProgram(provider, config.programId);
   const { usdcMint } = config;
   return {
-    listMarkets: () => fetchMarkets(program.account.market),
-    getConfig: () => fetchConfig(program.account.config, findConfigPda(config.programId).address),
+    listMarkets: dedupe(() => fetchMarkets(program.account.market), READ_TTL_MS),
+    getConfig: dedupe(
+      () => fetchConfig(program.account.config, findConfigPda(config.programId).address),
+      READ_TTL_MS,
+    ),
     usdcBalance: (owner) =>
       usdcMint === undefined
         ? Promise.resolve(null)

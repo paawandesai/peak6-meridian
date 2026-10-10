@@ -1,10 +1,16 @@
 /**
- * Tests for Pyth quotes API route (M3-10, D-055).
+ * Tests for Pyth quotes API route (M3-10, D-055): Pyth Pro REST latest_price.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { GET } from "./route";
-import { PYTH_FEED_IDS } from "@/lib/pyth-quotes";
+
+const pro = (id: number, price: string, exponent = -5, confidence?: string) => ({
+  parsed: {
+    timestampUs: "1700000000000000",
+    priceFeeds: [{ priceFeedId: id, price, exponent, ...(confidence ? { confidence } : {}) }],
+  },
+});
 
 describe("/api/pyth-quotes", () => {
   const ORIG_ENV = process.env;
@@ -20,173 +26,71 @@ describe("/api/pyth-quotes", () => {
 
   it("returns 503 when PYTH_API_TOKEN is not configured", async () => {
     delete process.env.PYTH_API_TOKEN;
-    const request = new Request("http://localhost/api/pyth-quotes");
-    const response = await GET(request);
-
+    const response = await GET(new Request("http://localhost/api/pyth-quotes"));
     expect(response.status).toBe(503);
-    const body = await response.json();
-    expect(body.error).toBe("Pyth API not configured");
+    expect((await response.json()).error).toBe("Pyth API not configured");
   });
 
   it("returns 400 for invalid tickers", async () => {
-    const request = new Request("http://localhost/api/pyth-quotes?tickers=INVALID");
-    const response = await GET(request);
-
+    const response = await GET(new Request("http://localhost/api/pyth-quotes?tickers=XXX"));
     expect(response.status).toBe(400);
-    const body = await response.json();
-    expect(body.error).toContain("malformed");
+    expect((await response.json()).error).toContain("malformed");
   });
 
-  it("fetches quotes for requested tickers with Authorization header", async () => {
-    const mockResponse = {
-      parsed: [
-        {
-          id: PYTH_FEED_IDS.AAPL,
-          price: {
-            price: "22500",
-            conf: "50",
-            expo: -2,
-            publish_time: 1700000000,
-          },
-        },
-      ],
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => mockResponse,
-    });
-
-    const request = new Request("http://localhost/api/pyth-quotes?tickers=AAPL");
-    const response = await GET(request);
-
+  it("POSTs the Pyth Pro feed id with a bearer token and returns cents", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => pro(922, "22512345", -5, "5000") });
+    const response = await GET(new Request("http://localhost/api/pyth-quotes?tickers=AAPL"));
     expect(response.status).toBe(200);
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.stringContaining(PYTH_FEED_IDS.AAPL),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      }),
-    );
-
+    const [url, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit & { headers: Record<string, string>; body: string },
+    ];
+    expect(url).toBe("https://pyth-lazer.dourolabs.app/v1/latest_price");
+    expect(init.method).toBe("POST");
+    expect(init.headers.Authorization).toBe("Bearer test-token");
+    expect(JSON.parse(init.body).priceFeedIds).toEqual([922]);
     const body = await response.json();
-    expect(body.quotes).toHaveLength(1);
     expect(body.quotes[0]).toMatchObject({
       ticker: "AAPL",
-      price_cents: 22500,
-      conf_cents: 50,
+      price_cents: 22512,
+      conf_cents: 5,
       publish_time: 1700000000,
-      feed_id: PYTH_FEED_IDS.AAPL,
+      feed_id: "922",
     });
+    expect(body.unavailable).toEqual([]);
   });
 
-  it("rejects mismatched feed ID", async () => {
-    const mockResponse = {
-      parsed: [
-        {
-          id: "0xwrongfeedid",
-          price: {
-            price: "22500",
-            conf: "50",
-            expo: -2,
-            publish_time: 1700000000,
-          },
-        },
-      ],
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => mockResponse,
-    });
-
-    const request = new Request("http://localhost/api/pyth-quotes?tickers=AAPL");
-    const response = await GET(request);
-
-    const body = await response.json();
+  it("marks a ticker unavailable when the response has another feed id", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => pro(954, "100") });
+    const body = await (
+      await GET(new Request("http://localhost/api/pyth-quotes?tickers=AAPL"))
+    ).json();
     expect(body.quotes).toHaveLength(0);
     expect(body.unavailable).toContain("AAPL");
   });
 
   it("handles API errors gracefully", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-    });
-
-    const request = new Request("http://localhost/api/pyth-quotes?tickers=AAPL");
-    const response = await GET(request);
-
-    const body = await response.json();
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
+    const body = await (
+      await GET(new Request("http://localhost/api/pyth-quotes?tickers=AAPL"))
+    ).json();
     expect(body.quotes).toHaveLength(0);
     expect(body.unavailable).toContain("AAPL");
   });
 
-  it("converts prices using Decimal math (not float)", async () => {
-    const mockResponse = {
-      parsed: [
-        {
-          id: PYTH_FEED_IDS.NVDA,
-          price: {
-            price: "13567",
-            conf: "13",
-            expo: -2,
-            publish_time: 1700000000,
-          },
-        },
-      ],
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => mockResponse,
-    });
-
-    const request = new Request("http://localhost/api/pyth-quotes?tickers=NVDA");
-    const response = await GET(request);
-
-    const body = await response.json();
-    expect(body.quotes[0].price_cents).toBe(13567);
-    expect(body.quotes[0].conf_cents).toBe(13);
-  });
-
   it("fetches all MAG7 when no tickers specified", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ parsed: [] }),
-    });
-
-    const request = new Request("http://localhost/api/pyth-quotes");
-    await GET(request);
-
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+    await GET(new Request("http://localhost/api/pyth-quotes"));
     expect(global.fetch).toHaveBeenCalledTimes(7);
   });
 
-  it("rejects invalid price values", async () => {
-    const mockResponse = {
-      parsed: [
-        {
-          id: PYTH_FEED_IDS.AAPL,
-          price: {
-            price: "-1000",
-            conf: "50",
-            expo: -2,
-            publish_time: 1700000000,
-          },
-        },
-      ],
-    };
-
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => mockResponse,
-    });
-
-    const request = new Request("http://localhost/api/pyth-quotes?tickers=AAPL");
-    const response = await GET(request);
-
-    const body = await response.json();
+  it("rejects negative prices", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => pro(922, "-100") });
+    const body = await (
+      await GET(new Request("http://localhost/api/pyth-quotes?tickers=AAPL"))
+    ).json();
     expect(body.quotes).toHaveLength(0);
     expect(body.unavailable).toContain("AAPL");
   });
