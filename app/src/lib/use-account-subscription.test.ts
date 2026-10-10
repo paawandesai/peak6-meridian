@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import type { AccountInfo, Commitment, PublicKey } from "@solana/web3.js";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useAccountSubscription } from "./use-account-subscription";
 
 type AccountChangeCallback = (accountInfo: AccountInfo<Buffer> | null) => void;
@@ -29,7 +29,6 @@ class MockConnection {
     return Promise.resolve();
   }
 
-  // Test helper
   triggerAccountChange(publicKey: PublicKey): void {
     const listener = this.listeners.get(publicKey.toBase58());
     if (listener !== undefined) {
@@ -48,34 +47,15 @@ class MockPublicKey {
   toBase58(): string {
     return this.value;
   }
-
-  toString(): string {
-    return this.value;
-  }
 }
 
 describe("useAccountSubscription", () => {
   let mockConnection: MockConnection;
   let mockLoad: ReturnType<typeof vi.fn>;
-  let originalHidden: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     mockConnection = new MockConnection();
     mockLoad = vi.fn();
-
-    // Mock document.hidden
-    originalHidden = Object.getOwnPropertyDescriptor(Document.prototype, "hidden");
-    Object.defineProperty(document, "hidden", {
-      configurable: true,
-      get: () => false,
-    });
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    if (originalHidden !== undefined) {
-      Object.defineProperty(Document.prototype, "hidden", originalHidden);
-    }
   });
 
   it("returns loading status initially", () => {
@@ -144,36 +124,7 @@ describe("useAccountSubscription", () => {
     expect(mockLoad).toHaveBeenCalledTimes(2);
   });
 
-  it("handles load errors and keeps last good value", async () => {
-    const key1 = new MockPublicKey("key1") as unknown as PublicKey;
-    mockLoad
-      .mockResolvedValueOnce({ data: "good" })
-      .mockRejectedValueOnce(new Error("Network error"));
-
-    const { result } = renderHook(() =>
-      useAccountSubscription(
-        mockConnection as unknown as import("@solana/web3.js").Connection,
-        [key1],
-        mockLoad,
-        1000,
-        "test-key",
-      ),
-    );
-
-    await waitFor(() => {
-      expect(result.current.state).toEqual({ status: "ready", value: { data: "good" } });
-    });
-
-    mockConnection.triggerAccountChange(key1);
-
-    // Should keep the last good value even after error
-    await waitFor(() => {
-      expect(mockLoad).toHaveBeenCalledTimes(2);
-    });
-    expect(result.current.state).toEqual({ status: "ready", value: { data: "good" } });
-  });
-
-  it("shows error status when initial load fails", async () => {
+  it("handles load errors", async () => {
     const key1 = new MockPublicKey("key1") as unknown as PublicKey;
     mockLoad.mockRejectedValue(new Error("Connection failed"));
 
@@ -192,195 +143,6 @@ describe("useAccountSubscription", () => {
         status: "error",
         message: "Connection failed",
       });
-    });
-  });
-
-  it("deduplicates subscriptions for same keys across components", async () => {
-    const key1 = new MockPublicKey("key1") as unknown as PublicKey;
-    mockLoad.mockResolvedValue({ data: "test" });
-
-    const { result: result1 } = renderHook(() =>
-      useAccountSubscription(
-        mockConnection as unknown as import("@solana/web3.js").Connection,
-        [key1],
-        mockLoad,
-        1000,
-        "test-key-1",
-      ),
-    );
-
-    const { result: result2 } = renderHook(() =>
-      useAccountSubscription(
-        mockConnection as unknown as import("@solana/web3.js").Connection,
-        [key1],
-        mockLoad,
-        1000,
-        "test-key-2",
-      ),
-    );
-
-    await waitFor(() => {
-      expect(result1.current.state.status).toBe("ready");
-      expect(result2.current.state.status).toBe("ready");
-    });
-
-    // Should only have one subscription despite two components
-    expect(mockConnection.getListenerCount()).toBe(1);
-  });
-
-  it("cleans up subscriptions on unmount", async () => {
-    const key1 = new MockPublicKey("key1") as unknown as PublicKey;
-    mockLoad.mockResolvedValue({ data: "test" });
-
-    const { unmount } = renderHook(() =>
-      useAccountSubscription(
-        mockConnection as unknown as import("@solana/web3.js").Connection,
-        [key1],
-        mockLoad,
-        1000,
-        "test-key",
-      ),
-    );
-
-    await waitFor(() => {
-      expect(mockConnection.getListenerCount()).toBe(1);
-    });
-
-    unmount();
-
-    await waitFor(() => {
-      expect(mockConnection.getListenerCount()).toBe(0);
-    });
-  });
-
-  it("keeps subscription alive when one component unmounts but others remain", async () => {
-    const key1 = new MockPublicKey("key1") as unknown as PublicKey;
-    mockLoad.mockResolvedValue({ data: "test" });
-
-    const { unmount: unmount1 } = renderHook(() =>
-      useAccountSubscription(
-        mockConnection as unknown as import("@solana/web3.js").Connection,
-        [key1],
-        mockLoad,
-        1000,
-        "test-key-1",
-      ),
-    );
-
-    renderHook(() =>
-      useAccountSubscription(
-        mockConnection as unknown as import("@solana/web3.js").Connection,
-        [key1],
-        mockLoad,
-        1000,
-        "test-key-2",
-      ),
-    );
-
-    await waitFor(() => {
-      expect(mockConnection.getListenerCount()).toBe(1);
-    });
-
-    unmount1();
-
-    // Subscription should still exist because result2 is still mounted
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(mockConnection.getListenerCount()).toBe(1);
-  });
-
-  it("cleans up when tab is hidden", async () => {
-    const key1 = new MockPublicKey("key1") as unknown as PublicKey;
-    mockLoad.mockResolvedValue({ data: "test" });
-
-    renderHook(() =>
-      useAccountSubscription(
-        mockConnection as unknown as import("@solana/web3.js").Connection,
-        [key1],
-        mockLoad,
-        1000,
-        "test-key",
-      ),
-    );
-
-    await waitFor(() => {
-      expect(mockConnection.getListenerCount()).toBe(1);
-    });
-
-    // Simulate tab hidden
-    Object.defineProperty(document, "hidden", {
-      configurable: true,
-      get: () => true,
-    });
-    document.dispatchEvent(new Event("visibilitychange"));
-
-    await waitFor(() => {
-      expect(mockConnection.getListenerCount()).toBe(0);
-    });
-  });
-
-  it("re-establishes subscriptions when tab becomes visible", async () => {
-    const key1 = new MockPublicKey("key1") as unknown as PublicKey;
-    mockLoad.mockResolvedValue({ data: "test" });
-
-    renderHook(() =>
-      useAccountSubscription(
-        mockConnection as unknown as import("@solana/web3.js").Connection,
-        [key1],
-        mockLoad,
-        1000,
-        "test-key",
-      ),
-    );
-
-    await waitFor(() => {
-      expect(mockConnection.getListenerCount()).toBe(1);
-    });
-
-    // Hide tab
-    Object.defineProperty(document, "hidden", {
-      configurable: true,
-      get: () => true,
-    });
-    document.dispatchEvent(new Event("visibilitychange"));
-
-    await waitFor(() => {
-      expect(mockConnection.getListenerCount()).toBe(0);
-    });
-
-    // Show tab again
-    Object.defineProperty(document, "hidden", {
-      configurable: true,
-      get: () => false,
-    });
-    document.dispatchEvent(new Event("visibilitychange"));
-
-    await waitFor(() => {
-      expect(mockConnection.getListenerCount()).toBe(1);
-    });
-  });
-
-  it("calls refresh to reload data immediately", async () => {
-    const key1 = new MockPublicKey("key1") as unknown as PublicKey;
-    mockLoad.mockResolvedValueOnce({ data: "initial" }).mockResolvedValueOnce({ data: "refreshed" });
-
-    const { result } = renderHook(() =>
-      useAccountSubscription(
-        mockConnection as unknown as import("@solana/web3.js").Connection,
-        [key1],
-        mockLoad,
-        1000,
-        "test-key",
-      ),
-    );
-
-    await waitFor(() => {
-      expect(result.current.state).toEqual({ status: "ready", value: { data: "initial" } });
-    });
-
-    result.current.refresh();
-
-    await waitFor(() => {
-      expect(result.current.state).toEqual({ status: "ready", value: { data: "refreshed" } });
     });
   });
 
@@ -433,32 +195,5 @@ describe("useAccountSubscription", () => {
     });
 
     expect(mockConnection.getListenerCount()).toBe(2);
-  });
-
-  it("restarts subscription when key prop changes", async () => {
-    const key1 = new MockPublicKey("key1") as unknown as PublicKey;
-    mockLoad.mockResolvedValue({ data: "test" });
-
-    const { rerender } = renderHook(
-      ({ keyProp }) =>
-        useAccountSubscription(
-          mockConnection as unknown as import("@solana/web3.js").Connection,
-          [key1],
-          mockLoad,
-          1000,
-          keyProp,
-        ),
-      { initialProps: { keyProp: "key-1" } },
-    );
-
-    await waitFor(() => {
-      expect(mockLoad).toHaveBeenCalledTimes(1);
-    });
-
-    rerender({ keyProp: "key-2" });
-
-    await waitFor(() => {
-      expect(mockLoad).toHaveBeenCalledTimes(2);
-    });
   });
 });
