@@ -55,6 +55,7 @@ export class DemoWallet implements Wallet {
   #accounts: WalletAccount[] = [];
   #connection: Connection | null = null;
   #signatureCount = 0;
+  #hasFunded = false;
 
   constructor(keypair: Keypair) {
     this.#keypair = keypair;
@@ -135,7 +136,28 @@ export class DemoWallet implements Wallet {
   };
 
   async #autoFund(): Promise<void> {
-    const wallet = this.#keypair.publicKey.toBase58();
+    // Auto-fund on first connect only. After reload, autoConnect triggers connect() again but
+    // the wallet is already funded, so skip the faucet (and avoid alerting on 429).
+    if (this.#hasFunded) return;
+
+    const connection = this.#getConnection();
+    const pubkey = this.#keypair.publicKey;
+
+    // Check if already funded: need fee SOL + USDC mint from config
+    try {
+      const solBalance = await connection.getBalance(pubkey);
+      const hasSol = solBalance > 0;
+      // The USDC check requires the mint from config; if unavailable, proceed with faucet.
+      // A funded wallet should have both, so checking SOL alone is a reasonable heuristic.
+      if (hasSol) {
+        this.#hasFunded = true;
+        return;
+      }
+    } catch {
+      // Balance check failed; proceed to faucet
+    }
+
+    const wallet = pubkey.toBase58();
     try {
       const response = await fetch("/api/faucet", {
         method: "POST",
@@ -144,12 +166,18 @@ export class DemoWallet implements Wallet {
       });
       if (response.ok) {
         // Faucet funded wallet with SOL + USDC
+        this.#hasFunded = true;
         return;
       } else if (response.status === 429) {
-        alert(
-          "Demo wallet: You've already claimed test funds recently. " +
-            "The faucet allows one claim per wallet per 24 hours.",
-        );
+        // 24h limit hit. If the wallet already has SOL (checked above), this is a benign retry
+        // after reload; otherwise it's a real exhaustion and worth alerting.
+        const solBalance = await connection.getBalance(pubkey).catch(() => 0);
+        if (solBalance === 0) {
+          alert(
+            "Demo wallet: You've already claimed test funds recently. " +
+              "The faucet allows one claim per wallet per 24 hours.",
+          );
+        }
       } else if (response.status === 503) {
         alert(
           "Demo wallet: The faucet is temporarily out of funds. " +
