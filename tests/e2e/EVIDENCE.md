@@ -108,20 +108,23 @@ Average: XXXms
 ```
 
 ### Lighthouse Report
-- HTML report in `tests/e2e/playwright-report/lighthouse/`
-- JSON data with accessibility score
+- HTML report: `./lighthouse-report.html` (output from one-off `npx lighthouse` command)
+- Accessibility score quoted in issue/MR comment
 
-## Validation
+## Acceptance Criteria Reference
 
-All evidence must meet acceptance criteria:
+Evidence collected using this infrastructure must meet:
 - **M2-06 AC5:** Four-intent run with screenshots, Lighthouse ≥ 90, 3s timing
 - **UI-04 AC5:** Four intents with before/after screenshots and < 3s confirmation
 - **UI-04 AC6:** 390px viewport validated
 
 ## Attaching Evidence to Issue #45
 
-Once collected, attach artifacts to issue #45:
-1. Upload screenshot archives
-2. Paste timing summary  
-3. Link Lighthouse report or paste accessibility score
-4. Mark deferred ACs as complete in issue
+**This MR provides infrastructure only.** Evidence collection is a separate step.
+
+Once evidence is collected locally or in CI:
+1. Upload screenshot files to issue #45
+2. Paste timing summary showing all < 3s
+3. Attach Lighthouse HTML report and quote accessibility score ≥ 90
+4. Confirm production build was used
+5. Mark deferred M2-06 AC5 and UI-04 AC5-AC6 as complete in issue #45
