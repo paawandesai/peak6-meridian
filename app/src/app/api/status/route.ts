@@ -63,7 +63,7 @@ type CacheEntry = {
 // - 1hr for fully settled dates
 const cache = new Map<string, CacheEntry>();
 
-const CACHE_ACTIVE_MS = 5 * 60 * 1000; // 5min for active markets
+const CACHE_ACTIVE_MS = 30 * 1000; // 30s for active markets (P1-6 AC)
 const CACHE_SETTLED_MS = 60 * 60 * 1000; // 1hr for settled markets
 
 // In-flight request deduplication
@@ -83,7 +83,7 @@ function parseDateParam(dateStr: string): number {
 /**
  * GET /api/status?date=YYYY-MM-DD
  * Returns per-market invariant data for a trading date.
- * Cached 30s with in-flight deduplication.
+ * Cached 30s (P1-6) with in-flight deduplication.
  */
 export async function GET(request: NextRequest): Promise<NextResponse<StatusResponse>> {
   try {
@@ -111,7 +111,26 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
     const connection = sharedConnection(config.rpcUrl);
     const programId = new PublicKey(config.programId);
 
-    // Determine trading date
+    // Build cache key (use "today" for active date requests)
+    const cacheKey = params.data.date
+      ? `status:${parseDateParam(params.data.date)}`
+      : "status:today";
+    const now = Date.now();
+
+    // Check cache BEFORE any RPC
+    const cached = cache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return NextResponse.json(cached.data);
+    }
+
+    // Check in-flight requests
+    const inflight = inflightRequests.get(cacheKey);
+    if (inflight) {
+      const data = await inflight;
+      return NextResponse.json(data);
+    }
+
+    // Determine trading date (RPC happens here only on cache miss)
     let tradingDate: number;
     if (params.data.date) {
       tradingDate = parseDateParam(params.data.date);
@@ -128,22 +147,6 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
       }
     }
 
-    const cacheKey = `status:${tradingDate}`;
-    const now = Date.now();
-
-    // Check cache
-    const cached = cache.get(cacheKey);
-    if (cached && cached.expiresAt > now) {
-      return NextResponse.json(cached.data);
-    }
-
-    // Check in-flight requests
-    const inflight = inflightRequests.get(cacheKey);
-    if (inflight) {
-      const data = await inflight;
-      return NextResponse.json(data);
-    }
-
     // Fetch data
     const fetchPromise = (async (): Promise<StatusResponse> => {
       try {
@@ -158,7 +161,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
         }
 
         // Load status data (vaults + facts)
-        const statusData = await loadStatusData(connection, dateMarkets, programId);
+        const nowSecs = Math.floor(Date.now() / 1000);
+        const statusData = await loadStatusData(connection, dateMarkets, programId, nowSecs);
 
         // Build invariant rows
         const markets: MarketInvariant[] = statusData.markets.map((market) => {

@@ -13,6 +13,7 @@ import { TestMarketToggle } from "@/components/ui";
 import { useAsync } from "@/components/use-async";
 import { useNow } from "@/components/use-now";
 import { partitionMarkets } from "@/lib/markets";
+import { etTradingDate } from "@/lib/time";
 import type { StatusResponse } from "@/app/api/status/route";
 
 /** YYYY-MM-DD format from YYYYMMDD */
@@ -23,10 +24,10 @@ function formatDate(yyyymmdd: number): string {
 
 /** Get trading date for yesterday (previous day in ET) */
 function getYesterdayET(): number {
-  const { etTradingDate } = require("@/lib/time");
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  return etTradingDate(yesterday);
+  const now = Date.now() / 1000; // unix seconds
+  const yesterdayUnixSecs = now - 24 * 3600;
+  // etTradingDate is imported at module level
+  return etTradingDate(yesterdayUnixSecs);
 }
 
 function Page() {
@@ -143,7 +144,7 @@ function Page() {
                   {
                     createdAt: m.createdAt > 0 ? m.createdAt : null,
                     settledAt: m.settledAt > 0 ? m.settledAt : null,
-                    settleSlot: m.settleSlot > 0 ? m.settleSlot : null,
+                    settleSlot: m.settleSlot > 0 ? BigInt(m.settleSlot) : null,
                     oracleSlot: m.oracleAsOf > 0 ? BigInt(m.oracleAsOf) : null,
                   },
                 ])
