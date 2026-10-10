@@ -19,6 +19,7 @@ import {
   confirmedStatus,
   intentButton,
   type IntentLabel,
+  orderKindRadio,
   priceInput,
   qtyInput,
   signButton,
@@ -29,6 +30,7 @@ const META_STRIKE_CENTS = 68_000n;
 
 type Step = {
   readonly intent: IntentLabel;
+  readonly kind: "market" | "limit";
   readonly qty: number;
   /** Price in cents of the side being traded (YES price for YES intents, NO price for NO). */
   readonly priceCents: number;
@@ -42,6 +44,7 @@ type Step = {
 const STEPS: readonly Step[] = [
   {
     intent: "Buy YES",
+    kind: "market",
     qty: 5,
     priceCents: 60,
     maker: { intent: "SELL_YES", kind: "limit", priceCents: 60, qty: 5n },
@@ -50,6 +53,7 @@ const STEPS: readonly Step[] = [
   },
   {
     intent: "Sell YES",
+    kind: "limit",
     qty: 5,
     priceCents: 55,
     maker: { intent: "BUY_YES", kind: "limit", priceCents: 55, qty: 5n },
@@ -58,6 +62,7 @@ const STEPS: readonly Step[] = [
   },
   {
     intent: "Buy NO",
+    kind: "market",
     qty: 3,
     priceCents: 55,
     maker: { intent: "BUY_YES", kind: "limit", priceCents: 45, qty: 3n },
@@ -66,6 +71,7 @@ const STEPS: readonly Step[] = [
   },
   {
     intent: "Sell NO",
+    kind: "limit",
     qty: 1,
     priceCents: 30,
     maker: { intent: "SELL_YES", kind: "limit", priceCents: 70, qty: 1n },
@@ -93,6 +99,7 @@ test.describe("Trade evidence collection (M2-06 AC5, UI-04 AC5-AC6)", () => {
       await makerOrder(chain, market, maker, step.maker);
 
       await intentButton(page, step.intent).click();
+      await orderKindRadio(page, step.kind).click();
       await priceInput(page).fill(String(step.priceCents));
       await qtyInput(page).fill(String(step.qty));
 

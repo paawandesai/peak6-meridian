@@ -32,14 +32,22 @@ This runs `03-trade-evidence.spec.ts` which:
 
 ### Lighthouse Accessibility Report
 
-The Lighthouse test requires the app to be running with a market available:
+The Lighthouse test requires a **production build** of the app running with a market available:
 
 ```bash
-# In one terminal: start validator and app
-make dev
+# In one terminal: start validator and seed a market
+cd tests/e2e
+pnpm run lifecycle --cluster localnet --phase init-only
+# Note the market address from output
 
-# In another terminal: run Lighthouse
-pnpm --filter e2e run lighthouse
+# In another terminal: build and start production app
+cd app
+pnpm build
+NEXT_PUBLIC_CLUSTER=localnet NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 pnpm start
+
+# In a third terminal: run Lighthouse with the market URL
+cd tests/e2e
+LIGHTHOUSE_URL=http://localhost:3000/trade/<market-address> pnpm run lighthouse
 ```
 
 This generates a Lighthouse report in `tests/e2e/playwright-report/lighthouse/` and validates accessibility ≥ 90.

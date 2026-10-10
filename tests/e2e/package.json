@@ -13,7 +13,7 @@
     "settlement-evidence": "tsx --env-file-if-exists=../../.env src/settlement-evidence.ts",
     "test:ui": "playwright test",
     "test:evidence": "mkdir -p playwright-report/evidence && playwright test 03-trade-evidence",
-    "lighthouse": "lhci autorun --config=lighthouse.config.js"
+    "lighthouse": "lhci autorun --config=lighthouse.config.cjs"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.31.1",
