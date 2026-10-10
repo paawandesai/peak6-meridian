@@ -65,7 +65,7 @@ make deploy-devnet  # Deploys program, creates test-USDC mint, initializes confi
 ## Demo: Trading a Binary Contract
 
 > **Note:** App deployment pending M4-03. Use `make dev` for local testing.  
-> **Walkthrough with screenshots:** [docs/demo.md](docs/demo.md)
+> **Walkthrough with screenshots:** [docs/demo.md](docs/demo.md) (Buy YES screenshot pending !49 merge)
 
 To test locally, run `make dev` and visit `http://localhost:3000`:
 

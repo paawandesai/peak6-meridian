@@ -7,6 +7,8 @@
 #
 # AC2: Validator :8899 and app :3000 both listening within 15 minutes (900s).
 #
+# NOTE: Ubuntu 24.04 CI evidence will be provided by !82 (CI fresh-clone job, currently PARKED).
+#
 # Usage (MR verification - test this specific commit):
 #   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=d8d0ef6 .
 #
