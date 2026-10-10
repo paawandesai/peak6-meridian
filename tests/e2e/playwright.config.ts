@@ -11,7 +11,9 @@ const APP_PORT = Number(process.env.E2E_APP_PORT ?? "3100");
 export default defineConfig({
   testDir: "playwright",
   testMatch: "**/*.spec.ts",
-  globalSetup: "./playwright/global-setup.ts",
+  globalSetup: process.env.E2E_DEMO_WALLET
+    ? "./playwright/global-setup-devnet.ts"
+    : "./playwright/global-setup.ts",
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -27,17 +29,5 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [
-    {
-      name: "localnet",
-      testMatch: /^(?!.*demo-wallet).*\.spec\.ts$/,
-      use: { browserName: "chromium" },
-    },
-    {
-      name: "devnet",
-      testMatch: "**/demo-wallet.spec.ts",
-      globalSetup: "./playwright/global-setup-devnet.ts",
-      use: { browserName: "chromium" },
-    },
-  ],
+  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
 });

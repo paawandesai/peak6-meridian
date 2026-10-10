@@ -2,8 +2,9 @@ import { test, expect } from "@playwright/test";
 import { confirmedStatus, intentButton, priceInput, qtyInput, signButton } from "./support/ui";
 
 // AC1: Demo wallet test runs with NEXT_PUBLIC_CLUSTER=devnet against the local harness.
-// Uses global-setup-devnet.ts (via the "devnet" project in playwright.config.ts) which starts
-// the app with NEXT_PUBLIC_CLUSTER=devnet so registerDemoWallet() registers (AC6 guard passes).
+// Run with E2E_DEMO_WALLET=1 to use global-setup-devnet.ts (starts app with devnet cluster).
+// Skipped in the default `make e2e` (localnet) since registerDemoWallet() requires devnet (AC6).
+test.skip(!process.env.E2E_DEMO_WALLET, "Demo wallet test requires E2E_DEMO_WALLET=1");
 
 test.describe("Demo wallet (M4-07 AC9)", () => {
   test("offers demo wallet, connects, funds, and places a trade", async ({ page }) => {
@@ -45,9 +46,9 @@ test.describe("Demo wallet (M4-07 AC9)", () => {
     expect(sigCount, "AC9: exactly one auto-signed transaction").toBe(1);
   });
 
-  test("demo wallet not offered on non-devnet", async ({ page }) => {
-    // AC6: This test would need NEXT_PUBLIC_CLUSTER=localnet, but this spec runs under the devnet
-    // project. The guard behavior (no registration on non-devnet) is verified by unit tests.
-    test.skip(true, "AC6 guard tested in unit tests; this e2e spec runs devnet-only");
+  test("demo wallet not offered on non-devnet", async () => {
+    // AC6: This e2e would need NEXT_PUBLIC_CLUSTER=localnet, but the spec runs with E2E_DEMO_WALLET=1
+    // (devnet). The AC6 guard (no registration on non-devnet) is verified by unit tests.
+    test.skip(true, "AC6 guard tested in unit tests; e2e runs devnet-only via E2E_DEMO_WALLET");
   });
 });
