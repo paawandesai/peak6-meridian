@@ -23,7 +23,9 @@
 //! devnet/mainnet as a future integration option (noted in D-055).
 
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::sysvar::instructions::load_instruction_at_checked;
+use anchor_lang::solana_program::sysvar::instructions::{
+    load_current_index_checked, load_instruction_at_checked,
+};
 
 use crate::errors::MeridianError;
 use crate::oracle::CloseReading;
@@ -365,7 +367,17 @@ pub fn read_pyth_lazer_close(
     let ed25519_ix =
         load_instruction_at_checked(ed25519_ix_index as usize, instructions_sysvar)?;
 
-    // Check 1: Program ID must be Ed25519Program
+    // Check 1: Ed25519 instruction must have already executed (prevent sysvar bypass)
+    // Require ed25519_ix_index < current_index to ensure the signature was verified
+    // before this instruction runs. An attacker cannot supply a later unverified ix.
+    let current_index = u16::try_from(load_current_index_checked(instructions_sysvar)?)
+        .map_err(|_| MeridianError::OracleInvalidValue)?;
+    require!(
+        ed25519_ix_index < current_index,
+        MeridianError::OracleInvalidValue
+    );
+
+    // Check 2: Program ID must be Ed25519Program
     require_keys_eq!(
         ed25519_ix.program_id,
         ED25519_PROGRAM_ID,
@@ -399,21 +411,23 @@ pub fn read_pyth_lazer_close(
     let message_data_size = u16::from_le_bytes(read_array(ix_data, 12)?) as usize;
     let message_ix_index = u16::from_le_bytes(read_array(ix_data, 14)?);
 
-    // Check 2: All offsets must point to this same instruction (prevent cross-ix attacks)
+    // Check 3: All offsets must point to this same instruction (prevent cross-ix attacks)
+    // Accept u16::MAX as sentinel for "this instruction" (web3.js/new_ed25519_instruction)
+    let is_valid_ix_index = |ix: u16| ix == ed25519_ix_index || ix == u16::MAX;
     require!(
-        signature_ix_index == ed25519_ix_index,
+        is_valid_ix_index(signature_ix_index),
         MeridianError::OracleInvalidValue
     );
     require!(
-        public_key_ix_index == ed25519_ix_index,
+        is_valid_ix_index(public_key_ix_index),
         MeridianError::OracleInvalidValue
     );
     require!(
-        message_ix_index == ed25519_ix_index,
+        is_valid_ix_index(message_ix_index),
         MeridianError::OracleInvalidValue
     );
 
-    // Check 3: Extract pubkey and verify it matches pinned signer
+    // Check 4: Extract pubkey and verify it matches pinned signer
     let pubkey_end = public_key_offset
         .checked_add(32)
         .ok_or(MeridianError::MathOverflow)?;
@@ -428,7 +442,7 @@ pub fn read_pyth_lazer_close(
         MeridianError::OracleFeedHashMismatch
     );
 
-    // Check 4: Extract message data (EXACTLY the signed payload, not attacker-controlled)
+    // Check 5: Extract message data (EXACTLY the signed payload, not attacker-controlled)
     let message_end = message_data_offset
         .checked_add(message_data_size)
         .ok_or(MeridianError::MathOverflow)?;
@@ -793,4 +807,10 @@ mod tests {
         // Should fail on unknown property type (fail-closed)
         assert!(parse_pyth_lazer_payload(&payload[..20]).is_err());
     }
+
+    // Note: Ed25519 sysvar bypass test (ed25519_ix_index >= current_index)
+    // requires integration test infrastructure with Instructions sysvar.
+    // Security invariant: read_pyth_lazer_close requires ed25519_ix_index < current_index
+    // to prevent attacker from supplying later unverified instruction with forged payload.
+    // Unit-level coverage: check_pyth_reading validates all payload fields once parsed.
 }
