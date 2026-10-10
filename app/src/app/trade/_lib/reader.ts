@@ -10,11 +10,11 @@ import {
   marketAddresses,
 } from "@meridian/client";
 import { type Connection, PublicKey } from "@solana/web3.js";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
 import { sharedConnection } from "@/lib/rpc";
 
 import type { BookOrder, FullBook } from "./book-view";
 import type { PublicConfig } from "@/lib/config";
-import { fetchUsdcBalance } from "@/lib/chain";
 import type { MarketRow } from "@/lib/markets";
 
 export type WalletView = {
@@ -116,20 +116,47 @@ export function createTradeReader(config: PublicConfig, row: MarketRow): TradeRe
       return decodeBook(await program.account.book.fetch(addresses.book));
     },
     async getWallet(owner) {
+      // P0-4: fetch 3 ATAs + OpenOrders in one getMultipleAccounts call
       const oo = findOpenOrdersPda(market, owner, config.programId).address;
-      const [yes, no, usdc, account] = await Promise.all([
-        fetchUsdcBalance(connection, owner, addresses.yesMint),
-        fetchUsdcBalance(connection, owner, addresses.noMint),
-        mint().then((m) => fetchUsdcBalance(connection, owner, m)),
-        program.account.openOrders.fetchNullable(oo),
+      const usdcMint = await mint();
+      const [yesAta, noAta, usdcAta] = await Promise.all([
+        getAssociatedTokenAddress(addresses.yesMint, owner),
+        getAssociatedTokenAddress(addresses.noMint, owner),
+        getAssociatedTokenAddress(usdcMint, owner),
       ]);
-      return {
-        yes,
-        no,
-        usdc,
-        freeUsdc: account === null ? 0n : BigInt(account.freeUsdc.toString()),
-        freeYes: account === null ? 0n : BigInt(account.freeYes.toString()),
+
+      const accounts = await connection.getMultipleAccountsInfo([yesAta, noAta, usdcAta, oo]);
+
+      // Parse token accounts (accounts 0-2). SPL token layout: amount at offset 64 (u64 LE).
+      // Throw on decode failures so Trade's fail-closed logic (holdings = null) triggers.
+      const parseTokenBalance = (accountInfo: typeof accounts[0]): bigint => {
+        if (!accountInfo) return 0n;
+        const data = accountInfo.data;
+        if (data.length < 72) {
+          throw new Error("SPL token account data too short");
+        }
+        // data might be Uint8Array (no readBigUInt64LE), convert to Buffer
+        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        return buf.readBigUInt64LE(64);
       };
+
+      const yes = parseTokenBalance(accounts[0] ?? null);
+      const no = parseTokenBalance(accounts[1] ?? null);
+      const usdc = parseTokenBalance(accounts[2] ?? null);
+
+      // Parse OpenOrders account (account 3). Let decode failures throw.
+      const ooAccount = accounts[3];
+      let freeUsdc = 0n;
+      let freeYes = 0n;
+      if (ooAccount) {
+        // Program camelCases IDL account names: "openOrders" not "OpenOrders"
+        const data = Buffer.isBuffer(ooAccount.data) ? ooAccount.data : Buffer.from(ooAccount.data);
+        const decoded = program.coder.accounts.decode("openOrders", data);
+        freeUsdc = BigInt(decoded.freeUsdc.toString());
+        freeYes = BigInt(decoded.freeYes.toString());
+      }
+
+      return { yes, no, usdc, freeUsdc, freeYes };
     },
     getOpenTime: () => fetchOpenTime(connection, market),
   };

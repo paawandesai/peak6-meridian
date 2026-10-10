@@ -31,7 +31,6 @@ const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 const NOW = utc("2026-10-08T19:00:00Z"); // 15:00 ET
 const TODAY = 20261008;
 const CLOSE = BigInt(utc("2026-10-08T20:00:00Z")); // 16:00 ET
-const OPEN = utc("2026-10-08T13:00:00Z"); // 09:00 ET
 
 type Q = {
   yesBid: number | null;
@@ -65,7 +64,6 @@ function sources(options: {
         }),
       fetchBooks: () => Promise.resolve(options.books ?? ({} as never)),
     },
-    openTimes: () => Promise.resolve(options.open ?? {}),
   };
 }
 
@@ -260,10 +258,10 @@ describe("states (AC3): every state shows its words", () => {
 });
 
 describe("open time, close time and countdown to the next transition (D-050)", () => {
-  it("shows the creation time and the close time in ET (no countdown for Open status)", async () => {
-    renderView([m(1)], { sources: sources({ open: { [addr(1)]: OPEN } }) });
+  it("Markets page shows dash for open time (P0-4: only Trade fetches real creation time)", async () => {
+    renderView([m(1)]);
     const row = await rowFor("$180");
-    await vi.waitFor(() => expect(row).toHaveTextContent("Opened 09:00 ET · closes 16:00 ET"));
+    await vi.waitFor(() => expect(row).toHaveTextContent("Opened — · closes 16:00 ET"));
     // Open status shows no countdown (only badge shows "closes HH:MM ET")
     expect(row.textContent).not.toMatch(/Closing soon in/);
   });
