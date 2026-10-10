@@ -83,7 +83,7 @@ export function badgeProps(
   const close = market.closeTs;
   switch (status) {
     case "Open":
-      return ctx.paused ? { state: "paused" } : { state: "open" };
+      return ctx.paused ? { state: "paused" } : { state: "open", closesAt: formatEtHm(close) };
     case "ClosingSoon":
       return ctx.paused
         ? { state: "paused" }
