@@ -121,8 +121,9 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
 
         print("Validator ready")
 
-        # Create payer keypair
-        payer_path = Path("target/test-payer.json")
+        # Create payer keypair (use absolute path for e2e script)
+        repo_root = Path.cwd()
+        payer_path = repo_root / "target" / "test-payer.json"
         if not payer_path.exists():
             subprocess.run(
                 ["solana-keygen", "new", "--no-bip39-passphrase", "-s", "-o", str(payer_path)],
@@ -143,7 +144,7 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
         env.update(
             {
                 "ANCHOR_PROVIDER_URL": rpc_url,
-                "ANCHOR_WALLET": str(payer_path),
+                "ANCHOR_WALLET": str(payer_path.resolve()),
                 "E2E_PROGRAM_ID": program_id,
                 "E2E_SEED_ONLY": "1",
                 "E2E_CLOSE_IN_SECS": "3600",
@@ -152,7 +153,7 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
 
         seed_result = subprocess.run(
             ["pnpm", "--filter", "e2e", "run", "lifecycle"],
-            cwd=str(Path.cwd()),
+            cwd=str(repo_root),
             env=env,
             capture_output=True,
             text=True,

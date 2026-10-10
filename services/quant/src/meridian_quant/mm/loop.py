@@ -466,7 +466,9 @@ class MarketMakerLoop:
                     mm_orders = [o for o in orders if o.owner == self._mm_owner]
                     for order in mm_orders:
                         try:
-                            await self._order_client.cancel_order(market.market, order.order_id, self._mm_owner)
+                            await self._order_client.cancel_order(
+                                market.market, order.order_id, self._mm_owner
+                            )
                         except Exception:
                             logger.exception(f"Failed to cancel orphaned Bid {order.order_id}")
                 except Exception:

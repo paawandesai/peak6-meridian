@@ -489,6 +489,10 @@ class ChainOrderClient:
             tx = Transaction([self.payer], msg, blockhash)
             sig = await self.rpc.send_transaction(tx)
             await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
+            # Refetch to ensure account is indexed before mint_pair (best effort)
+            yes_info = await self.rpc.get_account_info(user_yes)
+            if yes_info.value is None:
+                logger.warning(f"YES ATA creation confirmed but refetch returned None: {user_yes}")
 
         no_info = await self.rpc.get_account_info(user_no)
         if no_info.value is None:
@@ -501,6 +505,10 @@ class ChainOrderClient:
             tx = Transaction([self.payer], msg, blockhash)
             sig = await self.rpc.send_transaction(tx)
             await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
+            # Refetch to ensure account is indexed before mint_pair (best effort)
+            no_info = await self.rpc.get_account_info(user_no)
+            if no_info.value is None:
+                logger.warning(f"NO ATA creation confirmed but refetch returned None: {user_no}")
 
         # IDL: user is signer but not writable
         accounts = [
