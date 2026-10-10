@@ -22,7 +22,8 @@ from typing import Protocol
 
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Commitment, Confirmed, Finalized
-from solana.rpc.types import MemcmpOpts
+from solana.rpc.core import RPCException
+from solana.rpc.types import MemcmpOpts, TxOpts
 from solders.hash import Hash
 from solders.instruction import AccountMeta, Instruction
 from solders.keypair import Keypair
@@ -37,6 +38,12 @@ from spl.token.instructions import create_associated_token_account
 from .types import MarketState, RestingOrder, Side
 
 logger = logging.getLogger(__name__)
+
+
+def _is_blockhash_not_found(err: RPCException) -> bool:
+    text = str(err)
+    return "BlockhashNotFound" in text or "Blockhash not found" in text
+
 
 # SPL Token program
 TOKEN_PROGRAM_ID = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
@@ -391,7 +398,7 @@ class ChainOrderClient:
         now = self._monotonic()
         if self._blockhash is not None and now - self._blockhash[1] < BLOCKHASH_TTL_SECS:
             return self._blockhash[0]
-        resp = await self.rpc.get_latest_blockhash()
+        resp = await self.rpc.get_latest_blockhash(Confirmed)
         blockhash = resp.value.blockhash
         self._blockhash = (blockhash, now)
         return blockhash
@@ -399,12 +406,29 @@ class ChainOrderClient:
     async def _send_and_confirm(
         self, instructions: list[Instruction], commitment: Commitment = Confirmed
     ) -> Signature:
-        """Sign, send and confirm one transaction; raise if it fails or times out."""
+        """Sign, send and confirm one transaction; raise if it fails or times out.
+
+        The blockhash is fetched and preflighted at `confirmed`. A load-balanced RPC can still
+        route the preflight to a node that hasn't seen the cached blockhash yet ("Blockhash not
+        found"): then the blockhash is refreshed and the send retried exactly once.
+        """
+        try:
+            sig = await self._sign_and_send(instructions)
+        except RPCException as err:
+            if not _is_blockhash_not_found(err):
+                raise
+            logger.warning("Blockhash not found at preflight; refreshing it and retrying once")
+            self._blockhash = None
+            sig = await self._sign_and_send(instructions)
+        await self._confirm(sig, commitment)
+        return sig
+
+    async def _sign_and_send(self, instructions: list[Instruction]) -> Signature:
         blockhash = await self._recent_blockhash()
         message = Message.new_with_blockhash(instructions, self.payer.pubkey(), blockhash)
         transaction = Transaction([self.payer], message, blockhash)
-        sig: Signature = (await self.rpc.send_transaction(transaction)).value
-        await self._confirm(sig, commitment)
+        opts = TxOpts(preflight_commitment=Confirmed)
+        sig: Signature = (await self.rpc.send_transaction(transaction, opts=opts)).value
         return sig
 
     async def _confirm(self, sig: Signature, commitment: Commitment) -> None:
