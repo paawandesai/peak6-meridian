@@ -878,3 +878,174 @@ fn post_redstone_price_fails_older_than_stored() {
         meridian::errors::MeridianError::RedStonePackageOlderThanStored,
     );
 }
+
+#[test]
+fn settle_market_fails_package_too_late_at_settle() {
+    // AC2 / AB-03: stored timestamp after settling market's window end → RedStonePackageTooLate
+    // Tests settle-side validation when post used a later market
+    let mut harness = MarketHarness::new();
+    let admin = harness.harness.admin.insecure_clone();
+
+    // Setup RedStone oracle config
+    let signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
+    let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
+    let signing_signers = &signers[..3];
+
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+    let params = meridian::SetOracleConfigParams {
+        signers: addresses.clone(),
+        signer_threshold: THRESHOLD,
+        max_package_delay_secs: 600,
+    };
+    let ix = meridian::instruction::SetOracleConfig { params };
+    let accounts = meridian::accounts::SetOracleConfig {
+        config: config_pda(),
+        oracle_config: oracle_config_pda,
+        admin: admin.pubkey(),
+        system_program: system_program::ID,
+    };
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
+    expect_success(&result);
+
+    let payer = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    let ticker = symbol("NVDA");
+
+    // Market A: early close_ts
+    let market_a_close_ts = BASE_CLOSE_TS;
+    harness.harness.set_unix_timestamp(market_a_close_ts - 3600);
+    let market_a_args = MarketArgs {
+        ticker,
+        strike_cents: 200_000,
+        trading_date: BASE_TRADING_DATE,
+        close_ts: market_a_close_ts,
+    };
+    let market_a_addrs = harness.create_market(&market_a_args);
+
+    // Market B: same ticker, much later close_ts (e.g., next day)
+    let market_b_close_ts = market_a_close_ts + 86400; // +1 day
+    harness.harness.set_unix_timestamp(market_b_close_ts - 3600);
+    let market_b_args = MarketArgs {
+        ticker,
+        strike_cents: 205_000, // Different strike for different PDA
+        trading_date: BASE_TRADING_DATE,
+        close_ts: market_b_close_ts,
+    };
+    let market_b_addrs = harness.create_market(&market_b_args);
+
+    // Advance past Market B close
+    harness.harness.set_unix_timestamp(market_b_close_ts + 300);
+
+    // Post RedStone price for Market B's window (B close + 700s, AFTER B's 600s window end)
+    // This is after B's window but we use Market B to post so post_redstone_price allows it
+    // Actually, post won't allow it either. Let me use Market B close + 500s (within window)
+    // Then try to settle Market A, whose window ended long ago
+
+    // Actually, the test case is: post with a LATE market, then settle an EARLY market
+    // The stored timestamp is valid for the late market but TOO LATE for the early market
+
+    // Reverse: Market A is LATE, Market B is EARLY
+    // Post using late Market A (timestamp valid for A), try to settle early Market B
+    // The timestamp is too late for B's window
+
+    // Let me restructure: Market A (early close), Market B (late close)
+    // Post with Market B at timestamp that's valid for B but would be too late for A
+    // Then try to settle Market A → should fail with RedStonePackageTooLate
+
+    // Wait, that doesn't work either because Market A already closed before we posted.
+
+    // Let me think differently:
+    // Market A: close_ts = X
+    // Post at timestamp X + 700s using Market A → fails (too late)
+    //
+    // So I need to post at a timestamp that's valid for one market but too late for another.
+    // Market A: close_ts = 1000, window = [1000, 1600]
+    // Market B: close_ts = 500, window = [500, 1100]
+    // Post at timestamp 1500 using Market A (valid: 1000 <= 1500 <= 1600)
+    // Try to settle Market B → 1500 > 1100, so RedStonePackageTooLate
+
+    // But this requires Market B to close BEFORE Market A, which is backwards from my setup.
+    // Let me swap them:
+
+    // Market A: early close (BASE_CLOSE_TS)
+    // Market B: late close (BASE_CLOSE_TS + 86400)
+    // Post timestamp valid for B (B_close + 500s) using Market B
+    // This timestamp is way after A's window end (A_close + 600s)
+    // Try to settle Market A → should fail with RedStonePackageTooLate
+
+    let timestamp_ms = market_b_close_ts * 1000 + 500_000; // Valid for B (within 600s)
+    // This is market_a_close_ts + 86400 + 500s, which is >> market_a_close_ts + 600s
+    let value = 2050_0000_0000u128;
+    let mut builder = RedstonePayloadBuilder::new(
+        std::str::from_utf8(&ticker).unwrap().trim_end_matches('\0'),
+        value,
+        timestamp_ms,
+    );
+    for signer in signing_signers {
+        builder = builder.add_signer(signer.clone());
+    }
+    let payload = builder.build();
+
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
+
+    let post_ix = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        payload,
+    };
+    let post_accounts = meridian::accounts::PostRedstonePrice {
+        oracle_config: oracle_config_pda,
+        market: market_b_addrs.market, // Post using Market B (late close)
+        redstone_price: price_pda,
+        payer: payer.pubkey(),
+        system_program: system_program::ID,
+    };
+    let post_instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: post_accounts.to_account_metas(None),
+        data: post_ix.data(),
+    };
+    let post_result = harness.harness.send(post_instruction, &[&payer]);
+    expect_success(&post_result);
+
+    // Try to settle Market A (early close) - timestamp is after A's window end
+    let settler = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    let settle_ix = meridian::instruction::SettleMarket {};
+    let settle_accounts = meridian::accounts::SettleMarket {
+        config: config_pda(),
+        market: market_a_addrs.market,
+        feed_tiingo: Pubkey::default(),
+        feed_twelve_data: Pubkey::default(),
+        redstone_price: Some(price_pda),
+        oracle_config: Some(oracle_config_pda),
+        payer: settler.pubkey(),
+    };
+    let settle_instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: settle_accounts.to_account_metas(None),
+        data: settle_ix.data(),
+    };
+    let settle_result = harness.harness.send(settle_instruction, &[&settler]);
+    // timestamp_ms >> market_a window end, so settle-side RedStonePackageTooLate
+    common::assert_meridian_error(
+        &settle_result,
+        meridian::errors::MeridianError::RedStonePackageTooLate,
+    );
+}
