@@ -9,7 +9,7 @@ import pytest
 from solana.rpc.async_api import AsyncClient
 from solders.account import Account
 from solders.pubkey import Pubkey
-from solders.rpc.responses import GetAccountInfoResp, GetProgramAccountsResp, RpcResponseContext
+from solders.rpc.responses import GetAccountInfoResp, RpcResponseContext
 
 from meridian_quant.mm.chain import ChainMarketSource, ChainOrderClient
 

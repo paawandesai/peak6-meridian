@@ -63,17 +63,17 @@ describe("SettledRow", () => {
     const market: MarketRow = { ...baseMarket, settled: false };
     const onRedeem = vi.fn();
 
-    expect(() => render(<SettledRow market={market} redeemLabel="Redeem" onRedeem={onRedeem} />)).toThrow(
-      /requires a settled market/,
-    );
+    expect(() =>
+      render(<SettledRow market={market} redeemLabel="Redeem" onRedeem={onRedeem} />),
+    ).toThrow(/requires a settled market/);
   });
 
   it("throws when outcome is None", () => {
     const market: MarketRow = { ...baseMarket, outcome: "None" };
     const onRedeem = vi.fn();
 
-    expect(() => render(<SettledRow market={market} redeemLabel="Redeem" onRedeem={onRedeem} />)).toThrow(
-      /requires a settled market/,
-    );
+    expect(() =>
+      render(<SettledRow market={market} redeemLabel="Redeem" onRedeem={onRedeem} />),
+    ).toThrow(/requires a settled market/);
   });
 });

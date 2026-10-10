@@ -64,7 +64,7 @@ export function FundToast({ amountFunded, onDismiss }: FundToastProps) {
         className="text-mer-sm text-mer-ink-muted hover:text-mer-ink"
       >
         ✕
-        </button>
+      </button>
     </div>
   );
 }

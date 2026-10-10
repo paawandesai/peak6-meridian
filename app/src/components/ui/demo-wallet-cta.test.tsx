@@ -7,7 +7,9 @@ describe("DemoWalletCTA", () => {
     const onConnect = vi.fn();
     render(<DemoWalletCTA onConnect={onConnect} />);
 
-    expect(screen.getByRole("button", { name: "Try the demo wallet (devnet)" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try the demo wallet (devnet)" }),
+    ).toBeInTheDocument();
   });
 
   it("shows connecting text when busy", () => {

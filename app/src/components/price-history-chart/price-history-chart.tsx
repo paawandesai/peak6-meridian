@@ -163,7 +163,11 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
       {status === "error" && (
         <p className="text-mer-sm text-mer-ink-muted">Could not load price history for {ticker}.</p>
       )}
-      <div ref={containerRef} className="w-full" style={{ display: status === "ready" ? "block" : "none" }} />
+      <div
+        ref={containerRef}
+        className="w-full"
+        style={{ display: status === "ready" ? "block" : "none" }}
+      />
     </div>
   );
 }

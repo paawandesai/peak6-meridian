@@ -77,7 +77,9 @@ describe("pause control (UI-08 AC2, P1-8)", () => {
     expect(await screen.findByText(/Running:/)).toBeInTheDocument();
     expect(screen.getByText(/all actions available/)).toBeInTheDocument();
     expect(
-      screen.getByText(/When paused: trading and minting stopped; cancel, withdraw and redeem still work/),
+      screen.getByText(
+        /When paused: trading and minting stopped; cancel, withdraw and redeem still work/,
+      ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Pause trading" }));
     expect(await screen.findByText("Confirmed in slot 42".replace("42", "43"))).toBeInTheDocument();
