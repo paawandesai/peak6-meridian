@@ -637,9 +637,9 @@ fn post_redstone_price_tampered_feed_id_fails() {
     let mut payload = builder.build();
 
     // Tamper with feed_id bytes in first package: first 32 bytes
-    // Flip a byte in the ticker part (offset 4 = 5th byte, in "NVDA")
-    if payload.len() > 4 {
-        payload[4] ^= 0xFF;
+    // Flip a byte in the ticker part (offset 2 = 3rd byte, 'D' in "NVDA")
+    if payload.len() > 2 {
+        payload[2] ^= 0xFF;
     }
 
     let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
@@ -675,8 +675,8 @@ fn post_redstone_price_tampered_feed_id_fails() {
     let result = harness
         .harness
         .send_with_budget(instruction, &[&payer], 400_000);
-    // Tampering feed_id can break parsing structure
-    assert_meridian_error_with_budget(&result, MeridianError::RedStoneMalformedPayload);
+    // Tampered feed_id doesn't match canonical, parser rejects with RedStoneFeedIdMismatch
+    assert_meridian_error_with_budget(&result, MeridianError::RedStoneFeedIdMismatch);
 }
 
 #[test]
