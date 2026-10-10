@@ -28,6 +28,16 @@ vi.mock("../price-history-chart/price-history-chart", () => ({
   PriceHistoryChart: () => null,
 }));
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/",
+}));
+
 const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 const NOW = utc("2026-10-08T19:00:00Z"); // 15:00 ET
 const TODAY = 20261008;
