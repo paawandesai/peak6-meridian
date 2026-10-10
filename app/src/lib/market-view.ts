@@ -6,7 +6,6 @@ import { complementPriceCents, type BookQuotes } from "@meridian/client";
 
 import { formatUsdCents, scaledToCentsFloor } from "./display";
 import {
-  CLOSING_SOON_SECS,
   SETTLEMENT_DELAYED_SECS,
   SETTLING_START_SECS,
   type MarketRow,

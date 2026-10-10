@@ -8,6 +8,10 @@ const NOW = 1_800_000_000;
 /** The ET trading date of `NOW` (2027-01-15 ET): UI-03 AC1 scopes the page to the active date. */
 const TODAY = 20270115;
 
+vi.mock("./price-history-chart/price-history-chart", () => ({
+  PriceHistoryChart: () => null,
+}));
+
 beforeAll(() => {
   // TickerInsight renders DistributionChart (Recharts); jsdom needs ResizeObserver.
   vi.stubGlobal(
