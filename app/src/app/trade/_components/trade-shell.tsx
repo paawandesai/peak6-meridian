@@ -4,11 +4,11 @@ import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useMemo } from "react";
 
 import { TradeView } from "./trade-view";
-import { TickerInsight } from "@/components/fair-value/ticker-insight";
 import { createTradeReader } from "../_lib/reader";
 import { createTradeActions } from "../_lib/tx";
 import { AppHeader } from "@/components/app-header";
 import { FaucetButton } from "@/components/faucet-button";
+import { TickerInsight } from "@/components/fair-value/ticker-insight";
 import { Providers } from "@/components/providers";
 import { useReader } from "@/components/reader-context";
 import { useAsync } from "@/components/use-async";
@@ -60,6 +60,9 @@ function Page({ address }: { readonly address: string }) {
   } else if (market === undefined || tradeReader === null) {
     body = <p role="alert">{NOT_FOUND_TEXT}</p>;
   } else {
+    const ladder = markets.value.filter(
+      (m) => m.ticker === market.ticker && m.tradingDate === market.tradingDate,
+    );
     body = (
       <div className="grid gap-mer-8">
         <TradeView
