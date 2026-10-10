@@ -106,6 +106,27 @@ describe("pause banner slot", () => {
   });
 });
 
+describe("demo wallet CTA (P0-6 US-01, FR-23)", () => {
+  it("clicking the CTA calls select with DEMO_WALLET_NAME", async () => {
+    const selectMock = vi.fn();
+    const walletAdapterModule = await import("@solana/wallet-adapter-react");
+    const originalUseWallet = walletAdapterModule.useWallet;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (walletAdapterModule.useWallet as any) = () => ({ publicKey: null, select: selectMock });
+
+    const { DEMO_WALLET_NAME } = await import("@/lib/demo-wallet");
+    header();
+
+    const cta = screen.getByTestId("demo-wallet-cta");
+    cta.click();
+
+    expect(selectMock).toHaveBeenCalledWith(DEMO_WALLET_NAME);
+
+    // Restore
+    walletAdapterModule.useWallet = originalUseWallet;
+  });
+});
+
 describe("navigation and layout (AC5)", () => {
   it("lists Markets, Portfolio, History and Status as links and marks the current page", () => {
     header({ currentPath: "/portfolio" });

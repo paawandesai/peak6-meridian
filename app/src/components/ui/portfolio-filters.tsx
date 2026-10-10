@@ -1,18 +1,22 @@
 /**
  * Portfolio filters and totals line (P0-6 FR-19).
  * Three tabs: Open / Resting orders / Closed
- * Totals: USDC balance, redeemable now, unrealized P&L
+ * Totals: USDC balance, redeemable now, unrealized P&L, realized P&L
  */
+
+import { formatUsdSigned, formatUsdcBalance } from "@meridian/client";
 
 export type FilterTab = "open" | "resting" | "closed";
 
 export type PortfolioTotals = {
   /** USDC balance in base units (6 decimals). */
-  readonly usdcBalance: bigint;
+  readonly usdcBalance: bigint | null;
   /** Amount redeemable from settled markets (USDC base units). */
   readonly redeemableNow: bigint;
-  /** Unrealized P&L in cents (can be negative). */
+  /** Unrealized P&L in USDC base units (can be negative). Name is legacy. */
   readonly unrealizedCents: bigint;
+  /** Realized P&L in USDC base units (can be negative). */
+  readonly realizedCents: bigint;
 };
 
 export type PortfolioFiltersProps = {
@@ -20,30 +24,6 @@ export type PortfolioFiltersProps = {
   readonly onTabChange: (tab: FilterTab) => void;
   readonly totals: PortfolioTotals;
 };
-
-/**
- * Format USDC from base units to dollar string.
- * E.g., 1_000_000n → "$1.00"
- */
-function formatUSDC(baseUnits: bigint): string {
-  const dollars = Number(baseUnits) / 1_000_000;
-  return `$${dollars.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-/**
- * Format P&L cents to dollar string with sign.
- * E.g., 12345n → "+$123.45", -500n → "-$5.00"
- */
-function formatPnL(cents: bigint): string {
-  const dollars = Number(cents) / 100;
-  const formatted = Math.abs(dollars).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  if (cents > 0n) return `+$${formatted}`;
-  if (cents < 0n) return `-$${formatted}`;
-  return `$${formatted}`;
-}
 
 const TAB_LABELS: Record<FilterTab, string> = {
   open: "Open",
@@ -57,24 +37,30 @@ export function PortfolioFilters({ activeTab, onTabChange, totals }: PortfolioFi
   return (
     <div className="grid gap-mer-3" data-testid="portfolio-filters">
       {/* Totals line */}
-      <div className="flex flex-wrap items-baseline gap-x-mer-4 gap-y-mer-2 text-mer-sm">
-        <div>
-          <span className="text-mer-ink-muted">USDC: </span>
-          <span className="font-semibold">{formatUSDC(totals.usdcBalance)}</span>
-        </div>
-        <div>
-          <span className="text-mer-ink-muted">Redeemable: </span>
-          <span className="font-semibold">{formatUSDC(totals.redeemableNow)}</span>
-        </div>
-        <div>
-          <span className="text-mer-ink-muted">Unrealized: </span>
+      <p className="flex flex-wrap items-center gap-x-mer-4 gap-y-mer-1" aria-label="Totals">
+        <span className="mer-num">
+          {totals.usdcBalance === null ? "test-USDC —" : formatUsdcBalance(totals.usdcBalance)}
+        </span>
+        <span>
+          Redeemable now <span className="mer-num">{formatUsdSigned(totals.redeemableNow)}</span>
+        </span>
+        <span>
+          Unrealized{" "}
           <span
-            className={`font-semibold ${totals.unrealizedCents > 0n ? "text-mer-gain" : totals.unrealizedCents < 0n ? "text-mer-loss" : ""}`}
+            className={`mer-num ${totals.unrealizedCents > 0n ? "text-mer-gain" : totals.unrealizedCents < 0n ? "text-mer-loss" : ""}`}
           >
-            {formatPnL(totals.unrealizedCents)}
+            {formatUsdSigned(totals.unrealizedCents, "always")}
           </span>
-        </div>
-      </div>
+        </span>
+        <span>
+          Realized{" "}
+          <span
+            className={`mer-num ${totals.realizedCents > 0n ? "text-mer-gain" : totals.realizedCents < 0n ? "text-mer-loss" : ""}`}
+          >
+            {formatUsdSigned(totals.realizedCents, "always")}
+          </span>
+        </span>
+      </p>
 
       {/* Filter tabs */}
       <div role="tablist" className="flex gap-mer-2">
@@ -95,6 +81,9 @@ export function PortfolioFilters({ activeTab, onTabChange, totals }: PortfolioFi
           </button>
         ))}
       </div>
+      <p className="text-mer-xs text-mer-ink-muted">
+        Mark is the book midpoint, not a guaranteed sale price.
+      </p>
     </div>
   );
 }
