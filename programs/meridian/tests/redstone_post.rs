@@ -1001,3 +1001,127 @@ fn post_redstone_price_multi_datapoint_ticker_not_first() {
     );
     assert_eq!(price.symbol, ticker);
 }
+
+#[test]
+fn post_redstone_price_equal_timestamp_only_refreshes_slot() {
+    // AB-13: equal timestamp refresh only updates posted_slot, never overwrites value
+    // Prevents searcher from stripping signers and flipping YES/NO at strike boundary
+    let signers: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
+    let addresses: Vec<[u8; 20]> = signers.iter().map(|s| s.ethereum_address()).collect();
+
+    let mut harness = setup_with_signers(addresses);
+
+    let ticker = symbol("NVDA");
+    let close_ts_ms = 1700000000i64 * 1000;
+    let timestamp_ms = close_ts_ms + 100_000; // In-window
+
+    let payer = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    // Post with all 5 signers, value = 2050
+    let value_5_signers = 2050_0000_0000u128;
+    let mut builder_5 = RedstonePayloadBuilder::new("NVDA", value_5_signers, timestamp_ms);
+    for signer in &signers {
+        builder_5 = builder_5.add_signer(signer.clone());
+    }
+    let payload_5 = builder_5.build();
+
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+    let (market_pda, _) = Pubkey::find_program_address(
+        &[
+            meridian::MARKET_SEED,
+            &ticker,
+            &BASE_TRADING_DATE.to_le_bytes(),
+            &200_000u64.to_le_bytes(),
+        ],
+        &meridian::ID,
+    );
+
+    let post_ix_5 = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        payload: payload_5,
+    };
+    let post_accounts = meridian::accounts::PostRedstonePrice {
+        oracle_config: oracle_config_pda,
+        redstone_price: price_pda,
+        payer: payer.pubkey(),
+        system_program: system_program::ID,
+        market: market_pda,
+    };
+    let post_instruction_5 = Instruction {
+        program_id: meridian::ID,
+        accounts: post_accounts.to_account_metas(None),
+        data: post_ix_5.data(),
+    };
+    let result_5 = harness
+        .harness
+        .send_with_budget(post_instruction_5, &[&payer], 400_000);
+    expect_success(&result_5);
+
+    // Verify 5-signer post stored value and signer_count
+    let account_after_5 = harness
+        .harness
+        .svm
+        .get_account(&price_pda)
+        .expect("RedstonePrice should exist");
+    let mut data_after_5 = account_after_5.data.as_slice();
+    let price_after_5 = RedstonePrice::try_deserialize(&mut data_after_5).unwrap();
+    assert_eq!(price_after_5.value, value_5_signers);
+    assert_eq!(price_after_5.signer_count, 5);
+    let slot_after_5 = price_after_5.posted_slot;
+
+    // Advance slot for refresh
+    harness.harness.svm.warp_to_slot(slot_after_5 + 10);
+
+    // Searcher strips 2 signers, posts 3-of-5 subset at SAME timestamp with different value
+    // This would compute a different median if the payload has different signers
+    // For test simplicity, use a completely different value to show it doesn't overwrite
+    let value_3_signers = 1950_0000_0000u128; // Different value
+    let mut builder_3 = RedstonePayloadBuilder::new("NVDA", value_3_signers, timestamp_ms);
+    for signer in &signers[0..3] {
+        // First 3 signers (subset)
+        builder_3 = builder_3.add_signer(signer.clone());
+    }
+    let payload_3 = builder_3.build();
+
+    let post_ix_3 = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        payload: payload_3,
+    };
+    let post_instruction_3 = Instruction {
+        program_id: meridian::ID,
+        accounts: post_accounts.to_account_metas(None),
+        data: post_ix_3.data(),
+    };
+    let result_3 = harness
+        .harness
+        .send_with_budget(post_instruction_3, &[&payer], 400_000);
+    expect_success(&result_3);
+
+    // Verify: value and signer_count unchanged, only posted_slot refreshed
+    let account_after_3 = harness
+        .harness
+        .svm
+        .get_account(&price_pda)
+        .expect("RedstonePrice should exist");
+    let mut data_after_3 = account_after_3.data.as_slice();
+    let price_after_3 = RedstonePrice::try_deserialize(&mut data_after_3).unwrap();
+    assert_eq!(
+        price_after_3.value,
+        value_5_signers,
+        "AB-13: equal timestamp must not overwrite value"
+    );
+    assert_eq!(
+        price_after_3.signer_count, 5,
+        "AB-13: equal timestamp must not decrease signer_count"
+    );
+    assert!(
+        price_after_3.posted_slot > slot_after_5,
+        "Equal timestamp should refresh posted_slot"
+    );
+}
