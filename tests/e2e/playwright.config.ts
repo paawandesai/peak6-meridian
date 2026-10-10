@@ -27,5 +27,17 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+  projects: [
+    {
+      name: "localnet",
+      testMatch: /^(?!.*demo-wallet).*\.spec\.ts$/,
+      use: { browserName: "chromium" },
+    },
+    {
+      name: "devnet",
+      testMatch: "**/demo-wallet.spec.ts",
+      globalSetup: "./playwright/global-setup-devnet.ts",
+      use: { browserName: "chromium" },
+    },
+  ],
 });
