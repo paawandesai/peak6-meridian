@@ -103,7 +103,7 @@ export function StrikeRow({
   return (
     <tr className="relative border-t border-mer-rule align-top">
       <td className="py-mer-2 pr-mer-3">
-        <div className="flex items-center gap-mer-1">
+        <div className="flex flex-wrap items-center gap-mer-1">
           {tradeHref === undefined ? (
             <span className="mer-num font-medium">{strike}</span>
           ) : (

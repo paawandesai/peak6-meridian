@@ -187,7 +187,7 @@ function PositionsTable({
           {rows.map((row) => (
             <tr key={row.key} className="border-t border-mer-rule align-top">
               <th scope="row" className="py-mer-2 pr-mer-2 text-left font-medium">
-                <div className="flex items-center gap-mer-1">
+                <div className="flex flex-wrap items-center gap-mer-1">
                   {marketLabel(row.market)}
                   {!isSessionMarket(row.market) && !isDemoMarket(row.market) ? (
                     <TestMarketBadge />

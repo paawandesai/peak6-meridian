@@ -104,7 +104,7 @@ export function DemoBadge({
   return (
     <span
       data-testid="demo-badge"
-      className="inline-flex items-center rounded-mer bg-mer-warn px-mer-1 py-0.5 text-mer-xs font-bold whitespace-nowrap text-mer-paper"
+      className="inline-flex items-center rounded-mer bg-mer-warn px-mer-1 py-0.5 text-mer-xs font-bold text-mer-paper"
     >
       {demoBadgeText(market.tradingDate, registry)}
     </span>
