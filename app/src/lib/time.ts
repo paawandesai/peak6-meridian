@@ -4,6 +4,7 @@
  * platform's IANA support (`Intl.DateTimeFormat`, `America/New_York`), which handles DST with no
  * dependency, no UTC offsets and no calendar in the app.
  */
+import { closeTimeET, isTradingDay, nextTradingDay, tradingDateET } from "@meridian/client";
 import { marketStatus, type MarketRow } from "./markets";
 
 const ZONE = "America/New_York";
@@ -21,6 +22,16 @@ const hm = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
   hourCycle: "h23",
 });
+const hm12 = new Intl.DateTimeFormat("en-US", {
+  timeZone: ZONE,
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+const weekday = new Intl.DateTimeFormat("en-US", {
+  timeZone: ZONE,
+  weekday: "short",
+});
 const ymd = new Intl.DateTimeFormat("en-US", {
   timeZone: ZONE,
   year: "numeric",
@@ -36,9 +47,14 @@ export function formatEtHms(unixSecs: number | bigint): string {
   return hms.format(new Date(Number(unixSecs) * 1000));
 }
 
-/** `16:05` for unix seconds, in ET. */
+/** `16:05` for unix seconds, in ET (24-hour). */
 export function formatEtHm(unixSecs: number | bigint): string {
   return hm.format(new Date(Number(unixSecs) * 1000));
+}
+
+/** `4:05 PM` for unix seconds, in ET (12-hour with AM/PM). */
+export function formatEtHm12(unixSecs: number | bigint): string {
+  return hm12.format(new Date(Number(unixSecs) * 1000));
 }
 
 /** The ET calendar date as a `YYYYMMDD` number (the on-chain `trading_date` form). */
@@ -72,33 +88,105 @@ export function activeDateMarkets(markets: readonly MarketRow[], nowSecs: number
 
 export type NextClose =
   | { readonly kind: "none" } // "No markets today"
-  | { readonly kind: "countdown"; readonly closeTs: bigint; readonly secondsLeft: number }
-  | { readonly kind: "closed-settling" } // "Closed · settling"
+  | {
+      readonly kind: "countdown";
+      readonly closeTs: bigint;
+      readonly secondsLeft: number;
+      readonly hourET: 16 | 13;
+    }
+  | { readonly kind: "closed-settling"; readonly settlingAt: bigint | null } // "Closed · settling at 4:05 PM ET"
   | { readonly kind: "settlement-delayed" } // "Settlement delayed"
+  | {
+      readonly kind: "next-session";
+      readonly dayName: string;
+      readonly openTime: string;
+    } // "Next session Mon 9:30 AM ET"
   | { readonly kind: "markets-closed" }; // "Markets closed"
 
 /**
- * The header's next-close state. The target is the smallest on-chain `close_ts` with
- * `now < close_ts` among ALL markets (across all trading dates) whose on-chain status is `Open`
- * (not settled), so Open and Closing soon both count and early-close days need no calendar.
+ * The header's next-close state (P0-1 updated). The target is the session close of the active
+ * date, computed from session markets only (markets whose `close_ts` matches the NYSE session
+ * close for their trading date). Non-session markets (test markets) never drive the header.
+ * Early-close days need no calendar: the session close is read from the on-chain market.
  * The header never counts down to a time it computed itself.
  */
 export function nextClose(markets: readonly MarketRow[], nowSecs: number): NextClose {
-  if (markets.length === 0) return { kind: "none" };
   const now = BigInt(nowSecs);
-  // Look at ALL markets, not just active date — any open market across any trading date
-  const open = markets.filter((market) => !market.settled && now < market.closeTs);
+
+  // Filter to session markets only (P0-1): markets whose closeTs matches their trading date's
+  // session close. Test markets are excluded.
+  const sessionMarkets = markets.filter((market) => {
+    const sessionClose = sessionCloseTs(market.tradingDate);
+    return sessionClose !== null && Number(market.closeTs) === sessionClose;
+  });
+
+  // Look at session markets only, across all trading dates
+  const open = sessionMarkets.filter((market) => !market.settled && now < market.closeTs);
   if (open.length > 0) {
     const closeTs = open.reduce(
       (min, market) => (market.closeTs < min ? market.closeTs : min),
       open[0]?.closeTs ?? 0n,
     );
-    return { kind: "countdown", closeTs, secondsLeft: Number(closeTs - now) };
+    // Determine hourET from the closeTs (16:00 or 13:00)
+    const hourET = Number(formatEtHms(closeTs).slice(0, 2)) as 16 | 13;
+    return { kind: "countdown", closeTs, secondsLeft: Number(closeTs - now), hourET };
   }
-  const unsettled = markets.filter((market) => !market.settled);
-  if (unsettled.length === 0) return { kind: "markets-closed" };
+
+  const unsettled = sessionMarkets.filter((market) => !market.settled);
+  if (unsettled.length === 0) {
+    // P0-1 weekend AC: show next session only on weekends/holidays
+    try {
+      const todayEt = tradingDateET(new Date(nowSecs * 1000));
+
+      // When no markets loaded: next-session on weekends/holidays, none on trading days
+      if (markets.length === 0) {
+        if (!isTradingDay(todayEt)) {
+          const nextDay = nextTradingDay(todayEt);
+          const dayName = weekday.format(new Date(`${nextDay}T12:00:00Z`));
+          return { kind: "next-session", dayName, openTime: "9:30 AM" };
+        }
+        return { kind: "none" };
+      }
+
+      // On weekends/holidays with settled markets, show next session
+      if (!isTradingDay(todayEt)) {
+        const nextDay = nextTradingDay(todayEt);
+        const dayName = weekday.format(new Date(`${nextDay}T12:00:00Z`));
+        return { kind: "next-session", dayName, openTime: "9:30 AM" };
+      }
+
+      // On trading days, all session markets settled: show "Markets closed"
+      return { kind: "markets-closed" };
+    } catch {
+      // Outside supported years or calendar unavailable
+      if (markets.length === 0) return { kind: "none" };
+      return { kind: "markets-closed" };
+    }
+  }
   // Settlement delayed wins: it is the state that needs attention.
-  return unsettled.some((market) => marketStatus(market, nowSecs) === "SettlementDelayed")
-    ? { kind: "settlement-delayed" }
-    : { kind: "closed-settling" };
+  if (unsettled.some((market) => marketStatus(market, nowSecs) === "SettlementDelayed")) {
+    return { kind: "settlement-delayed" };
+  }
+  // "Closed · settling at 4:05 PM ET" - settlement starts at close + 5 min
+  const firstUnsettled = unsettled[0];
+  const settlingAt = firstUnsettled ? firstUnsettled.closeTs + 5n * 60n : null;
+  return { kind: "closed-settling", settlingAt };
+}
+
+/**
+ * Session close time for a trading date (P0-1). Returns unix seconds of the NYSE session close:
+ * 16:00 ET on regular days, 13:00 ET on early-close days.
+ *
+ * @param tradingDate `YYYYMMDD` number as stored on-chain.
+ * @returns Unix seconds of the session close (16:00 or 13:00 ET), or null if not a valid trading day.
+ */
+export function sessionCloseTs(tradingDate: number): number | null {
+  try {
+    const text = String(tradingDate).padStart(8, "0");
+    const isoDate = `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+    return closeTimeET(isoDate).closeTs;
+  } catch {
+    // Not a trading day or outside supported years
+    return null;
+  }
 }
