@@ -2,9 +2,10 @@
  * Real StatusChainReader implementation using status-chain (P1-6).
  * Wires /api/status to the on-chain data layer after !122.
  */
-import { Connection, PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
 import { loadStatusData } from "@/app/status/status-chain";
-import { loadMarketRows } from "@/lib/market-data";
+import { createReader } from "@/lib/chain";
+import { loadPublicConfig } from "@/lib/config";
 import { sharedConnection } from "@/lib/rpc";
 import type { MarketInvariant } from "./route";
 import type { StatusChainReader } from "./route";
@@ -15,17 +16,19 @@ const USDC_BASE_PER_CONTRACT = 1_000_000n; // 1 USDC = 1M base units
  * Real implementation of StatusChainReader using loadStatusData from status-chain.ts.
  */
 class RealStatusChainReader implements StatusChainReader {
-  private connection: Connection;
   private programId: PublicKey;
 
-  constructor(rpcUrl: string, programId: string) {
-    this.connection = sharedConnection(rpcUrl);
+  constructor(programId: string) {
     this.programId = new PublicKey(programId);
   }
 
   async fetchMarketInvariants(tradingDate: number): Promise<MarketInvariant[]> {
+    const config = loadPublicConfig();
+    const reader = createReader(config);
+    const connection = sharedConnection(config.rpcUrl);
+
     // Load all markets and filter to this trading date
-    const allMarkets = await loadMarketRows(this.connection, this.programId);
+    const allMarkets = await reader.listMarkets();
     const dateMarkets = allMarkets.filter((m) => m.tradingDate === tradingDate);
 
     if (dateMarkets.length === 0) {
@@ -33,7 +36,7 @@ class RealStatusChainReader implements StatusChainReader {
     }
 
     // Load status data (vaults + facts)
-    const statusData = await loadStatusData(this.connection, dateMarkets, this.programId);
+    const statusData = await loadStatusData(connection, dateMarkets, this.programId);
 
     // Build invariant rows
     return statusData.markets.map((market) => {
@@ -46,20 +49,23 @@ class RealStatusChainReader implements StatusChainReader {
       return {
         address: market.address,
         ticker: market.ticker,
-        strikeCents: market.strikeCents,
+        strikeCents: Number(market.strikeCents),
         vaultBase: vaultBase?.toString() ?? "0",
         pairsOutstanding: pairsOutstanding.toString(),
         expectedVaultBase: expectedVaultBase.toString(),
         invariantPass,
-        closeTs: market.closeTs,
-        settledAt: Number(facts?.settledAt?.blockTime ?? 0),
-        oracleAsOf: Number(facts?.oracleSlot ?? 0), // TODO: convert slot to timestamp when oracle data available
+        closeTs: Number(market.closeTs),
+        settledAt: facts?.settledAt ?? 0,
+        oracleAsOf: Number(facts?.oracleSlot ?? 0n),
       };
     });
   }
 
   async getActiveDate(): Promise<number> {
-    const allMarkets = await loadMarketRows(this.connection, this.programId);
+    const config = loadPublicConfig();
+    const reader = createReader(config);
+    const allMarkets = await reader.listMarkets();
+
     if (allMarkets.length === 0) {
       // No markets, return today's date in ET
       const now = new Date();
@@ -79,16 +85,15 @@ class RealStatusChainReader implements StatusChainReader {
  * Install the real StatusChainReader on globalThis (called at module load in production).
  */
 export function installStatusChainReader(): void {
-  const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL;
   const programId = process.env.NEXT_PUBLIC_PROGRAM_ID;
 
-  if (!rpcUrl || !programId) {
-    console.warn("Status chain reader not installed: missing RPC_URL or PROGRAM_ID");
+  if (!programId) {
+    console.warn("Status chain reader not installed: missing PROGRAM_ID");
     return;
   }
 
   (globalThis as { statusChainReader?: StatusChainReader }).statusChainReader =
-    new RealStatusChainReader(rpcUrl, programId);
+    new RealStatusChainReader(programId);
 }
 
 // Auto-install in production (not in tests)

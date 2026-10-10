@@ -123,7 +123,7 @@ describe("GET /api/status", () => {
 
   it("deduplicates in-flight requests", async () => {
     vi.mocked(mockReader.getActiveDate).mockResolvedValue(20261010);
-    let resolvePromise: (value: MarketInvariant[]) => void;
+    let resolvePromise!: (value: MarketInvariant[]) => void;
     const promise = new Promise<MarketInvariant[]>((resolve) => {
       resolvePromise = resolve;
     });
@@ -135,9 +135,7 @@ describe("GET /api/status", () => {
     const [promise1, promise2] = [GET(req1), GET(req2)];
 
     // Resolve the fetch
-    if (resolvePromise) {
-      resolvePromise([mockMarket]);
-    }
+    resolvePromise([mockMarket]);
     await Promise.all([promise1, promise2]);
 
     // Should only fetch once despite two concurrent requests
