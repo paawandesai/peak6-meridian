@@ -22,15 +22,10 @@
     "@solana/wallet-adapter-react": "0.15.40",
     "@solana/wallet-adapter-react-ui": "0.9.40",
     "@solana/wallet-adapter-solflare": "0.6.34",
-<<<<<<< HEAD
     "@solana/wallet-standard-wallet-adapter-react": "^1.1.8",
     "@solana/web3.js": "1.99.0",
-    "decimal.js": "^10.6.0",
-=======
-    "@solana/wallet-standard-wallet-adapter-react": "1.1.8",
-    "@solana/web3.js": "1.99.0",
     "bs58": "6.0.0",
->>>>>>> 651753a (fix(demo-wallet): address review round 2 findings (M4-07))
+    "decimal.js": "^10.6.0",
     "next": "15.5.27",
     "tweetnacl": "1.0.3",
     "react": "19.3.0",

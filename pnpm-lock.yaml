@@ -74,24 +74,17 @@ importers:
         specifier: 0.6.34
         version: 0.6.34(@solana/web3.js@1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))
       '@solana/wallet-standard-wallet-adapter-react':
-<<<<<<< HEAD
         specifier: ^1.1.8
-=======
-        specifier: 1.1.8
->>>>>>> 651753a (fix(demo-wallet): address review round 2 findings (M4-07))
         version: 1.1.8(@solana/wallet-adapter-base@0.9.28(@solana/web3.js@1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)))(@solana/web3.js@1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(bs58@6.0.0)(fastestsmallesttextencoderdecoder@1.0.22)(react@19.3.0)(typescript@5.9.3)
       '@solana/web3.js':
         specifier: 1.99.0
         version: 1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
-<<<<<<< HEAD
-      decimal.js:
-        specifier: ^10.6.0
-        version: 10.6.0
-=======
       bs58:
         specifier: 6.0.0
         version: 6.0.0
->>>>>>> 651753a (fix(demo-wallet): address review round 2 findings (M4-07))
+      decimal.js:
+        specifier: ^10.6.0
+        version: 10.6.0
       next:
         specifier: 15.5.27
         version: 15.5.27(@babel/core@7.29.7)(@playwright/test@1.63.0)(@types/node@22.20.5)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
