@@ -148,8 +148,13 @@ migrate-config:
 e2e-ui-browser:
 	pnpm --filter e2e exec playwright install chromium --with-deps
 
+## Playwright browser smoke (tests/e2e/playwright, M2-13): local validator + seed + app + injected
+## test wallet. Needs the local-oracle build: E2E_PREBUILT=1 (CI with the `build` artifacts) uses
+## target/ as is, otherwise this builds it first. The e2e package's vitest unit tests run in
+## `make test` (test-js-py-unit), not here.
 e2e-ui:
-	pnpm --filter e2e run test
+	@if [ "$${E2E_PREBUILT:-0}" != "1" ]; then $(MAKE) build-local; fi
+	pnpm --filter e2e run test:ui
 
 e2e:
 	scripts/e2e.sh
