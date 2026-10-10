@@ -29,10 +29,7 @@ const QuerySchema = z.object({
 export async function GET(request: NextRequest) {
   const token = process.env.PYTH_API_TOKEN;
   if (!token) {
-    return NextResponse.json(
-      { error: "PYTH_API_TOKEN not configured" },
-      { status: 503 },
-    );
+    return NextResponse.json({ error: "PYTH_API_TOKEN not configured" }, { status: 503 });
   }
 
   const { searchParams } = new URL(request.url);
@@ -45,10 +42,7 @@ export async function GET(request: NextRequest) {
 
   const parsed = QuerySchema.safeParse(params);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid query parameters" },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: "Invalid query parameters" }, { status: 400 });
   }
 
   const url = new URL("https://pyth.dourolabs.app/v1/fixed_rate@200ms/history");
@@ -66,32 +60,20 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      return NextResponse.json(
-        { error: "Upstream error" },
-        { status: 502 },
-      );
+      return NextResponse.json({ error: "Upstream error" }, { status: 502 });
     }
 
     const data = await response.json();
     const validated = PythHistorySchema.safeParse(data);
     if (!validated.success) {
-      return NextResponse.json(
-        { error: "Invalid upstream response" },
-        { status: 502 },
-      );
+      return NextResponse.json({ error: "Invalid upstream response" }, { status: 502 });
     }
 
     return NextResponse.json(validated.data);
   } catch (error) {
     if (error instanceof Error && error.name === "TimeoutError") {
-      return NextResponse.json(
-        { error: "Upstream timeout" },
-        { status: 504 },
-      );
+      return NextResponse.json({ error: "Upstream timeout" }, { status: 504 });
     }
-    return NextResponse.json(
-      { error: "Request failed" },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: "Request failed" }, { status: 502 });
   }
 }
