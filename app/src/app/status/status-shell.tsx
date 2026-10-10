@@ -1,9 +1,7 @@
 "use client";
 
-import { useConnection } from "@solana/wallet-adapter-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
-import { loadStatusData } from "./status-chain";
 import { StatusView } from "./status-view";
 import { AppHeader } from "@/components/app-header";
 import { BottomTabBar } from "@/components/app-shell/bottom-tab-bar";
@@ -14,15 +12,28 @@ import { useTestMarkets } from "@/components/test-market-context";
 import { TestMarketToggle } from "@/components/ui";
 import { useAsync } from "@/components/use-async";
 import { useNow } from "@/components/use-now";
-import { loadPublicConfig } from "@/lib/config";
 import { partitionMarkets } from "@/lib/markets";
+import { etTradingDate } from "@/lib/time";
+import type { StatusResponse } from "@/app/api/status/route";
+
+/** YYYY-MM-DD format from YYYYMMDD */
+function formatDate(yyyymmdd: number): string {
+  const s = yyyymmdd.toString();
+  return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+}
+
+/** Get trading date for yesterday (previous day in ET) */
+function getYesterdayET(): number {
+  const now = Date.now() / 1000; // unix seconds
+  const yesterdayUnixSecs = now - 24 * 3600;
+  // etTradingDate is imported at module level
+  return etTradingDate(yesterdayUnixSecs);
+}
 
 function Page() {
   const reader = useReader();
   const nowSecs = useNow();
-  const { connection } = useConnection();
   const { showTestMarkets, setShowTestMarkets } = useTestMarkets();
-  const config = useMemo(() => loadPublicConfig(), []);
   const marketsAll = useAsync(() => reader.listMarkets(), [reader]);
   // P0-1 AC3-4: Filter to session markets only (test markets hidden by default)
   const { testMarketCount, markets } = useMemo(() => {
@@ -32,15 +43,22 @@ function Page() {
     return { testMarketCount: test.length, markets: { ...marketsAll, value: filtered } };
   }, [marketsAll, showTestMarkets]);
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
-  const data = useAsync(
-    async () => {
-      const all = await reader.listMarkets();
-      const { session, test } = partitionMarkets(all);
-      const filtered = showTestMarkets ? [...session, ...test] : session;
-      return loadStatusData(connection, filtered, config.programId);
-    },
-    [reader, connection, config, showTestMarkets],
-  );
+
+  // P1-6: Date selector for today (default) or yesterday
+  const [selectedDate, setSelectedDate] = useState<number | null>(null);
+
+  const statusData = useAsync(async (): Promise<StatusResponse> => {
+    const dateParam = selectedDate ? `?date=${formatDate(selectedDate)}` : "";
+    const showTestParam = showTestMarkets ? (dateParam ? "&" : "?") + "showTest=1" : "";
+    const response = await fetch(`/api/status${dateParam}${showTestParam}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response.json() as Promise<StatusResponse>;
+  }, [selectedDate, showTestMarkets]);
+
+  const yesterdayDate = useMemo(() => getYesterdayET(), []);
+
   return (
     <>
       <AppHeader
@@ -52,7 +70,35 @@ function Page() {
         <FaucetButton />
       </AppHeader>
       <main className="mx-auto max-w-5xl px-mer-4 py-mer-6 pb-20 md:pb-mer-6">
-        <h2 className="mb-mer-4 text-mer-xl font-semibold">Status</h2>
+        <div className="mb-mer-4 flex items-center justify-between">
+          <h2 className="text-mer-xl font-semibold">Status</h2>
+
+          {/* P1-6: Date selector */}
+          <div className="flex gap-mer-2">
+            <button
+              onClick={() => setSelectedDate(null)}
+              className={`rounded px-mer-3 py-mer-1 text-mer-sm ${
+                selectedDate === null
+                  ? "bg-mer-yes text-mer-ink"
+                  : "bg-mer-surface text-mer-ink-muted hover:bg-mer-surface"
+              }`}
+            >
+              Today
+            </button>
+            <button
+              onClick={() => setSelectedDate(yesterdayDate)}
+              className={`rounded px-mer-3 py-mer-1 text-mer-sm ${
+                selectedDate === yesterdayDate
+                  ? "bg-mer-yes text-mer-ink"
+                  : "bg-mer-surface text-mer-ink-muted hover:bg-mer-surface"
+              }`}
+            >
+              Yesterday
+            </button>
+          </div>
+        </div>
+
+        {/* P0-1: Test market toggle */}
         {testMarketCount > 0 ? (
           <div className="mb-mer-4">
             <TestMarketToggle
@@ -62,9 +108,50 @@ function Page() {
             />
           </div>
         ) : null}
-        {data.status === "loading" ? <p>Loading status…</p> : null}
-        {data.status === "error" ? <p role="alert">Could not load status: {data.message}</p> : null}
-        {data.status === "ready" ? <StatusView data={data.value} /> : null}
+
+        {statusData.status === "loading" ? <p>Loading status…</p> : null}
+        {statusData.status === "error" ? (
+          <p role="alert">Could not load status: {statusData.message}</p>
+        ) : null}
+        {statusData.status === "ready" && statusData.value.s === "error" ? (
+          <p role="alert">Error: {statusData.value.error}</p>
+        ) : null}
+        {statusData.status === "ready" && statusData.value.s === "ok" && statusData.value.markets ? (
+          <StatusView
+            data={{
+              markets: statusData.value.markets.map((m) => ({
+                address: m.address,
+                ticker: m.ticker,
+                strikeCents: BigInt(m.strikeCents),
+                tradingDate: statusData.value.date ?? 0,
+                settled: m.settled,
+                settlePrice: null,
+                closeTs: BigInt(m.closeTs),
+                pairsOutstanding: BigInt(m.pairsOutstanding),
+                outcome: m.outcome,
+                settlePriceScaled: 0n,
+                settledAt: BigInt(m.settledAt),
+              })),
+              vaults: new Map(
+                statusData.value.markets.map((m) => [
+                  m.address,
+                  m.vaultBase === "0" ? null : BigInt(m.vaultBase),
+                ])
+              ),
+              facts: new Map(
+                statusData.value.markets.map((m) => [
+                  m.address,
+                  {
+                    createdAt: m.createdAt > 0 ? m.createdAt : null,
+                    settledAt: m.settledAt > 0 ? m.settledAt : null,
+                    settleSlot: m.settleSlot > 0 ? m.settleSlot : null,
+                    oracleSlot: m.oracleAsOf > 0 ? BigInt(m.oracleAsOf) : null,
+                  },
+                ])
+              ),
+            }}
+          />
+        ) : null}
       </main>
       <BottomTabBar />
     </>
