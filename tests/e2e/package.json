@@ -8,7 +8,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lifecycle": "tsx src/lifecycle.ts",
-    "rehearsal": "tsx --env-file-if-exists=../../.env src/lifecycle.ts --cluster devnet"
+    "rehearsal": "tsx --env-file-if-exists=../../.env src/lifecycle.ts --cluster devnet",
+    "coverage-window": "tsx --env-file-if-exists=../../.env src/coverage-window.ts",
+    "settlement-evidence": "tsx --env-file-if-exists=../../.env src/settlement-evidence.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.31.1",
