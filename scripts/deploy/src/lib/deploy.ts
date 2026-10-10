@@ -13,6 +13,7 @@ import {
   sendConfigStep,
   verifyMint,
 } from "./chain-io";
+import { readOracleConfigFile, type OracleConfigParams } from "./oracle-config";
 import {
   assertConfigAdmin,
   assertConfigMatches,
@@ -149,6 +150,19 @@ async function loadFeeds(options: Options, connection: Connection): Promise<Feed
     );
   }
   return feeds;
+}
+
+/** Loads and validates `--oracle-config` before anything is sent (M2-15 AC6). */
+async function loadOracleConfig(
+  path: string,
+  log: (msg: string) => void,
+): Promise<OracleConfigParams> {
+  const config = readOracleConfigFile(path);
+  log(
+    `oracle config: ${config.signers.length} signers, threshold ${config.signerThreshold}, ` +
+      `max delay ${config.maxPackageDelaySecs}s`,
+  );
+  return config;
 }
 
 async function ensureProgram(
@@ -308,6 +322,7 @@ function buildRecord(
   mint: PublicKey,
   config: OnChainConfig,
   upgradeAuthority: PublicKey,
+  oracleConfig?: OracleConfigParams,
 ): DeploymentRecord {
   const feeds: NonNullable<DeploymentRecord["feeds"]> = {};
   for (const [index, symbol] of TICKER_ORDER.entries()) {
@@ -330,8 +345,8 @@ function buildRecord(
     }
     feeds[symbol] = [first, second];
   }
-  return {
-    version: 1,
+  const base = {
+    version: 1 as const,
     cluster,
     programId: ctx.programId.toBase58(),
     usdcMint: mint.toBase58(),
@@ -341,6 +356,20 @@ function buildRecord(
     faucet: ctx.options.faucet.toBase58(),
     upgradeAuthority: upgradeAuthority.toBase58(),
     feeds,
+  };
+  if (oracleConfig === undefined) {
+    return base;
+  }
+  const oracleConfigPda = PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle_config")],
+    ctx.programId,
+  )[0];
+  return {
+    ...base,
+    oracleConfigPda: oracleConfigPda.toBase58(),
+    oracleSigners: [...oracleConfig.signers],
+    oracleSignerThreshold: oracleConfig.signerThreshold,
+    oracleMaxPackageDelaySecs: oracleConfig.maxPackageDelaySecs,
   };
 }
 
@@ -409,15 +438,11 @@ async function deploy(
   });
   log(`cluster: ${cluster}`);
 
-  // Fail closed: --oracle-config is not yet wired (depends on !75 for set_oracle_config instruction).
-  if (options.oracleConfigPath !== undefined) {
-    throw new Error(
-      "--oracle-config is not yet implemented: set_oracle_config instruction not available " +
-        "(depends on !75 RedStone program + IDL). Remove the flag or wait for !75 to merge.",
-    );
-  }
-
   const feeds = options.feedsPath === undefined ? undefined : await loadFeeds(options, connection);
+  const oracleConfig =
+    options.oracleConfigPath === undefined
+      ? undefined
+      : await loadOracleConfig(options.oracleConfigPath, log);
 
   const ctx: Context = { options, connection, admin, programId, log, actions: [], runSolana };
   const program = createProgram(connection, admin, programId);
@@ -469,7 +494,108 @@ async function deploy(
     throw new Error("the Config is missing after initialize_config");
   }
   assertConfigAdmin(config, admin.publicKey);
-  const finalRecord = buildRecord(cluster, ctx, mint, config, upgradeAuthority);
+
+  // Set oracle config if provided (M2-15 AC6). Idempotent: skip if on-chain already matches.
+  if (oracleConfig !== undefined) {
+    const oracleConfigPda = PublicKey.findProgramAddressSync(
+      [Buffer.from("oracle_config")],
+      ctx.programId,
+    )[0];
+
+    // Check if on-chain config already matches (idempotent like planConfig)
+    let alreadyMatches = false;
+    try {
+      const onChain = await program.account.oracleConfig.fetch(oracleConfigPda);
+      const signersMatch =
+        onChain.signers.length === oracleConfig.signers.length &&
+        onChain.signers.every((signerBytes: number[], i: number) => {
+          const expected = oracleConfig.signers[i];
+          if (!expected) return false;
+          const hex = Buffer.from(signerBytes).toString("hex");
+          return `0x${hex}` === expected.toLowerCase();
+        });
+      const thresholdMatches = onChain.signerThreshold === oracleConfig.signerThreshold;
+      const delayMatches =
+        onChain.maxPackageDelaySecs.toNumber() === oracleConfig.maxPackageDelaySecs;
+      alreadyMatches = signersMatch && thresholdMatches && delayMatches;
+    } catch {
+      // OracleConfig not set yet, proceed with set
+    }
+
+    if (!alreadyMatches) {
+      const signers = oracleConfig.signers.map((hex) => {
+        const bytes = Buffer.from(hex.slice(2), "hex");
+        if (bytes.length !== 20) {
+          throw new Error(`signer ${hex} is not 20 bytes`);
+        }
+        return Array.from(bytes);
+      });
+      await program.methods
+        .setOracleConfig({
+          signers,
+          signerThreshold: oracleConfig.signerThreshold,
+          maxPackageDelaySecs: oracleConfig.maxPackageDelaySecs,
+        })
+        .accounts({ admin: admin.publicKey })
+        .rpc({ commitment: "confirmed" });
+      ctx.actions.push("set-oracle-config");
+      log(
+        `set-oracle-config: ${signers.length} signers, threshold ${oracleConfig.signerThreshold}`,
+      );
+
+      // Fail closed: verify on-chain matches input
+      const verified = await program.account.oracleConfig.fetch(oracleConfigPda);
+      const verifiedSignersMatch =
+        verified.signers.length === oracleConfig.signers.length &&
+        verified.signers.every((signerBytes: number[], i: number) => {
+          const expected = oracleConfig.signers[i];
+          if (!expected) return false;
+          const hex = Buffer.from(signerBytes).toString("hex");
+          return `0x${hex}` === expected.toLowerCase();
+        });
+      const verifiedThresholdMatches = verified.signerThreshold === oracleConfig.signerThreshold;
+      const verifiedDelayMatches =
+        verified.maxPackageDelaySecs.toNumber() === oracleConfig.maxPackageDelaySecs;
+
+      if (!verifiedSignersMatch || !verifiedThresholdMatches || !verifiedDelayMatches) {
+        throw new Error(
+          "OracleConfig mismatch after set_oracle_config: on-chain state does not match input file",
+        );
+      }
+    }
+  }
+
+  // Fetch on-chain oracle config to preserve in record, even if --oracle-config not passed this run
+  let oracleConfigForRecord = oracleConfig;
+  if (oracleConfigForRecord === undefined) {
+    try {
+      const oracleConfigPda = PublicKey.findProgramAddressSync(
+        [Buffer.from("oracle_config")],
+        ctx.programId,
+      )[0];
+      const onChainOracleConfig = await program.account.oracleConfig.fetch(oracleConfigPda);
+      // Convert on-chain format to OracleConfigParams
+      oracleConfigForRecord = {
+        signers: onChainOracleConfig.signers.map((signerBytes: number[]) => {
+          const hex = Buffer.from(signerBytes).toString("hex");
+          return `0x${hex}`;
+        }),
+        signerThreshold: onChainOracleConfig.signerThreshold,
+        maxPackageDelaySecs: onChainOracleConfig.maxPackageDelaySecs.toNumber(),
+      };
+    } catch {
+      // OracleConfig not set yet, that's fine
+    }
+  }
+
+  const finalRecord = buildRecord(
+    cluster,
+    ctx,
+    mint,
+    config,
+    upgradeAuthority,
+    oracleConfigForRecord,
+  );
   const written = writeRecord(options.outPath, finalRecord);
   log(`${written ? "wrote" : "unchanged:"} ${options.outPath}`);
   return { actions: ctx.actions, record: finalRecord };

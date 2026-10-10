@@ -16,6 +16,10 @@ bytemuck = "1"
 litesvm = "=0.5.0"
 meridian = { path = "../../../programs/meridian" }
 solana-sdk = "=2.1.21"
+# For RedStone test payloads (common/redstone.rs included via src/lib.rs)
+k256 = "0.13"
+sha3 = "0.10"
+rand = "0.8"
 
 [dev-dependencies]
 serde_json = "1"

@@ -1,0 +1,269 @@
+//! M2-15 AC3: RedStone permission tests.
+//! Tests: set_oracle_config admin-only, threshold validation, post_redstone_price permissionless.
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::arithmetic_side_effects
+)]
+
+mod common;
+
+use anchor_lang::prelude::Pubkey;
+use anchor_lang::{InstructionData, ToAccountMetas};
+use common::redstone::{RedstonePayloadBuilder, TestSigner};
+use common::{
+    assert_meridian_error_with_budget, config_pda, expect_success, symbol, MarketArgs,
+    MarketHarness, BASE_TRADING_DATE, FUNDING_LAMPORTS,
+};
+use meridian::errors::MeridianError;
+use solana_sdk::instruction::Instruction;
+use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::system_program;
+
+const THRESHOLD: u8 = 3;
+
+#[test]
+fn set_oracle_config_rejects_non_admin() {
+    // AC3: set_oracle_config rejects non-admin signer
+    let mut harness = MarketHarness::new();
+    let non_admin = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&non_admin.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    let signers: Vec<[u8; 20]> = (0..5).map(|_| [0u8; 20]).collect();
+
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let params = meridian::SetOracleConfigParams {
+        signers,
+        signer_threshold: THRESHOLD,
+        max_package_delay_secs: 600,
+    };
+
+    let ix = meridian::instruction::SetOracleConfig { params };
+    let accounts = meridian::accounts::SetOracleConfig {
+        config: config_pda(),
+        oracle_config: oracle_config_pda,
+        admin: non_admin.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&non_admin], 400_000);
+    assert_meridian_error_with_budget(&result, MeridianError::AdminOnly);
+}
+
+#[test]
+fn set_oracle_config_rejects_threshold_zero() {
+    // AC3: set_oracle_config rejects threshold=0
+    let mut harness = MarketHarness::new();
+    let admin = harness.harness.admin.insecure_clone();
+
+    let signers: Vec<[u8; 20]> = (0..5).map(|_| [0u8; 20]).collect();
+
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let params = meridian::SetOracleConfigParams {
+        signers,
+        signer_threshold: 0, // Invalid: must be >= 1
+        max_package_delay_secs: 600,
+    };
+
+    let ix = meridian::instruction::SetOracleConfig { params };
+    let accounts = meridian::accounts::SetOracleConfig {
+        config: config_pda(),
+        oracle_config: oracle_config_pda,
+        admin: admin.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
+    assert_meridian_error_with_budget(&result, MeridianError::OracleThresholdTooLow);
+}
+
+#[test]
+fn set_oracle_config_rejects_threshold_too_high() {
+    // AC3: set_oracle_config rejects threshold > signers.len()
+    let mut harness = MarketHarness::new();
+    let admin = harness.harness.admin.insecure_clone();
+
+    let signers: Vec<[u8; 20]> = (0..3).map(|_| [0u8; 20]).collect();
+
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let params = meridian::SetOracleConfigParams {
+        signers,
+        signer_threshold: 5, // Invalid: > 3 signers
+        max_package_delay_secs: 600,
+    };
+
+    let ix = meridian::instruction::SetOracleConfig { params };
+    let accounts = meridian::accounts::SetOracleConfig {
+        config: config_pda(),
+        oracle_config: oracle_config_pda,
+        admin: admin.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
+    assert_meridian_error_with_budget(&result, MeridianError::OracleThresholdTooHigh);
+}
+
+#[test]
+fn set_oracle_config_rejects_too_many_signers() {
+    // AC3 extension: set_oracle_config rejects > MAX_SIGNERS (8)
+    let mut harness = MarketHarness::new();
+    let admin = harness.harness.admin.insecure_clone();
+
+    let signers: Vec<[u8; 20]> = (0..9).map(|_| [0u8; 20]).collect(); // 9 > MAX_SIGNERS
+
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let params = meridian::SetOracleConfigParams {
+        signers,
+        signer_threshold: 3,
+        max_package_delay_secs: 600,
+    };
+
+    let ix = meridian::instruction::SetOracleConfig { params };
+    let accounts = meridian::accounts::SetOracleConfig {
+        config: config_pda(),
+        oracle_config: oracle_config_pda,
+        admin: admin.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
+    assert_meridian_error_with_budget(&result, MeridianError::OracleTooManySigners);
+}
+
+#[test]
+fn post_redstone_price_is_permissionless() {
+    // AC3: post_redstone_price succeeds for any payer (permissionless)
+    let mut harness = MarketHarness::new();
+    let admin = harness.harness.admin.insecure_clone();
+
+    // Setup oracle config first
+    let signers_test: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
+    let addresses: Vec<[u8; 20]> = signers_test.iter().map(|s| s.ethereum_address()).collect();
+    let mut signing_signers = signers_test;
+    let remaining = signing_signers.split_off(3);
+    drop(remaining);
+
+    let (oracle_config_pda, _) = Pubkey::find_program_address(&[b"oracle_config"], &meridian::ID);
+
+    let params = meridian::SetOracleConfigParams {
+        signers: addresses,
+        signer_threshold: THRESHOLD,
+        max_package_delay_secs: 600,
+    };
+
+    let ix = meridian::instruction::SetOracleConfig { params };
+    let accounts = meridian::accounts::SetOracleConfig {
+        config: config_pda(),
+        oracle_config: oracle_config_pda,
+        admin: admin.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: accounts.to_account_metas(None),
+        data: ix.data(),
+    };
+    let result = harness
+        .harness
+        .send_with_budget(instruction, &[&admin], 400_000);
+    expect_success(&result);
+
+    // Create market for RedStone window validation (AB-03)
+    let test_close_ts = 1700000000i64;
+    harness.harness.set_unix_timestamp(test_close_ts - 3600);
+    let market_args = MarketArgs {
+        ticker: symbol("NVDA"),
+        strike_cents: 200_000,
+        trading_date: BASE_TRADING_DATE,
+        close_ts: test_close_ts,
+    };
+    harness.create_market(&market_args);
+
+    // Now post price as a random payer (not admin)
+    let random_payer = Keypair::new();
+    harness
+        .harness
+        .svm
+        .airdrop(&random_payer.pubkey(), FUNDING_LAMPORTS)
+        .unwrap();
+
+    let ticker = symbol("NVDA");
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
+    for signer in signing_signers {
+        builder = builder.add_signer(signer);
+    }
+    let payload = builder.build();
+
+    let (price_pda, _) = Pubkey::find_program_address(&[b"redstone_price", &ticker], &meridian::ID);
+
+    let post_ix = meridian::instruction::PostRedstonePrice {
+        symbol: ticker,
+        payload,
+    };
+
+    let post_accounts = meridian::accounts::PostRedstonePrice {
+        oracle_config: oracle_config_pda,
+        market: {
+            let (pda, _) = Pubkey::find_program_address(
+                &[
+                    meridian::MARKET_SEED,
+                    &symbol("NVDA"),
+                    &BASE_TRADING_DATE.to_le_bytes(),
+                    &200_000u64.to_le_bytes(),
+                ],
+                &meridian::ID,
+            );
+            pda
+        },
+        redstone_price: price_pda,
+        payer: random_payer.pubkey(),
+        system_program: system_program::ID,
+    };
+
+    let post_instruction = Instruction {
+        program_id: meridian::ID,
+        accounts: post_accounts.to_account_metas(None),
+        data: post_ix.data(),
+    };
+    let post_result = harness.harness.send(post_instruction, &[&random_payer]);
+    expect_success(&post_result); // Succeeds even though payer is not admin
+}

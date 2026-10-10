@@ -167,6 +167,8 @@ export async function buildSettleInstructions(params: {
           market,
           feedTiingo: params.feeds[0],
           feedTwelveData: params.feeds[1],
+          redstonePrice: null, // Switchboard path (M2-16 will use RedStone)
+          oracleConfig: null, // Switchboard path
           payer: params.payer,
         })
         .instruction(),

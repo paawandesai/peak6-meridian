@@ -86,6 +86,8 @@ impl Harness {
                 market: addresses.market,
                 feed_tiingo,
                 feed_twelve_data,
+                redstone_price: None,
+                oracle_config: None,
                 payer,
             }
             .to_account_metas(None),

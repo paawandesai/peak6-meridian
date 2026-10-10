@@ -693,6 +693,8 @@ async function main(): Promise<void> {
           market: addresses.market,
           feedTiingo: localFeedPda(TRADED.symbol, 0),
           feedTwelveData: localFeedPda(TRADED.symbol, 1),
+          redstonePrice: null, // Local oracle path (Switchboard)
+          oracleConfig: null, // Local oracle path
           payer: admin.publicKey,
         })
         .rpc({ commitment: "confirmed" }),

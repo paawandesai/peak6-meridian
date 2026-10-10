@@ -640,6 +640,8 @@ async function settleLocally(ctx: Ctx, state: RehearsalState, a: MarketAddresses
           market: a.market,
           feedTiingo: localFeedPda(ctx, state.symbol, 0),
           feedTwelveData: localFeedPda(ctx, state.symbol, 1),
+          redstonePrice: null, // Local oracle path (Switchboard)
+          oracleConfig: null, // Local oracle path
           payer: ctx.admin.publicKey,
         })
         .rpc({ commitment: "confirmed" }),
