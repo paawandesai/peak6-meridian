@@ -5,6 +5,7 @@ import {
   createChart,
   type IChartApi,
   type ISeriesApi,
+  type IPriceLine,
   type UTCTimestamp,
 } from "lightweight-charts";
 
@@ -62,6 +63,7 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const priceLinesRef = useRef<IPriceLine[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
   const [lastGoodData, setLastGoodData] = useState<PythHistoryData | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -188,18 +190,23 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
     };
   }, [ticker, Math.floor(nowSecs / 300) * 300, isOpen]);
 
-  // Update strike lines when strikes change
+  // Update strike lines when strikes change (using stable stringified comparison)
   useEffect(() => {
     if (!seriesRef.current || status !== "ready") return;
 
+    // Remove existing price lines
+    priceLinesRef.current.forEach((line) => {
+      seriesRef.current?.removePriceLine(line);
+    });
+    priceLinesRef.current = [];
+
     const mutedColor = getCssVar("--mer-ink-muted") || "#4A5B72";
 
-    // Clear existing price lines (lightweight-charts doesn't have a direct API for this,
-    // so we recreate the series data to clear old lines)
+    // Add strike lines
     if (strikes && strikes.length > 0) {
       strikes.forEach((strikeCents) => {
         const priceInDollars = Number(strikeCents) / 100;
-        seriesRef.current?.createPriceLine({
+        const line = seriesRef.current?.createPriceLine({
           price: priceInDollars,
           color: mutedColor,
           lineWidth: 1,
@@ -207,13 +214,15 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
           axisLabelVisible: true,
           title: `$${priceInDollars.toFixed(2)}`,
         });
+        if (line) priceLinesRef.current.push(line);
       });
     }
 
+    // Add fair value line
     if (fairValueCents !== undefined && fairValueCents !== null) {
       const yesColor = getCssVar("--mer-yes") || "#1E5BB8";
       const fairInDollars = fairValueCents / 100;
-      seriesRef.current?.createPriceLine({
+      const line = seriesRef.current?.createPriceLine({
         price: fairInDollars,
         color: yesColor,
         lineWidth: 2,
@@ -221,8 +230,9 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
         axisLabelVisible: true,
         title: `Fair $${fairInDollars.toFixed(2)}`,
       });
+      if (line) priceLinesRef.current.push(line);
     }
-  }, [strikes, fairValueCents, status]);
+  }, [JSON.stringify(strikes?.map(String)), fairValueCents, status]);
 
   return (
     <details onToggle={(e) => setIsOpen((e.target as HTMLDetailsElement).open)}>
