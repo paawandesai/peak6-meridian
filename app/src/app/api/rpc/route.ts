@@ -233,7 +233,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       try {
         const result = await pending;
         return NextResponse.json({ jsonrpc: "2.0", result, id });
-      } catch (error) {
+      } catch {
         // Fall through to make new request
       }
     }
