@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { MarketsView } from "./markets-view";
+import { tradeHref } from "@/app/trade/_lib/href";
 import { market, reader, withReader } from "@/test-utils";
 
 const NOW = 1_800_000_000;
@@ -82,5 +83,25 @@ describe("MarketsView", () => {
       "AAPL",
       "NVDA",
     ]);
+  });
+
+  it("links each strike to its Trade page (UI-04 AC8)", async () => {
+    const markets = [
+      market({ address: "addr1", ticker: "NVDA", strikeCents: 15_000n }),
+      market({ address: "addr2", ticker: "AAPL", strikeCents: 22_000n }),
+      market({ address: "addr3", ticker: "AAPL", strikeCents: 23_000n }),
+    ];
+    render(
+      withReader(
+        reader({ listMarkets: () => Promise.resolve(markets) }),
+        <MarketsView nowSecs={NOW} tradeHref={tradeHref} />,
+      ),
+    );
+
+    const strikeLinks = await screen.findAllByRole("link");
+    expect(strikeLinks).toHaveLength(3);
+    expect(strikeLinks[0]).toHaveAttribute("href", "/trade/addr2");
+    expect(strikeLinks[1]).toHaveAttribute("href", "/trade/addr3");
+    expect(strikeLinks[2]).toHaveAttribute("href", "/trade/addr1");
   });
 });

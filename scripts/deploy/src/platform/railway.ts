@@ -4,6 +4,8 @@
  * services/automation/railway.json, uploads with the Railway CLI, and checks `/health` with the
  * bearer token. Variable values and tokens never reach logs or errors.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   assertComplete,
   childEnv,
@@ -18,7 +20,8 @@ import {
 } from "./platform";
 
 const API = "https://backboard.railway.com/graphql/v2";
-export const CONFIG_FILE = "services/automation/railway.json";
+// Railway resolves the config-as-code path from the repo root and expects a leading slash.
+export const CONFIG_FILE = "/services/automation/railway.json";
 
 export type RailwayOptions = {
   readonly token: string;
@@ -65,7 +68,15 @@ function makeGql(deps: PlatformDeps, headers: Record<string, string>, secrets: s
     );
     const body = asRecord(result.body);
     if (result.status !== 200 || Array.isArray(body.errors)) {
-      throw new Error(`railway: ${label} failed (status ${result.status})`);
+      const messages = Array.isArray(body.errors)
+        ? body.errors
+            .map((error) => asRecord(error).message)
+            .filter((message): message is string => typeof message === "string")
+        : [];
+      const detail = messages.length === 0 ? "" : `: ${messages.join("; ")}`;
+      throw new Error(
+        redactSecrets(`railway: ${label} failed (status ${result.status})${detail}`, secrets),
+      );
     }
     return asRecord(body.data);
   };
@@ -201,6 +212,27 @@ export async function checkHealth(
   );
 }
 
+/**
+ * Railway rejects `railwayConfigFile` now that Config as Code is deprecated, so the settings in
+ * railway.json (still the source of truth) are applied directly as service instance fields.
+ */
+export function serviceSettings(repoRoot: string): Json {
+  const config = asRecord(JSON.parse(readFileSync(join(repoRoot, CONFIG_FILE), "utf8")));
+  const build = asRecord(config.build);
+  const deploy = asRecord(config.deploy);
+  const input: Json = {};
+  if (typeof build.builder === "string") input.builder = build.builder;
+  if (typeof build.buildCommand === "string") input.buildCommand = build.buildCommand;
+  if (typeof deploy.startCommand === "string") input.startCommand = deploy.startCommand;
+  if (typeof deploy.restartPolicyType === "string") {
+    input.restartPolicyType = deploy.restartPolicyType;
+  }
+  if (typeof deploy.restartPolicyMaxRetries === "number") {
+    input.restartPolicyMaxRetries = deploy.restartPolicyMaxRetries;
+  }
+  return input;
+}
+
 export async function deployRailway(
   deps: PlatformDeps,
   options: RailwayOptions,
@@ -232,7 +264,7 @@ export async function deployRailway(
     `mutation($serviceId: String!, $environmentId: String!, $input: ServiceInstanceUpdateInput!) {
        serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input)
      }`,
-    { serviceId, environmentId: target.environmentId, input: { railwayConfigFile: CONFIG_FILE } },
+    { serviceId, environmentId: target.environmentId, input: serviceSettings(options.repoRoot) },
   );
   const domain = await ensureDomain(gql, target, serviceId);
 

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import type { PlatformDeps } from "./platform";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 import { checkHealth, CONFIG_FILE, deployRailway, type RailwayOptions } from "./railway";
 
 const TOKEN = "railway-token-SECRET";
@@ -20,7 +25,7 @@ const options: RailwayOptions = {
   projectName: "meridian",
   serviceName: "automation",
   env,
-  repoRoot: "/repo",
+  repoRoot: REPO_ROOT,
   healthAttempts: 2,
   healthIntervalMs: 1,
 };
@@ -29,6 +34,7 @@ type Mode = "project-token" | "account-existing" | "account-new";
 
 function fakes(mode: Mode, healthStatuses: number[] = [200]) {
   const queries: string[] = [];
+  const bodies: string[] = [];
   const headersSeen: Record<string, string>[] = [];
   const logs: string[] = [];
   const health = [...healthStatuses];
@@ -43,6 +49,7 @@ function fakes(mode: Mode, healthStatuses: number[] = [200]) {
       headersSeen.push(headers);
       const { query } = JSON.parse(String(init.body)) as { query: string };
       queries.push(query);
+      bodies.push(String(init.body));
       const reply = (data: unknown, status = 200) =>
         new Response(JSON.stringify({ data }), { status });
       if (query.includes("projectToken")) {
@@ -73,12 +80,12 @@ function fakes(mode: Mode, healthStatuses: number[] = [200]) {
       return reply({ ok: true });
     },
   };
-  return { deps, queries, headersSeen, logs };
+  return { deps, queries, bodies, headersSeen, logs };
 }
 
 describe("deployRailway", () => {
   it("project token: uses its project, sets variables and config file, uploads, checks health", async () => {
-    const { deps, queries, headersSeen, logs } = fakes("project-token");
+    const { deps, queries, bodies, headersSeen, logs } = fakes("project-token");
     let runEnv: NodeJS.ProcessEnv = {};
     let runArgs: readonly string[] = [];
     const result = await deployRailway(deps, options, async (_c, args, o) => {
@@ -99,7 +106,10 @@ describe("deployRailway", () => {
     );
     expect(runArgs.join(" ")).toContain("--environment e1");
     expect(runArgs.join(" ")).not.toContain(TOKEN);
-    expect(CONFIG_FILE).toBe("services/automation/railway.json");
+    expect(CONFIG_FILE).toBe("/services/automation/railway.json");
+    const update = bodies.find((b) => b.includes("serviceInstanceUpdate"));
+    expect(update).not.toContain("railwayConfigFile");
+    expect(update).toContain("corepack pnpm --filter automation start");
     const output = logs.join("\n");
     for (const secret of [TOKEN, KEYPAIR, SERVICE_TOKEN, "tiingo-key-xyz"]) {
       expect(output).not.toContain(secret);
