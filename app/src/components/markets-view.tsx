@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Landing, PageNotes } from "./markets/notes";
 import { useMarketSources } from "./markets/data-context";
@@ -10,8 +10,7 @@ import { useReader } from "./reader-context";
 import { useAsync } from "./use-async";
 import { useNow } from "./use-now";
 import { useMarketData, type MarketDataSources } from "@/lib/market-data";
-import { formatTradingDate, groupByTicker, marketStatus, type MarketRow } from "@/lib/markets";
-import { activeDateMarkets, etTradingDate } from "@/lib/time";
+import { groupByTicker, marketStatus, type MarketRow } from "@/lib/markets";
 import { tradeHref } from "@/app/trade/_lib/href";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
 import { useFairValues } from "@/lib/fair-values";
@@ -97,10 +96,15 @@ export function MarketsView({
     };
   };
   const allGroups = groupByTicker(all);
+  // Only when trading has stopped everywhere: an open market alongside a closed one keeps it hidden.
+  const statuses = all.map((m) => marketStatus(m, now));
+  const needsSettleNote =
+    !statuses.some((s) => s === "Open" || s === "ClosingSoon") &&
+    statuses.some((s) => s === "Closed" || s === "Settling" || s === "SettlementDelayed");
   return (
     <div className="space-y-mer-6">
       <Landing />
-      <PageNotes showSettleNote={false} />
+      <PageNotes showSettleNote={needsSettleNote} />
       {allGroups.map((group) => {
         const open: MarketRow[] = [];
         const closed: MarketRow[] = [];

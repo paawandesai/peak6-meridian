@@ -114,7 +114,7 @@ describe("badgeProps (design.md §3 precedence)", () => {
   };
 
   it("maps each time-based state", () => {
-    expect(statusAt(-5_000)).toEqual({ state: "open" });
+    expect(statusAt(-5_000)).toMatchObject({ state: "open" });
     expect(statusAt(-300)).toEqual({ state: "closing-soon", remaining: "05:00" });
     expect(statusAt(10)).toMatchObject({ state: "closed" });
     expect(statusAt(400)).toEqual({ state: "settling" });

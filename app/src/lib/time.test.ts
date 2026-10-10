@@ -126,9 +126,9 @@ describe("nextClose (header rule)", () => {
     expect(nextClose([m], Number(closeNormal) + 5_000)).toEqual({ kind: "markets-closed" });
   });
 
-  it("only the active date counts: an older date's open market does not drive the countdown", () => {
+  it("includes all open markets across all dates: an older date's open market drives the countdown", () => {
     const old = market({ address: "o", tradingDate: 20261007, closeTs: closeNormal + 9_999_999n });
     const today = market({ address: "t", tradingDate: date, closeTs: closeNormal, settled: true });
-    expect(nextClose([old, today], NOW)).toEqual({ kind: "markets-closed" });
+    expect(nextClose([old, today], NOW)).toMatchObject({ kind: "countdown", closeTs: closeNormal + 9_999_999n });
   });
 });

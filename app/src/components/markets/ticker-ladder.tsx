@@ -5,7 +5,7 @@ import { PriceHistoryChart } from "../price-history-chart/price-history-chart";
 import { StrikeRow, type StrikeData } from "./strike-row";
 import type { PythQuote } from "@/lib/pyth-quotes";
 import type { BadgeContext } from "@/lib/market-view";
-import { marketStatus, type MarketRow } from "@/lib/markets";
+import { type MarketRow } from "@/lib/markets";
 import { formatEtHm } from "@/lib/time";
 
 /**
