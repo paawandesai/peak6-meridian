@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within, configure } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 import { TradeView } from "./trade-view";
 import { NO_VIEW_CAPTION } from "./book-panel";
@@ -23,6 +23,15 @@ import { PYTH_FEED_IDS } from "@/lib/pyth-quotes";
 // The shared dev box can be heavily loaded; generous waits keep these from flaking.
 configure({ asyncUtilTimeout: 10_000 });
 vi.setConfig({ testTimeout: 60_000 });
+
+// Mock Pyth API by default to avoid unmocked fetch errors
+beforeEach(() => {
+  mockPythQuotes([{ ticker: "NVDA", price_cents: 18_000 }]);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // 2026-10-08 16:00 ET close = 20:00Z.
 const CLOSE = 1_791_489_600n;
@@ -572,6 +581,12 @@ describe("the page header (UI-04 AC9, AC10, M2-06 AC6)", () => {
     expect(screen.getByText("Pyth")).toBeInTheDocument();
     expect(screen.getByText(/\ds ago/)).toBeInTheDocument();
     await screen.findByTestId("simulated");
+  });
+
+  it("shows unavailable when Pyth quote fails to load", async () => {
+    mockPythQuotes([]); // Empty quotes = unavailable
+    renderView();
+    await waitFor(() => expect(screen.getByText("NVDA price unavailable")).toBeInTheDocument());
   });
 
   it("explains the midpoint in always-visible text", async () => {

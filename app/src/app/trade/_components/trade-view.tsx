@@ -13,13 +13,12 @@ import type { TradeReader } from "../_lib/reader";
 import { badgeProps, nextTransition, panelState } from "../_lib/state";
 import type { TradeActions } from "../_lib/tx";
 import { usePolled } from "../_lib/use-polled";
-import { AsOf, Countdown, StateBadge } from "@/components/ui";
-import { PythPrice, PythPricePlaceholder } from "@/components/pyth-price";
+import { Countdown, StateBadge } from "@/components/ui";
+import { PythPrice, PythPricePlaceholder, PythPriceUnavailable } from "@/components/pyth-price";
 import type { AppConfig } from "@/lib/chain";
-import { formatUsdCents } from "@/lib/display";
 import type { MarketData } from "@/lib/market-data";
 import type { MarketRow } from "@/lib/markets";
-import { formatEtHms } from "@/lib/time";
+import { formatEtHm } from "@/lib/time";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
 
 type Props = {
@@ -45,12 +44,17 @@ function LivePrice({
 }) {
   const pythQuotes = usePythQuotes([market.ticker as never]);
   const quote = pythQuotes.quotes[market.ticker];
+  const isUnavailable = !pythQuotes.loading && quote === undefined;
 
-  if (quote === undefined) {
+  if (pythQuotes.loading || quote === undefined) {
     return (
       <span className="inline-flex flex-wrap items-baseline gap-mer-2 text-mer-sm">
         <span className="mer-num font-semibold">{market.ticker}</span>
-        <PythPricePlaceholder />
+        {isUnavailable ? (
+          <PythPriceUnavailable ticker={market.ticker} />
+        ) : (
+          <PythPricePlaceholder />
+        )}
       </span>
     );
   }

@@ -46,12 +46,23 @@ export function PythPrice({
 }
 
 /**
- * Placeholder shown when Pyth quote is unavailable.
+ * Placeholder shown when Pyth quote is loading.
  */
 export function PythPricePlaceholder() {
   return (
     <span className="flex flex-wrap items-baseline gap-x-mer-2">
-      <span className="text-mer-sm text-mer-ink-muted">— Pyth price loading</span>
+      <span className="text-mer-sm text-mer-ink-muted">Pyth price loading</span>
+    </span>
+  );
+}
+
+/**
+ * Error message when Pyth quote is unavailable.
+ */
+export function PythPriceUnavailable({ ticker }: { readonly ticker: string }) {
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-mer-2">
+      <span className="text-mer-sm text-mer-ink-muted">{ticker} price unavailable</span>
     </span>
   );
 }

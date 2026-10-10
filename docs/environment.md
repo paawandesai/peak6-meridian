@@ -33,6 +33,7 @@
 | `TIINGO_API_KEY` | automation, app server, quant, ops-agent, feed jobs | Tiingo API | devnet | `test-tiingo-key` |
 | `TWELVEDATA_API_KEY` | same | Twelve Data API | devnet | `test-twelvedata-key` |
 | `FINNHUB_API_KEY` | app server, quant, ops-agent | Finnhub live quotes | no | `test-finnhub-key` |
+| `PYTH_API_TOKEN` | app server | Pyth Pro (Lazer) live equity prices (M3-10, D-055) | M3 | `test-pyth-pro-token` |
 | `ANTHROPIC_API_KEY` | ops-agent | Claude API | M3 | `sk-ant-test-placeholder` |
 | `OPS_AGENT_MODEL` | ops-agent | Model ID | no | `claude-sonnet-5-5` |
 | `OPS_AGENT_BUDGET_USD` | ops-agent | Hard spend cap; agent refuses calls once reached | no (default 20) | `20` |

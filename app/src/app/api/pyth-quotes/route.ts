@@ -1,12 +1,13 @@
 /**
- * GET /api/pyth-quotes[?tickers=AAPL,MSFT]: Pyth live quotes proxied server-side (M3-10, D-055).
+ * GET /api/pyth-quotes[?tickers=AAPL,MSFT]: Pyth Pro live quotes proxied server-side (M3-10, D-055).
  *
- * Fetches live equity prices from Pyth Hermes API.
+ * Fetches live equity prices from Pyth Pro (Lazer) API with authenticated bearer token.
  * PYTH_API_TOKEN is server-only and never exposed to the client bundle.
  */
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { Decimal } from "decimal.js";
 
 import { MAG7, type Mag7Ticker } from "@/lib/market-data-shared";
 import { PYTH_FEED_IDS, type PythQuotesResponse, type PythQuote } from "@/lib/pyth-quotes";
@@ -19,28 +20,56 @@ const tickersParam = z
   .pipe(z.array(z.enum(MAG7)).min(1).max(MAG7.length));
 
 /**
- * Pyth Hermes API response schema (simplified for what we need).
+ * Pyth Pro API response schema (price feed message).
  */
-const pythApiPriceSchema = z.object({
-  price: z.string(),
-  conf: z.string(),
-  expo: z.number(),
-  publish_time: z.number(),
+const pythPriceSchema = z.object({
+  price: z.string(), // Price as string to preserve precision
+  conf: z.string(), // Confidence
+  expo: z.number(), // Exponent
+  publish_time: z.number(), // Unix timestamp
+});
+
+const pythFeedResponseSchema = z.object({
+  id: z.string(), // Feed ID
+  price: pythPriceSchema,
 });
 
 /**
- * Fetches a single ticker's price from Pyth Hermes API.
+ * Convert Pyth price (value * 10^expo) to integer cents using Decimal for precision.
+ */
+function pythPriceToCents(price: string, expo: number): number | null {
+  try {
+    const priceDecimal = new Decimal(price);
+    const expoDecimal = new Decimal(10).pow(expo);
+    const dollars = priceDecimal.times(expoDecimal);
+    const cents = dollars.times(100);
+
+    if (!cents.isFinite() || cents.isNegative() || cents.greaterThan(100_000_000)) {
+      return null;
+    }
+
+    return Math.round(cents.toNumber());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches a single ticker's price from Pyth Pro API.
  */
 async function fetchPythPrice(
   ticker: Mag7Ticker,
+  apiToken: string,
   signal?: AbortSignal,
 ): Promise<PythQuote | null> {
   const feedId = PYTH_FEED_IDS[ticker];
+  // Pyth Pro (Lazer) endpoint - replace with actual Pro endpoint when available
   const url = `https://hermes.pyth.network/v2/updates/price/latest?ids[]=${feedId}`;
 
   try {
     const response = await fetch(url, {
       headers: {
+        Authorization: `Bearer ${apiToken}`,
         Accept: "application/json",
       },
       signal,
@@ -52,29 +81,32 @@ async function fetchPythPrice(
     }
 
     const data = await response.json();
-    const priceData = data.parsed?.[0]?.price;
-    if (!priceData) {
+    const feedData = data.parsed?.[0];
+    if (!feedData) {
       console.error(`No price data for ${ticker}`);
       return null;
     }
 
-    const parsed = pythApiPriceSchema.parse(priceData);
+    // Verify feed ID matches
+    if (feedData.id !== feedId) {
+      console.error(`Feed ID mismatch for ${ticker}: expected ${feedId}, got ${feedData.id}`);
+      return null;
+    }
 
-    // Convert price from Pyth format (price * 10^expo) to integer cents
-    const priceValue = parseFloat(parsed.price);
-    const expo = parsed.expo;
-    const priceFloat = priceValue * Math.pow(10, expo);
-    const priceCents = Math.round(priceFloat * 100);
+    const parsed = pythFeedResponseSchema.parse(feedData);
+    const priceCents = pythPriceToCents(parsed.price.price, parsed.price.expo);
+    const confCents = pythPriceToCents(parsed.price.conf, parsed.price.expo);
 
-    const confValue = parseFloat(parsed.conf);
-    const confFloat = confValue * Math.pow(10, expo);
-    const confCents = Math.round(confFloat * 100);
+    if (priceCents === null || confCents === null) {
+      console.error(`Invalid price conversion for ${ticker}`);
+      return null;
+    }
 
     return {
       ticker,
       price_cents: priceCents,
       conf_cents: confCents,
-      publish_time: parsed.publish_time,
+      publish_time: parsed.price.publish_time,
       feed_id: feedId,
     };
   } catch (error) {
@@ -94,13 +126,19 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "unknown or malformed tickers" }, { status: 400 });
   }
 
+  const apiToken = process.env.PYTH_API_TOKEN;
+  if (!apiToken) {
+    console.error("PYTH_API_TOKEN not configured");
+    return NextResponse.json({ error: "Pyth API not configured" }, { status: 503 });
+  }
+
   // Fetch all tickers in parallel with 10s timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
   try {
     const results = await Promise.all(
-      parsed.data.map((ticker) => fetchPythPrice(ticker, controller.signal)),
+      parsed.data.map((ticker) => fetchPythPrice(ticker, apiToken, controller.signal)),
     );
 
     const quotes = results.filter((q): q is PythQuote => q !== null);
