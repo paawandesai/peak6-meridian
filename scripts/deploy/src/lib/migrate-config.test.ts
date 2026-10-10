@@ -18,7 +18,10 @@ import {
   PYTH_TAIL_LEN,
   rentTopUp,
   verifyMigrated,
+  pythUpdateParams,
+  verifyPythUpdate,
 } from "./migrate-config";
+import type { OnChainConfig } from "./config-plan";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 const PROGRAM_ID = new PublicKey("H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm");
@@ -218,5 +221,62 @@ describe("expectedPythTail and rentTopUp", () => {
     expect(rentTopUp(100, 40)).toBe(60);
     expect(rentTopUp(100, 100)).toBe(0);
     expect(rentTopUp(100, 150)).toBe(0);
+  });
+});
+
+describe("setting the Pyth fields of an already-migrated Config (D-055 runbook)", () => {
+  const key = (seed: number): PublicKey => new PublicKey(new Uint8Array(32).fill(seed));
+  const aapl: OnChainConfig["tickers"][number] = {
+    symbol: "AAPL",
+    feeds: [key(4), key(5)],
+    feedHashes: [new Uint8Array(32), new Uint8Array(32).fill(7)],
+  };
+  const onChain: OnChainConfig = {
+    admin: key(1),
+    automationAuthority: key(2),
+    usdcMint: key(3),
+    maxStalenessSlots: 30n,
+    maxConfBps: 5,
+    overrideDelaySecs: 3_600n,
+    tickers: [aapl],
+    pyth: { lazerSigner: PublicKey.default, feedIds: [0, 0, 0, 0, 0, 0, 0], maxAgeSecs: 30n },
+  };
+  const pyth = {
+    lazerSigner: new PublicKey("9gKEEcFzSd1PDYBKWAKZi4Sq4ZCUaVX5oTr8kEjdwsfR"),
+    feedIds: [...MAG7_PYTH_FEED_IDS],
+    maxAgeSecs: 30n,
+  };
+
+  it("resends every scalar field from chain and lists no ticker slot", () => {
+    expect(pythUpdateParams(onChain, pyth)).toEqual({
+      automationAuthority: key(2),
+      maxStalenessSlots: 30n,
+      maxConfBps: 5,
+      overrideDelaySecs: 3_600n,
+      tickers: [],
+      pyth,
+    });
+  });
+
+  it("verifies only the Pyth fields changed, and to the requested values", () => {
+    expect(verifyPythUpdate(onChain, { ...onChain, pyth }, pyth)).toEqual([]);
+    const drifted: OnChainConfig = {
+      ...onChain,
+      automationAuthority: key(9),
+      maxConfBps: 6,
+      tickers: [{ ...aapl, feeds: [key(4), key(6)] }],
+      pyth: { ...pyth, maxAgeSecs: 31n },
+    };
+    const problems = verifyPythUpdate(onChain, drifted, pyth);
+    expect(problems.map((p) => p.split(" ")[0])).toEqual([
+      "automation_authority",
+      "max_conf_bps",
+      "tickers",
+      "pyth_max_age_secs",
+    ]);
+    expect(verifyPythUpdate(onChain, onChain, pyth)).toEqual([
+      "pyth_lazer_signer is 11111111111111111111111111111111",
+      "pyth_feed_ids are 0,0,0,0,0,0,0",
+    ]);
   });
 });

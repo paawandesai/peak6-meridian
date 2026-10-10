@@ -3,16 +3,20 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { type Program } from "@coral-xyz/anchor";
 import {
   assertCluster,
+  configParamsArg,
   findConfigPda,
   MERIDIAN_PROGRAM_ID,
+  type Meridian,
+  type PythConfigInput,
   pythConfigArg,
   redactRpcUrl,
 } from "@meridian/client";
-import { Connection, SystemProgram } from "@solana/web3.js";
+import { Connection, type Keypair, SystemProgram } from "@solana/web3.js";
 
-import { createProgram } from "./lib/chain-io";
+import { createProgram, readOnChainConfig } from "./lib/chain-io";
 import { readKeypairFile } from "./lib/keypair";
 import {
   classifyConfigAccount,
@@ -21,8 +25,10 @@ import {
   MIGRATE_USAGE,
   type MigrateOptions,
   parseMigrateOptions,
+  pythUpdateParams,
   rentTopUp,
   verifyMigrated,
+  verifyPythUpdate,
 } from "./lib/migrate-config";
 
 const log = (line: string): void => {
@@ -82,7 +88,11 @@ async function run(options: MigrateOptions): Promise<void> {
       `already migrated: pyth_lazer_signer=${decoded.pythLazerSigner.toBase58()} ` +
         `pyth_feed_ids=${decoded.pythFeedIds.join(",")} pyth_max_age_secs=${decoded.pythMaxAgeSecs.toString()}`,
     );
-    log("nothing to do (migrate_config would fail with ConfigAlreadyMigrated)");
+    if (options.pyth === null) {
+      log("nothing to do (migrate_config would fail with ConfigAlreadyMigrated)");
+      return;
+    }
+    await setPythFields(program, admin, options.pyth, options.dryRun);
     return;
   }
 
@@ -150,6 +160,59 @@ async function run(options: MigrateOptions): Promise<void> {
       `pyth_feed_ids=${decoded.pythFeedIds.join(",")} pyth_max_age_secs=${decoded.pythMaxAgeSecs.toString()}`,
   );
   log(`verified: bytes 0..${before.length} unchanged byte-for-byte; new fields as expected`);
+}
+
+/**
+ * Already migrated: sets the Pyth fields with update_config (D-055 runbook). Every other field
+ * is resent from chain, then re-read and compared, so nothing else can change unnoticed.
+ */
+async function setPythFields(
+  program: Program<Meridian>,
+  admin: Keypair,
+  pyth: PythConfigInput,
+  dryRun: boolean,
+): Promise<void> {
+  const before = await readOnChainConfig(program);
+  if (before === null) {
+    throw new Error("the Config account disappeared");
+  }
+  if (!before.admin.equals(admin.publicKey)) {
+    throw new Error(
+      `the Config admin is ${before.admin.toBase58()}, not the signer ${admin.publicKey.toBase58()}; nothing was sent`,
+    );
+  }
+  log(
+    `update_config (Pyth fields only): signer=${pyth.lazerSigner.toBase58()} ` +
+      `feed_ids=${pyth.feedIds.join(",")} max_age_secs=${pyth.maxAgeSecs}; ` +
+      `resending automation=${before.automationAuthority.toBase58()} ` +
+      `max_staleness_slots=${before.maxStalenessSlots} max_conf_bps=${before.maxConfBps} ` +
+      `override_delay_secs=${before.overrideDelaySecs} usdc_mint=${before.usdcMint.toBase58()}`,
+  );
+  const config = findConfigPda(program.programId).address;
+  const method = program.methods
+    .updateConfig(configParamsArg(pythUpdateParams(before, pyth)))
+    .accountsStrict({ config, admin: admin.publicKey, usdcMint: before.usdcMint });
+  if (dryRun) {
+    const connection = program.provider.connection;
+    const tx = await method.transaction();
+    tx.feePayer = admin.publicKey;
+    tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+    const simulation = await connection.simulateTransaction(tx, [admin]);
+    for (const line of simulation.value.logs ?? []) log(`  sim: ${line}`);
+    if (simulation.value.err !== null) {
+      throw new Error(`simulation failed: ${JSON.stringify(simulation.value.err)}`);
+    }
+    log("DRY_RUN: simulation succeeded; nothing was sent");
+    return;
+  }
+  log(`sent update_config: ${await method.rpc({ commitment: "confirmed" })}`);
+  const after = await readOnChainConfig(program);
+  const problems =
+    after === null ? ["the Config account disappeared"] : verifyPythUpdate(before, after, pyth);
+  if (problems.length > 0) {
+    throw new Error(`verification FAILED: ${problems.join("; ")}`);
+  }
+  log("verified: Pyth fields set; every other field unchanged");
 }
 
 async function main(): Promise<void> {

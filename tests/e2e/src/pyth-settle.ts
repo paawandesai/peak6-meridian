@@ -5,8 +5,9 @@
  * part of `make e2e`. Nothing here touches devnet: the cluster is the throwaway validator that
  * `scripts/e2e.sh` starts, and the script refuses any other RPC.
  *
- * 1. Config with the MAG7 tickers, then `update_config` sets the official Pyth Lazer signer, the
- *    Pyth Pro feed ids and a 30 s close window, plus a 5 s override delay for step 6.
+ * 1. Config with the MAG7 tickers (5 s override delay for step 6), then the runbook command
+ *    `make migrate-config` with PYTH_LAZER_SIGNER (dry run, then for real) pins the official Pyth
+ *    Lazer signer, the Pyth Pro feed ids and a 30 s close window through update_config.
  * 2. AAPL markets for trading date 2026-10-09 closing a few seconds from now (create_strike_market
  *    needs a future close, so the recorded Friday 16:00 ET update is settled in LiteSVM instead).
  * 3. Once closed, Pyth's update signed at close_ts is fetched (the production request).
@@ -52,7 +53,10 @@ import {
   readPythConfig,
   type SignedPythUpdate,
 } from "automation";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 /** Pyth Lazer's production signer (Solana storage account 3rdJbq…, OP-PIP-45; D-056). */
@@ -174,7 +178,28 @@ async function initConfig(): Promise<void> {
       .accountsStrict({ config, admin: admin.publicKey, usdcMint })
       .rpc({ commitment: "confirmed" });
   }
-  evidence.updateConfigSignature = await updateConfig(pythOn());
+  // The runbook step, as the operator will run it on devnet: dry run first, then for real.
+  for (const dryRun of ["1", "0"]) {
+    const out = execFileSync("make", ["--no-print-directory", "migrate-config"], {
+      cwd: resolve(fileURLToPath(new URL(".", import.meta.url)), "../../.."),
+      env: {
+        ...process.env,
+        SOLANA_RPC_URL: env.ANCHOR_PROVIDER_URL,
+        SOLANA_CLUSTER: "localnet",
+        ADMIN_KEYPAIR_PATH: env.ANCHOR_WALLET,
+        MERIDIAN_PROGRAM_ID: programId.toBase58(),
+        PYTH_LAZER_SIGNER: PYTH_LAZER_SIGNER.toBase58(),
+        PYTH_MAX_AGE_SECS: CLOSE_WINDOW_SECS.toString(),
+        DRY_RUN: dryRun,
+      },
+      encoding: "utf8",
+    });
+    for (const line of out
+      .split("\n")
+      .filter((l) => /migrate-config: (update_config|DRY_RUN|sent|verified)/.test(l))) {
+      say(line.trim());
+    }
+  }
   const pinned = await readPythConfig(program, config);
   say(
     `update_config: signer ${pinned.signer.toBase58()}, feeds ${JSON.stringify(pinned.feedIds)}, window ${pinned.closeWindowSecs}s`,
