@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { AppHeader, NAV_ITEMS, PAUSE_BANNER_TEXT } from "./app-header";
+import { TestMarketProvider } from "./test-market-context";
 import HomePage from "@/app/page";
 import { market, reader, withReader } from "@/test-utils";
 
@@ -38,7 +39,11 @@ describe("clock (AC4)", () => {
   });
 
   it("the prerendered shell contains the placeholder, so there is no hydration mismatch", () => {
-    const html = renderToStaticMarkup(<HomePage />);
+    const html = renderToStaticMarkup(
+      <TestMarketProvider>
+        <HomePage />
+      </TestMarketProvider>,
+    );
     expect(html).toContain("--:--:-- ET");
     expect(html).toContain("Loading markets");
   });
@@ -55,7 +60,7 @@ describe("next close (AC4)", () => {
       nowSecs: CLOSE - 724,
       markets: [market({ tradingDate: date, closeTs: BigInt(CLOSE) })],
     });
-    expect(screen.getByTestId("next-close")).toHaveTextContent("Closes in 12:04");
+    expect(screen.getByTestId("next-close")).toHaveTextContent("NYSE close 4:00 PM ET · in 12:04");
   });
 
   it("an early-close day counts down to its own 13:00 ET close_ts", () => {
@@ -64,7 +69,7 @@ describe("next close (AC4)", () => {
       nowSecs: early - 3_600,
       markets: [market({ tradingDate: 20261127, closeTs: BigInt(early) })],
     });
-    expect(screen.getByTestId("next-close")).toHaveTextContent("Closes in 1:00:00");
+    expect(screen.getByTestId("next-close")).toHaveTextContent("NYSE close 1:00 PM ET · in 1:00:00");
   });
 
   it("a market in its final 15 minutes still drives the countdown, not 'Closed · settling'", () => {
@@ -72,7 +77,7 @@ describe("next close (AC4)", () => {
       nowSecs: CLOSE - 300,
       markets: [market({ tradingDate: date, closeTs: BigInt(CLOSE) })],
     });
-    expect(screen.getByTestId("next-close")).toHaveTextContent("Closes in 05:00");
+    expect(screen.getByTestId("next-close")).toHaveTextContent("NYSE close 4:00 PM ET · in 05:00");
     expect(screen.getByTestId("next-close")).not.toHaveTextContent("settling");
   });
 
@@ -98,6 +103,27 @@ describe("pause banner slot", () => {
     unmount();
     header({ config: { paused: false, overrideDelaySecs: 3600n, admin: "A" } });
     expect(screen.queryByText(PAUSE_BANNER_TEXT)).toBeNull();
+  });
+});
+
+describe("demo wallet CTA (P0-6 US-01, FR-23)", () => {
+  it("clicking the CTA calls select with DEMO_WALLET_NAME", async () => {
+    const selectMock = vi.fn();
+    const walletAdapterModule = await import("@solana/wallet-adapter-react");
+    const originalUseWallet = walletAdapterModule.useWallet;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (walletAdapterModule.useWallet as any) = () => ({ publicKey: null, select: selectMock });
+
+    const { DEMO_WALLET_NAME } = await import("@/lib/demo-wallet");
+    header();
+
+    const cta = screen.getByTestId("demo-wallet-cta");
+    cta.click();
+
+    expect(selectMock).toHaveBeenCalledWith(DEMO_WALLET_NAME);
+
+    // Restore
+    walletAdapterModule.useWallet = originalUseWallet;
   });
 });
 

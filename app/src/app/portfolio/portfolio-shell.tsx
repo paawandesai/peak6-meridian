@@ -2,6 +2,7 @@
 
 import { PortfolioView } from "./portfolio-view";
 import { AppHeader } from "@/components/app-header";
+import { BottomTabBar } from "@/components/app-shell/bottom-tab-bar";
 import { FaucetButton } from "@/components/faucet-button";
 import { Providers } from "@/components/providers";
 import { useReader } from "@/components/reader-context";
@@ -23,10 +24,11 @@ function Shell() {
       >
         <FaucetButton />
       </AppHeader>
-      <main className="mx-auto max-w-5xl px-mer-4 py-mer-6">
+      <main className="mx-auto max-w-5xl px-mer-4 py-mer-6 pb-20 md:pb-mer-6">
         <h2 className="mb-mer-4 text-mer-lg font-semibold">Portfolio</h2>
         <PortfolioView nowSecs={nowSecs} />
       </main>
+      <BottomTabBar />
     </>
   );
 }

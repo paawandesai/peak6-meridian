@@ -14,12 +14,17 @@ import {
   type RowState,
 } from "./model";
 import { useReader } from "@/components/reader-context";
+import { useTestMarkets } from "@/components/test-market-context";
 import {
   Countdown,
   Pnl,
+  PortfolioFilters,
+  type PortfolioTotals,
   SideLabel,
   StateBadge,
   type StateBadgeProps,
+  TestMarketBadge,
+  TestMarketToggle,
   TxStatus,
   type TxStatusProps,
 } from "@/components/ui";
@@ -28,7 +33,6 @@ import { loadPublicConfig } from "@/lib/config";
 import {
   formatPriceTenths,
   formatUsdCents,
-  formatUsdcBalance,
   formatUsdSigned,
   scaledToCentsFloor,
 } from "@/lib/display";
@@ -36,8 +40,10 @@ import { type MarketData, type MarketDataSources, useMarketData } from "@/lib/ma
 import {
   formatStrike,
   formatTradingDate,
+  isSessionMarket,
   type MarketRow,
   marketStatus,
+  partitionMarkets,
   SETTLING_START_SECS,
 } from "@/lib/markets";
 import { tenthsToBase, type YesQuotes } from "@/lib/pnl";
@@ -47,11 +53,6 @@ export const MARK_FOOTNOTE = "Mark is the book midpoint, not a guaranteed sale p
 export const CONNECT_COPY = "Connect your wallet to see your positions, P&L and winnings.";
 
 type Filter = "open" | "resting" | "closed";
-const FILTERS: readonly { readonly id: Filter; readonly label: string }[] = [
-  { id: "open", label: "Open" },
-  { id: "resting", label: "Resting orders" },
-  { id: "closed", label: "Closed" },
-];
 
 /** `NVDA ≥ $180 10/08` */
 export function marketLabel(market: MarketRow): string {
@@ -193,7 +194,10 @@ function PositionsTable({
           {rows.map((row) => (
             <tr key={row.key} className="border-t border-mer-rule align-top">
               <th scope="row" className="py-mer-2 pr-mer-2 text-left font-medium">
-                {marketLabel(row.market)}
+                <div className="flex items-center gap-mer-1">
+                  {marketLabel(row.market)}
+                  {!isSessionMarket(row.market) ? <TestMarketBadge /> : null}
+                </div>
               </th>
               <td className="py-mer-2 pr-mer-2">
                 <SideLabel
@@ -400,6 +404,7 @@ export function PortfolioView(props: PortfolioViewProps) {
   const { connection } = useConnection();
   const { setVisible } = useWalletModal();
   const reader = useReader();
+  const { showTestMarkets, setShowTestMarkets } = useTestMarkets();
   const config = useMemo(() => loadPublicConfig(), []);
   const source = useMemo(
     () => props.source ?? createPortfolioSource(config),
@@ -409,7 +414,14 @@ export function PortfolioView(props: PortfolioViewProps) {
   const [filter, setFilter] = useState<Filter>("open");
   const [tx, setTx] = useState<TxStatusProps | null>(null);
 
-  const markets = useAsync(() => reader.listMarkets(), [reader]);
+  const marketsAll = useAsync(() => reader.listMarkets(), [reader]);
+  // P0-1 AC3-4: Filter to session markets only (test markets hidden by default)
+  const { testMarketCount, markets } = useMemo(() => {
+    if (marketsAll.status !== "ready") return { testMarketCount: 0, markets: marketsAll };
+    const { session, test } = partitionMarkets(marketsAll.value);
+    const filtered = showTestMarkets ? [...session, ...test] : session;
+    return { testMarketCount: test.length, markets: { ...marketsAll, value: filtered } };
+  }, [marketsAll, showTestMarkets]);
   const settings = useAsync(() => reader.getConfig(), [reader]);
   const wallet = publicKey;
   const snapshot = useAsync(
@@ -529,32 +541,32 @@ export function PortfolioView(props: PortfolioViewProps) {
     }),
   );
 
+  const portfolioTotals: PortfolioTotals = {
+    usdcBalance: model.totals.usdc,
+    redeemableNow: model.totals.redeemable, // already in USDC base units
+    unrealizedCents: model.totals.unrealized, // already in USDC base units
+    realizedCents: model.totals.realized, // already in USDC base units
+  };
+
   return (
     <div className="flex flex-col gap-mer-4">
-      <p className="flex flex-wrap items-center gap-x-mer-4 gap-y-mer-1" aria-label="Totals">
-        <span className="mer-num">
-          {model.totals.usdc === null ? "test-USDC —" : formatUsdcBalance(model.totals.usdc)}
-        </span>
-        <span>
-          Redeemable now <span className="mer-num">{formatUsdSigned(model.totals.redeemable)}</span>{" "}
-          {redeemAll.length > 0 ? (
-            <button
-              type="button"
-              className="rounded-mer border border-mer-control-border px-mer-2 py-mer-1 font-medium disabled:opacity-50"
-              disabled={busy}
-              onClick={() => void run((actions) => actions.redeem(redeemAll))}
-            >
-              Redeem all
-            </button>
-          ) : null}
-        </span>
-        <span>
-          Unrealized <PnlCell value={model.totals.unrealized} />
-        </span>
-        <span>
-          Realized <PnlCell value={model.totals.realized} />
-        </span>
-      </p>
+      <PortfolioFilters
+        activeTab={filter}
+        onTabChange={setFilter}
+        totals={portfolioTotals}
+      />
+      {redeemAll.length > 0 ? (
+        <div>
+          <button
+            type="button"
+            className="rounded-mer border border-mer-control-border px-mer-2 py-mer-1 font-medium disabled:opacity-50"
+            disabled={busy}
+            onClick={() => void run((actions) => actions.redeem(redeemAll))}
+          >
+            Redeem all
+          </button>
+        </div>
+      ) : null}
       {model.incompleteHistory ? (
         <p role="note" className="text-mer-sm text-mer-ink-muted">
           History incomplete: P&L is shown as — where the events on this wallet do not account for
@@ -563,27 +575,13 @@ export function PortfolioView(props: PortfolioViewProps) {
       ) : null}
       {tx === null ? null : <TxStatus {...tx} />}
 
-      <div className="flex flex-wrap items-center justify-between gap-mer-2">
-        <div role="group" aria-label="Filter positions" className="flex gap-mer-1">
-          {FILTERS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={filter === id}
-              className={`rounded-mer border px-mer-3 py-mer-1 text-mer-sm font-medium ${
-                filter === id
-                  ? "border-mer-ink bg-mer-ink text-mer-surface"
-                  : "border-mer-control-border"
-              }`}
-              onClick={() => setFilter(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <p className="text-mer-xs text-mer-ink-muted">{MARK_FOOTNOTE}</p>
-      </div>
-
+      {testMarketCount > 0 ? (
+        <TestMarketToggle
+          testMarketCount={testMarketCount}
+          showTestMarkets={showTestMarkets}
+          onToggle={() => setShowTestMarkets(!showTestMarkets)}
+        />
+      ) : null}
       {filter === "resting" ? (
         model.resting.length === 0 ? (
           <p>No resting orders.</p>

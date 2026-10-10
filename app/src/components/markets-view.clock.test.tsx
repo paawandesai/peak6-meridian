@@ -7,15 +7,39 @@ vi.mock("@solana/wallet-adapter-react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@solana/wallet-adapter-react")>()),
   useWallet: () => ({ publicKey: null }),
 }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/",
+}));
 
 import { MarketsView } from "./markets-view";
+import { TestMarketProvider } from "./test-market-context";
 import { market, reader, withReader } from "@/test-utils";
 
+const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
+// Oct 8, 2026 is a trading day, session close at 16:00 ET = 20:00 UTC (EDT)
+const SESSION_CLOSE = BigInt(utc("2026-10-08T20:00:00Z"));
+
 const markets = [
-  market({ address: "1111111111111111111111111111111A", tradingDate: 20261008, ticker: "NVDA" }),
+  market({
+    address: "1111111111111111111111111111111A",
+    tradingDate: 20261008,
+    ticker: "NVDA",
+    closeTs: SESSION_CLOSE,
+  }),
 ];
 const view = () =>
-  withReader(reader({ listMarkets: () => Promise.resolve(markets) }), <MarketsView />);
+  withReader(
+    reader({ listMarkets: () => Promise.resolve(markets) }),
+    <TestMarketProvider>
+      <MarketsView />
+    </TestMarketProvider>,
+  );
 
 describe("MarketsView before the clock has mounted", () => {
   it("shows loading, never a 'Showing markets from … (closed)' line from a 1970 clock", async () => {

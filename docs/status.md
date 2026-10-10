@@ -1,10 +1,10 @@
 <!-- OWNER: operator. -->
 # Status
 
-_Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, OQ-17)._
+_Last updated: 2026-10-10 CT (P1-9: oracle wording and milestone updates)._
 
 ## Current milestone
-**M1: Core lifecycle, local** (ends Wed Oct 7 23:59 ET). Tickets: [tickets/M1.md](tickets/M1.md). Next anchor: Thu Oct 8 16:05 ET devnet rehearsal settlement.
+M1-M4 delivery. M1 complete. Active work on M2-M4 features and P-series priority fixes. See milestone ticket files: [M1](tickets/M1.md), [M2](tickets/M2.md), [M3](tickets/M3.md), [M4](tickets/M4.md).
 
 ## Done
 - Kickoff pack.

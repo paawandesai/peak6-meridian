@@ -54,7 +54,9 @@ describe("FairEdge with no value", () => {
     const a = render(<FairEdge {...base} status="loading" yesCents={62} fair={undefined} />);
     expect(screen.getByRole("status")).toHaveTextContent("Fair value loading…");
     a.unmount();
-    const { container } = render(<FairEdge {...base} status="unavailable" yesCents={62} fair={undefined} />);
+    const { container } = render(
+      <FairEdge {...base} status="unavailable" yesCents={62} fair={undefined} />,
+    );
     expect(container.textContent).toBe("");
     expect(screen.queryByText(/¢/)).toBeNull();
   });

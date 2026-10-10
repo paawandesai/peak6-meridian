@@ -20,7 +20,7 @@ function getFaucet(): Faucet {
     ALERT_WEBHOOK_URL: process.env.ALERT_WEBHOOK_URL,
     USDC_MINT: process.env.USDC_MINT,
     SOLANA_CLUSTER: process.env.SOLANA_CLUSTER,
-    SOLANA_RPC_URL: process.env.SOLANA_RPC_URL,
+    SOLANA_RPC_URL: process.env.MERIDIAN_DEVNET_RPC_URL?.trim() || process.env.SOLANA_RPC_URL,
   });
   return faucet;
 }

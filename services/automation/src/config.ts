@@ -36,7 +36,9 @@ export type ServiceEnv = z.infer<typeof envSchema>;
 
 /** Validates `env`; throws naming the offending variables, never their values. */
 export function parseEnv(env: Readonly<Record<string, string | undefined>>): ServiceEnv {
-  const result = envSchema.safeParse(env);
+  // MERIDIAN_DEVNET_RPC_URL (dedicated devnet RPC, e.g. Helius) wins over SOLANA_RPC_URL.
+  const preferred = env.MERIDIAN_DEVNET_RPC_URL?.trim();
+  const result = envSchema.safeParse(preferred ? { ...env, SOLANA_RPC_URL: preferred } : env);
   if (!result.success) {
     const names = [...new Set(result.error.issues.map((issue) => String(issue.path[0])))];
     throw new Error(`invalid environment: ${names.join(", ")}`);

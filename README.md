@@ -99,7 +99,7 @@ Your position appears in the Portfolio page.
 - **Sell NO:** Exit a NO position (buys YES, redeems pair)
 
 ### 5. Settlement & Redemption
-- Markets settle at 4:05 PM ET using Switchboard oracles
+- Markets settle at 4:05 PM ET using Pyth Pro (cross-checked with RedStone)
 - After settlement, visit Portfolio
 - Click "Redeem" on winning positions
 - Winners receive $1.00 per contract; losers get $0
@@ -138,7 +138,7 @@ make typecheck
 │   ├── automation/        # Market creation & settlement (TypeScript)
 │   ├── quant/             # Fair values & market maker (Python)
 │   └── ops-agent/         # Settlement oversight (Python + Claude)
-├── oracle/feeds/          # Switchboard feed definitions
+├── oracle/feeds/          # Oracle feed definitions (Pyth Pro, RedStone)
 ├── scripts/               # Deployment & lifecycle scripts
 ├── tests/
 │   ├── e2e/               # End-to-end tests
@@ -179,7 +179,7 @@ See `make help` or `Makefile` for all targets.
 
 ## Risks and Limitations
 
-**This is a devnet demo.** No real money. No regulatory compliance. No mainnet deployment.
+**This is a devnet demo.** No real money. No mainnet deployment.
 
 Known limitations:
 - Devnet only (test-USDC, no real funds)

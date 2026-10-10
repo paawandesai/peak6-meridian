@@ -142,7 +142,7 @@ describe("useMarketData", () => {
     });
   });
 
-  it("shows a new order within the 1 s book poll, well inside NFR-01's 3 s", async () => {
+  it("shows a new order within the 2 s book poll, well inside NFR-01's 3 s", async () => {
     let ask = 44;
     const { result } = renderHook(() =>
       useMarketData(
@@ -155,7 +155,7 @@ describe("useMarketData", () => {
     });
     ask = 42; // a confirmed order lowers the best ask
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(2_000); // P0-4: 2s interval
     });
     const book = result.current.books[MARKET_A.address];
     expect(book?.state === "ready" ? book.quotes.yesAsk : null).toBe(42);

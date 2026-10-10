@@ -126,12 +126,43 @@ Shows:
 ## Settlement and Redemption
 
 After 4:00 PM ET close:
-1. Oracle fetches closing prices from Tiingo
+1. Oracle fetches closing prices from Pyth Pro (cross-checked with RedStone)
 2. Markets settle (YES wins if close ≥ strike, else NO wins)
-3. Winners can redeem tokens for $1.00 USDC each
+3. Winners redeem tokens for $1.00 USDC per contract
 4. Losers' tokens have zero value
 
 See [docs/domain.md](domain.md) for full trading rules and settlement mechanics.
+
+## Pre-recording Checklist
+
+Before recording demo footage, verify the following:
+
+### Settlement state (issue #53)
+**Issue:** As of 2026-10-09, 0 of 106 markets settled automatically; settlement requires manual intervention.  
+**How to verify:** Check `/status` page settlement count or run settlement manually via operator scripts.
+
+### Fair values and edge display (issue #36)
+**Issue:** `/api/fair-values` returns 503 with `{"error":"the quant service is not configured"}` because `QUANT_API_BASE_URL` is unset on Vercel. The quant service is not deployed (issue #36 parked).  
+**Impact:** Fair value and edge columns show "—" instead of calculated values.  
+**How to verify:** Open Markets page; fair value and edge columns display "—" dashes.
+
+### Weekend / no open markets
+**Issue:** Outside trading hours or on weekends, no markets are open for trading.  
+**Workaround:** Use the "Show test markets" toggle to reveal seeded test markets, or record during trading hours (Mon–Fri, before 4:00 PM ET).  
+**How to verify:** Markets page shows either live strikes or "Trading has stopped" / "Settlement delayed" messages; toggle reveals test markets.
+
+### Replay mode
+**What it does:** The settings sheet includes a replay mode toggle that allows users to view and interact with historical market data as if it were live.  
+**How to verify:** Open settings sheet and confirm replay mode toggle is present and functional.
+
+### Demo wallet
+**Path:** The demo wallet is a browser-based testing wallet accessible via the wallet connection flow. It provides a pre-funded wallet for demo purposes without requiring a real wallet extension.  
+**How to verify:** Connect wallet and select the demo wallet option; confirm test-USDC balance is available.
+
+### Production smoke test
+**Purpose:** Verify that the production deployment is functional before recording.  
+**Paths:** `tests/e2e/.smoke-tmp/`, `/tmp/meridian-smoke-baseline-nine.{md,messages.json}`  
+**How to verify:** Run smoke spec against production URL; all tests pass with 0 pageerrors.
 
 ## Video
 

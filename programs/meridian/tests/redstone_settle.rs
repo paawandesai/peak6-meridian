@@ -986,7 +986,7 @@ fn settle_market_fails_package_too_late_at_settle() {
     // Try to settle Market A → should fail with RedStonePackageTooLate
 
     let timestamp_ms = market_b_close_ts * 1000 + 500_000; // Valid for B (within 600s)
-    // This is market_a_close_ts + 86400 + 500s, which is >> market_a_close_ts + 600s
+                                                           // This is market_a_close_ts + 86400 + 500s, which is >> market_a_close_ts + 600s
     let value = 2050_0000_0000u128;
     let mut builder = RedstonePayloadBuilder::new(
         std::str::from_utf8(&ticker).unwrap().trim_end_matches('\0'),

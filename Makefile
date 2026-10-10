@@ -14,7 +14,7 @@ PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
 	client lint lint-rust lint-js-py check-links typecheck test test-rust-unit test-js-py-unit test-security \
-	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet test-deploy-devnet e2e e2e-ui-browser e2e-ui dev demo-ops
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet test-deploy-devnet e2e e2e-ui e2e-ui-browser dev demo-ops
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -25,7 +25,7 @@ PNPM_R_FLAGS ?=
 BUILD_LOCAL := $(if $(MERIDIAN_PREBUILT),,build-local)
 
 help:
-	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e e2e-ui-browser e2e-ui dev demo-ops"
+	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e dev demo-ops"
 
 ## Toolchain (once per machine): pinned Rust, Agave CLI, Anchor, Node, pnpm, uv, cargo tools.
 toolchain:
@@ -136,16 +136,15 @@ deploy-devnet:
 	pnpm --filter deploy run deploy-devnet $(DEPLOY_ARGS)
 
 ## End-to-end smoke on a local validator.
+## Playwright browser install (CI e2e:ui job). Downloads Chromium for @playwright/test.
+e2e-ui-browser:
+	pnpm --filter e2e exec playwright install chromium --with-deps
+
+e2e-ui:
+	pnpm --filter e2e run test
+
 e2e:
 	scripts/e2e.sh
-
-## Install Playwright browsers for e2e:ui tests (M2-13).
-e2e-ui-browser:
-	pnpm --filter e2e playwright install --with-deps chromium
-
-## Run Playwright UI tests (M2-13).
-e2e-ui:
-	pnpm --filter e2e test:ui
 
 dev:
 	scripts/dev.sh

@@ -1,6 +1,6 @@
 """Market maker configuration."""
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +10,10 @@ class MMConfig(BaseSettings):
     model_config = SettingsConfigDict(case_sensitive=False, populate_by_name=True)
 
     # Solana connection (Finding #6: no MM_ prefix per environment.md)
-    rpc_url: str = Field(default="http://localhost:8899", alias="SOLANA_RPC_URL")
+    rpc_url: str = Field(
+        default="http://localhost:8899",
+        validation_alias=AliasChoices("MERIDIAN_DEVNET_RPC_URL", "SOLANA_RPC_URL"),
+    )
     ws_url: str = Field(default="ws://localhost:8900", alias="SOLANA_WS_URL")
 
     # Market maker keypair (JSON array per environment.md, Finding #6)

@@ -6,14 +6,7 @@ import { useState } from "react";
 import { TxStatus, type TxStatusProps } from "./ui";
 import { useAsync } from "./use-async";
 import { useReader } from "./reader-context";
-import {
-  adminErrorText,
-  PAUSE_KEEPS,
-  PAUSE_STOPS,
-  TICKERS,
-  UNPAUSE_RESUMES,
-  validateAddStrike,
-} from "@/lib/admin";
+import { adminErrorText, TICKERS, validateAddStrike } from "@/lib/admin";
 import type { AdminActions } from "@/lib/admin-chain";
 import type { AppConfig } from "@/lib/chain";
 import type { MarketRow } from "@/lib/markets";
@@ -63,11 +56,16 @@ function PauseSection({
         Pause
       </h2>
       <p className="text-mer-sm" data-testid="pause-state">
-        {config.paused ? "Trading is paused." : "Trading is running."}
+        <span className="font-medium">{config.paused ? "Paused: " : "Running: "}</span>
+        {config.paused
+          ? "trading and minting stopped; cancel, withdraw and redeem still work"
+          : "all actions available"}
       </p>
-      <p className="text-mer-sm">{PAUSE_STOPS}</p>
-      <p className="text-mer-sm">{PAUSE_KEEPS}</p>
-      {config.paused ? <p className="text-mer-sm">{UNPAUSE_RESUMES}</p> : null}
+      {config.paused ? null : (
+        <p className="text-mer-sm text-mer-ink-muted">
+          When paused: trading and minting stopped; cancel, withdraw and redeem still work.
+        </p>
+      )}
       <div>
         <button
           type="button"

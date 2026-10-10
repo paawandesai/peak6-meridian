@@ -145,7 +145,13 @@ export function nextTransition(
 }
 
 /** The open (creation) and close times of a market in ET: `Opens 09:00 ET · closes 16:00 ET`. */
-export function openCloseText(openedAt: number | null, closeTs: bigint): string {
+export function openCloseText(
+  openedAt: number | null,
+  closeTs: bigint,
+  isSessionMarket: boolean,
+): string {
   const opened = openedAt === null ? "Opened —" : `Opened ${formatEtHm(openedAt)} ET`;
-  return `${opened} · closes ${formatEtHm(closeTs)} ET`;
+  const closeTime = formatEtHm(closeTs);
+  const qualifier = isSessionMarket ? "" : " (not the session close)";
+  return `${opened} · closes ${closeTime} ET${qualifier}`;
 }

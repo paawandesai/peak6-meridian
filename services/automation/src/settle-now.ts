@@ -23,7 +23,10 @@ const env = z
     ADMIN_KEYPAIR_PATH: z.string().optional(),
     ALERT_WEBHOOK_URL: z.string().optional(),
   })
-  .parse(process.env);
+  .parse({
+    ...process.env,
+    SOLANA_RPC_URL: process.env.MERIDIAN_DEVNET_RPC_URL?.trim() || process.env.SOLANA_RPC_URL,
+  });
 
 settleNow({
   argv: process.argv.slice(2),
