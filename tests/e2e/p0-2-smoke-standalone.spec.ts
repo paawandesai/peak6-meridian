@@ -23,7 +23,17 @@ async function checkPageErrors(page: Page, route: string): Promise<{ errors: str
     }
   });
 
-  await page.goto(`${BASE_URL}${route}`, { waitUntil: 'networkidle', timeout: 30000 });
+  // Use 'load' not 'networkidle' - app polls every 1-5s so network never goes idle
+  await page.goto(`${BASE_URL}${route}`, { waitUntil: 'load', timeout: 15000 });
+
+  // Wait for page to be ready - either content or empty state
+  if (route === '/') {
+    // Markets page: wait for either ticker headings or "No markets" text
+    await page.locator('h2, text=/Loading markets|No markets/').first().waitFor({ timeout: 15000 }).catch(() => {});
+  } else {
+    // Other pages: wait for main heading
+    await page.locator('h1, h2').first().waitFor({ timeout: 15000 }).catch(() => {});
+  }
 
   return { errors, console429 };
 }
@@ -51,7 +61,8 @@ test.describe('P0-2 Mobile (390x844)', () => {
   }
 
   test('chart collapsed by default', async ({ page }) => {
-    await page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
+    await page.locator('h2').first().waitFor({ timeout: 15000 }).catch(() => {});
 
     const disclosure = page.locator('details').filter({ hasText: 'Show price history' }).first();
     if (await disclosure.isVisible().catch(() => false)) {
@@ -64,7 +75,8 @@ test.describe('P0-2 Mobile (390x844)', () => {
   });
 
   test('chart expands and never blank - AC3', async ({ page }) => {
-    await page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
+    await page.locator('h2').first().waitFor({ timeout: 15000 }).catch(() => {});
 
     const summary = page.locator('summary').filter({ hasText: 'Show price history' }).first();
     if (await summary.isVisible().catch(() => false)) {
@@ -120,7 +132,8 @@ test.describe('P0-2 Desktop (1280x800)', () => {
   }
 
   test('chart collapsed by default', async ({ page }) => {
-    await page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
+    await page.locator('h2').first().waitFor({ timeout: 15000 }).catch(() => {});
 
     const disclosure = page.locator('details').filter({ hasText: 'Show price history' }).first();
     if (await disclosure.isVisible().catch(() => false)) {
@@ -132,7 +145,8 @@ test.describe('P0-2 Desktop (1280x800)', () => {
   });
 
   test('chart expands - AC3', async ({ page }) => {
-    await page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
+    await page.locator('h2').first().waitFor({ timeout: 15000 }).catch(() => {});
 
     const summary = page.locator('summary').filter({ hasText: 'Show price history' }).first();
     if (await summary.isVisible().catch(() => false)) {
