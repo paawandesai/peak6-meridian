@@ -7,6 +7,9 @@ import { TradeView } from "./trade-view";
 import { createTradeReader } from "../_lib/reader";
 import { createTradeActions } from "../_lib/tx";
 import { AppHeader } from "@/components/app-header";
+import { DemoMarketHeader } from "@/components/demo-banner";
+import { ReplayGuard } from "@/components/replay-guard";
+import { useReplay } from "@/components/use-replay";
 import { BottomTabBar } from "@/components/app-shell/bottom-tab-bar";
 import { FaucetButton } from "@/components/faucet-button";
 import { TickerInsight } from "@/components/fair-value/ticker-insight";
@@ -27,6 +30,8 @@ function Page({ address }: { readonly address: string }) {
   const { connection } = useConnection();
   const { publicKey, signTransaction } = useWallet();
   const config = useMemo(() => loadPublicConfig(), []);
+  // Replay is read-only: no signing actions and every control disabled (ReplayGuard).
+  const readOnly = useReplay()?.kind === "replay";
   const marketsAll = useAsync(() => reader.listMarkets(), [reader]);
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
   // P0-1 AC4: Filter to session markets only
@@ -52,10 +57,10 @@ function Page({ address }: { readonly address: string }) {
   );
   const actions = useMemo(
     () =>
-      market === undefined || publicKey === null || signTransaction === undefined
+      readOnly || market === undefined || publicKey === null || signTransaction === undefined
         ? null
         : createTradeActions(connection, { publicKey, signTransaction }, config, market),
-    [connection, publicKey, signTransaction, config, market],
+    [readOnly, connection, publicKey, signTransaction, config, market],
   );
 
   let body;
@@ -72,7 +77,8 @@ function Page({ address }: { readonly address: string }) {
       (m) => m.ticker === market.ticker && m.tradingDate === market.tradingDate,
     );
     body = (
-      <div className="grid gap-mer-8">
+      <ReplayGuard active={readOnly}>
+        <DemoMarketHeader market={market} />
         <TradeView
           market={market}
           config={appConfig.value}
@@ -84,7 +90,7 @@ function Page({ address }: { readonly address: string }) {
           explorerUrl={(signature) => explorerTxUrl(signature, config)}
         />
         <TickerInsight market={market} ladder={ladder} books={marketData.books} nowSecs={nowSecs} />
-      </div>
+      </ReplayGuard>
     );
   }
   return (
