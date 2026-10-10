@@ -161,15 +161,14 @@ export async function buildSettleInstructions(params: {
   for (const market of params.markets) {
     out.push(
       await params.program.methods
-        .settleMarket(null) // ed25519_ix_index: null for Switchboard path (M3-10b adds Pyth)
+        .settleMarket()
         .accountsStrict({
           config: params.config,
           market,
           feedTiingo: params.feeds[0],
           feedTwelveData: params.feeds[1],
-          redstonePrice: null, // Switchboard path (M3-10b: Pyth primary, RedStone fallback)
+          redstonePrice: null, // Switchboard path (M2-16 will use RedStone)
           oracleConfig: null, // Switchboard path
-          instructionsSysvar: null, // Pyth path only (M3-10b)
           payer: params.payer,
         })
         .instruction(),

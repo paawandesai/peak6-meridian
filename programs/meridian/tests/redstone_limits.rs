@@ -234,9 +234,7 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
         .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
 
-    let settle_ix = meridian::instruction::SettleMarket {
-        ed25519_ix_index: None,
-    };
+    let settle_ix = meridian::instruction::SettleMarket {};
     let settle_accounts = meridian::accounts::SettleMarket {
         config: config_pda(),
         market: addresses_market.market,
@@ -244,7 +242,6 @@ fn settle_market_with_redstone_stays_under_cu_limit() {
         feed_twelve_data: Pubkey::default(),
         redstone_price: Some(price_pda),
         oracle_config: Some(oracle_config_pda),
-        instructions_sysvar: None,
         payer: settler.pubkey(),
     };
 

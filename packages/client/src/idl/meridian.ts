@@ -1286,9 +1286,7 @@ export type Meridian = {
     },
     {
       name: "settleMarket";
-      docs: [
-        "Permissionless settlement from Pyth (primary), RedStone (fallback) or Switchboard (FR-08, M3-10b).",
-      ];
+      docs: ["Permissionless settlement from the two oracle feeds (FR-08)."];
       discriminator: [193, 153, 95, 216, 166, 6, 144, 217];
       accounts: [
         {
@@ -1322,8 +1320,8 @@ export type Meridian = {
         {
           name: "redstonePrice";
           docs: [
-            "RedStone verified price for this ticker (M2-15, D-054). Optional: used as fallback when",
-            "Pyth is not present, or for two-source spread check when both Pyth and RedStone are present.",
+            "RedStone verified price for this ticker (M2-15, D-054). Optional: if present, use",
+            "RedStone path instead of Switchboard.",
             "AB-04: PDA seeds constraint ensures this is the price account for market.ticker.",
           ];
           optional: true;
@@ -1345,28 +1343,12 @@ export type Meridian = {
           };
         },
         {
-          name: "instructionsSysvar";
-          docs: [
-            "Instructions sysvar (M3-10b, D-055). Required for Pyth Lazer path to validate the",
-            "Ed25519Program signature verification instruction.",
-          ];
-          optional: true;
-          address: "Sysvar1nstructions1111111111111111111111111";
-        },
-        {
           name: "payer";
           docs: ["Anyone: settlement is permissionless (D-030)."];
           signer: true;
         },
       ];
-      args: [
-        {
-          name: "ed25519IxIndex";
-          type: {
-            option: "u16";
-          };
-        },
-      ];
+      args: [];
     },
     {
       name: "unpause";
@@ -1936,32 +1918,6 @@ export type Meridian = {
             };
           },
           {
-            name: "pythLazerSigner";
-            docs: [
-              "Pyth Lazer Ed25519 signer pubkey (D-055, M3-10b). Operator-controlled, never",
-              "hard-trusted from payload. Used to verify Pyth signed price updates.",
-            ];
-            type: "pubkey";
-          },
-          {
-            name: "pythFeedIds";
-            docs: [
-              "Pyth feed IDs for MAG7 tickers, in the same order as `tickers`. Each u32 is the",
-              "numeric Pyth Pro feed ID. Zero means no Pyth feed configured for that ticker slot.",
-            ];
-            type: {
-              array: ["u32", 7];
-            };
-          },
-          {
-            name: "pythMaxAgeSecs";
-            docs: [
-              "Maximum age of Pyth timestamp in seconds (D-055). Pyth timestamps are in microseconds",
-              "and checked against clock.unix_timestamp (not slot-based like Core feeds).",
-            ];
-            type: "i64";
-          },
-          {
             name: "bump";
             docs: ["PDA bump."];
             type: "u8";
@@ -2025,20 +1981,6 @@ export type Meridian = {
                 };
               };
             };
-          },
-          {
-            name: "pythLazerSigner";
-            type: "pubkey";
-          },
-          {
-            name: "pythFeedIds";
-            type: {
-              array: ["u32", 7];
-            };
-          },
-          {
-            name: "pythMaxAgeSecs";
-            type: "i64";
           },
         ];
       };

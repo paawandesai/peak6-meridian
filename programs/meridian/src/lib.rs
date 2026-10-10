@@ -108,9 +108,9 @@ pub mod meridian {
         instructions::sell_no::handle_sell_no(ctx, qty, price)
     }
 
-    /// Permissionless settlement from Pyth (primary), RedStone (fallback) or Switchboard (FR-08, M3-10b).
-    pub fn settle_market(ctx: Context<SettleMarket>, ed25519_ix_index: Option<u16>) -> Result<()> {
-        instructions::settle_market::handle_settle_market(ctx, ed25519_ix_index)
+    /// Permissionless settlement from the two oracle feeds (FR-08).
+    pub fn settle_market(ctx: Context<SettleMarket>) -> Result<()> {
+        instructions::settle_market::handle_settle_market(ctx)
     }
 
     /// Admin settlement with a manual price after the delay (FR-09).

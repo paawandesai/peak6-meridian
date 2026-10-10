@@ -634,7 +634,7 @@ async function settleLocally(ctx: Ctx, state: RehearsalState, a: MarketAddresses
     }
     sigs.push(
       await ctx.program.methods
-        .settleMarket(null)
+        .settleMarket()
         .accountsStrict({
           config: findConfigPda(ctx.programId).address,
           market: a.market,
@@ -642,7 +642,6 @@ async function settleLocally(ctx: Ctx, state: RehearsalState, a: MarketAddresses
           feedTwelveData: localFeedPda(ctx, state.symbol, 1),
           redstonePrice: null, // Local oracle path (Switchboard)
           oracleConfig: null, // Local oracle path
-          instructionsSysvar: null,
           payer: ctx.admin.publicKey,
         })
         .rpc({ commitment: "confirmed" }),
