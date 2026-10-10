@@ -127,35 +127,31 @@ export function createTradeReader(config: PublicConfig, row: MarketRow): TradeRe
 
       const accounts = await connection.getMultipleAccountsInfo([yesAta, noAta, usdcAta, oo]);
 
-      // Parse token accounts (accounts 0-2)
+      // Parse token accounts (accounts 0-2). SPL token layout: amount at offset 64 (u64 LE).
+      // Throw on decode failures so Trade's fail-closed logic (holdings = null) triggers.
       const parseTokenBalance = (accountInfo: typeof accounts[0]): bigint => {
         if (!accountInfo) return 0n;
-        try {
-          // SPL token account layout: amount is at offset 64 (u64 little-endian)
-          const data = accountInfo.data;
-          if (data.length < 72) return 0n;
-          return data.readBigUInt64LE(64);
-        } catch {
-          return 0n;
+        const data = accountInfo.data;
+        if (data.length < 72) {
+          throw new Error("SPL token account data too short");
         }
+        // data might be Uint8Array (no readBigUInt64LE), convert to Buffer
+        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        return buf.readBigUInt64LE(64);
       };
 
       const yes = parseTokenBalance(accounts[0] ?? null);
       const no = parseTokenBalance(accounts[1] ?? null);
       const usdc = parseTokenBalance(accounts[2] ?? null);
 
-      // Parse OpenOrders account (account 3)
+      // Parse OpenOrders account (account 3). Let decode failures throw.
       const ooAccount = accounts[3];
       let freeUsdc = 0n;
       let freeYes = 0n;
       if (ooAccount) {
-        try {
-          const decoded = program.coder.accounts.decode("OpenOrders", ooAccount.data);
-          freeUsdc = BigInt(decoded.freeUsdc.toString());
-          freeYes = BigInt(decoded.freeYes.toString());
-        } catch {
-          // Account exists but couldn't decode, use defaults
-        }
+        const decoded = program.coder.accounts.decode("OpenOrders", ooAccount.data);
+        freeUsdc = BigInt(decoded.freeUsdc.toString());
+        freeYes = BigInt(decoded.freeYes.toString());
       }
 
       return { yes, no, usdc, freeUsdc, freeYes };

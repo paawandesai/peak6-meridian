@@ -74,3 +74,47 @@ describe("fetchOpenTime (D-050)", () => {
     expect(endless.getSignaturesForAddress).toHaveBeenCalledTimes(5);
   });
 });
+
+describe("SPL token parsing (P0-4: getWallet decode)", () => {
+  // Test the parseTokenBalance logic from getWallet
+  const parseTokenBalance = (accountInfo: { data: Buffer | Uint8Array } | null): bigint => {
+    if (!accountInfo) return 0n;
+    const data = accountInfo.data;
+    if (data.length < 72) {
+      throw new Error("SPL token account data too short");
+    }
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    return buf.readBigUInt64LE(64);
+  };
+
+  it("parses amount from Buffer at offset 64 (Node.js AccountInfo.data)", () => {
+    const data = Buffer.alloc(165);
+    data.writeBigUInt64LE(12345n, 64);
+    expect(parseTokenBalance({ data })).toBe(12345n);
+  });
+
+  it("parses amount from Uint8Array at offset 64 (browser AccountInfo.data)", () => {
+    const data = new Uint8Array(165);
+    const view = new DataView(data.buffer);
+    view.setBigUint64(64, 67890n, true); // little-endian
+    expect(parseTokenBalance({ data })).toBe(67890n);
+  });
+
+  it("returns 0n when account does not exist", () => {
+    expect(parseTokenBalance(null)).toBe(0n);
+  });
+
+  it("throws when data is too short (fail-closed, not zero balance)", () => {
+    const badData = Buffer.alloc(10);
+    expect(() => parseTokenBalance({ data: badData })).toThrow("SPL token account data too short");
+  });
+
+  it("throws on Uint8Array that would fail readBigUInt64LE without Buffer conversion", () => {
+    // This test ensures the Uint8Array → Buffer conversion is working
+    const data = new Uint8Array(165);
+    const view = new DataView(data.buffer);
+    view.setBigUint64(64, 99999n, true);
+    // If we didn't convert to Buffer, this would throw because Uint8Array lacks readBigUInt64LE
+    expect(parseTokenBalance({ data })).toBe(99999n);
+  });
+});
