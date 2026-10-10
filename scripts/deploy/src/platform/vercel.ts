@@ -191,5 +191,43 @@ export async function deployVercel(
   }
   const url = parseDeploymentUrl(stdout);
   deps.log(`vercel: deployed ${url}`);
+  const alias = options.env.VERCEL_PRODUCTION_ALIAS ?? "peak6-meridian.vercel.app";
+  if (alias !== "") await assignAlias(deps, scoped, url, alias, secrets);
   return { url };
+}
+
+/** Points the public alias at this deployment; a failure is logged (with Vercel's code), not fatal. */
+async function assignAlias(
+  deps: PlatformDeps,
+  options: VercelOptions,
+  url: string,
+  alias: string,
+  secrets: readonly string[],
+): Promise<void> {
+  const host = encodeURIComponent(new URL(url).host);
+  const scope = options.teamId === undefined ? "" : `?teamId=${encodeURIComponent(options.teamId)}`;
+  const result = await requestJson(
+    deps,
+    "vercel POST alias",
+    `${API}/v2/deployments/${host}/aliases${scope}`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${options.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ alias }),
+    },
+    secrets,
+  );
+  if (result.status < 300) {
+    deps.log(`vercel: aliased https://${alias} -> ${url}`);
+    return;
+  }
+  const err = asRecord(asRecord(result.body).error);
+  const code = typeof err.code === "string" ? `, ${err.code}` : "";
+  const message = typeof err.message === "string" ? `: ${err.message}` : "";
+  deps.log(
+    redactSecrets(
+      `vercel: WARNING could not alias ${alias} (status ${result.status}${code})${message}`,
+      secrets,
+    ),
+  );
 }
