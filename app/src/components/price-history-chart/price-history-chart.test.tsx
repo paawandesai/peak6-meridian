@@ -7,6 +7,7 @@ const mockCreateChart = vi.fn();
 const mockAddCandlestickSeries = vi.fn();
 const mockSetData = vi.fn();
 const mockCreatePriceLine = vi.fn();
+const mockRemovePriceLine = vi.fn();
 const mockRemove = vi.fn();
 const mockTimeScale = vi.fn(() => ({ fitContent: vi.fn() }));
 const mockApplyOptions = vi.fn();
@@ -29,7 +30,9 @@ describe("PriceHistoryChart", () => {
     mockAddCandlestickSeries.mockReturnValue({
       setData: mockSetData,
       createPriceLine: mockCreatePriceLine,
+      removePriceLine: mockRemovePriceLine,
     });
+    mockCreatePriceLine.mockReturnValue({ id: "mock-line" });
     global.fetch = vi.fn();
   });
 
@@ -244,6 +247,139 @@ describe("PriceHistoryChart", () => {
       const container = document.querySelector(".h-48");
       expect(container).toBeInTheDocument();
       expect(container).toHaveClass("sm:h-64");
+    });
+  });
+
+  it("calls setData with lastGoodData after collapse/re-expand", async () => {
+    const mockData = {
+      s: "ok" as const,
+      t: [1000000],
+      o: [100.0],
+      h: [101.0],
+      l: [99.0],
+      c: [100.5],
+    };
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockData,
+    });
+
+    render(<PriceHistoryChart ticker="AAPL" nowSecs={1500000} />);
+
+    // Expand and wait for first load
+    const summary = screen.getByText(/Show price history/);
+    fireEvent.click(summary);
+    await waitFor(() => expect(mockSetData).toHaveBeenCalledTimes(1));
+    expect(mockCreateChart).toHaveBeenCalledTimes(1);
+
+    // Collapse
+    fireEvent.click(summary);
+    await waitFor(() => expect(mockRemove).toHaveBeenCalledTimes(1));
+
+    // Re-expand - new chart created, but fetch fails
+    mockSetData.mockClear();
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ s: "no_data" }),
+    });
+
+    fireEvent.click(summary);
+
+    // New chart created
+    await waitFor(() => expect(mockCreateChart).toHaveBeenCalledTimes(2));
+
+    // setData should be called with lastGoodData even though fetch returned no_data
+    await waitFor(() => expect(mockSetData).toHaveBeenCalledTimes(1));
+
+    const setDataCall = mockSetData.mock.calls[0]?.[0];
+    expect(setDataCall).toEqual([
+      { time: 1000000, open: 100, high: 101, low: 99, close: 100.5 },
+    ]);
+  });
+
+  it("calls setData with lastGoodData on fetch failure", async () => {
+    const mockData = {
+      s: "ok" as const,
+      t: [1000000, 1000060],
+      o: [100.0, 101.0],
+      h: [101.0, 102.0],
+      l: [99.0, 100.0],
+      c: [100.5, 101.5],
+    };
+
+    // First fetch succeeds
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockData,
+    });
+
+    const { rerender } = render(<PriceHistoryChart ticker="AAPL" nowSecs={1500000} />);
+    fireEvent.click(screen.getByText(/Show price history/));
+
+    await waitFor(() => expect(mockSetData).toHaveBeenCalledTimes(1));
+    const firstCall = mockSetData.mock.calls[0]?.[0];
+    expect(firstCall).toHaveLength(2);
+
+    mockSetData.mockClear();
+
+    // Second fetch fails (network error)
+    global.fetch = vi.fn().mockRejectedValueOnce(new Error("Network timeout"));
+    rerender(<PriceHistoryChart ticker="AAPL" nowSecs={1500300} />);
+
+    // setData should be called again with the same lastGoodData
+    await waitFor(() => expect(mockSetData).toHaveBeenCalledTimes(1));
+    const secondCall = mockSetData.mock.calls[0]?.[0];
+    expect(secondCall).toEqual(firstCall);
+  });
+
+  it("removes old price lines before adding new ones", async () => {
+    const mockData = {
+      s: "ok" as const,
+      t: [1000000],
+      o: [100.0],
+      h: [101.0],
+      l: [99.0],
+      c: [100.5],
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockData,
+    });
+
+    const { rerender } = render(
+      <PriceHistoryChart
+        ticker="AAPL"
+        nowSecs={1500000}
+        strikes={[10000n, 11000n]}
+        fairValueCents={10500}
+      />
+    );
+    fireEvent.click(screen.getByText(/Show price history/));
+
+    // Wait for chart to be ready
+    await waitFor(() => expect(mockCreatePriceLine).toHaveBeenCalled());
+
+    const initialCallCount = mockCreatePriceLine.mock.calls.length;
+    expect(initialCallCount).toBe(3); // 2 strikes + 1 fair value
+
+    mockCreatePriceLine.mockClear();
+    mockRemovePriceLine.mockClear();
+
+    // Rerender with new strikes (simulates clock tick with new array reference)
+    rerender(
+      <PriceHistoryChart
+        ticker="AAPL"
+        nowSecs={1500001}
+        strikes={[10000n, 11000n, 12000n]}
+        fairValueCents={10600}
+      />
+    );
+
+    // Old lines should be removed before new ones are created
+    await waitFor(() => {
+      expect(mockRemovePriceLine).toHaveBeenCalledTimes(initialCallCount);
+      expect(mockCreatePriceLine).toHaveBeenCalledTimes(4); // 3 strikes + 1 fair value
     });
   });
 });
