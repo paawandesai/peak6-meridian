@@ -14,6 +14,7 @@ type SubscriptionRef = {
   activeCount: number;
   pollTimer: ReturnType<typeof setInterval> | null;
   lastPollInFlight: boolean;
+  usingWebSocket: boolean;
 };
 
 const subscriptions = new Map<string, SubscriptionRef>();
@@ -103,6 +104,7 @@ export function useAccountSubscription<T>(
         activeCount: 0,
         pollTimer: null,
         lastPollInFlight: false,
+        usingWebSocket: false,
       };
       subscriptions.set(subKey, subRef);
     }
@@ -110,7 +112,6 @@ export function useAccountSubscription<T>(
     subRef.activeCount += 1;
 
     // Try WebSocket subscriptions
-    let usingWebSocket = false;
     const setupSubscriptions = async (): Promise<void> => {
       if (cancelled || subRef === undefined) return;
 
@@ -130,10 +131,10 @@ export function useAccountSubscription<T>(
             subRef.subscriptionIds.set(keyStr, subscriptionId);
           }
         }
-        usingWebSocket = true;
+        subRef.usingWebSocket = true;
       } catch (error) {
         // WebSocket subscription failed, fall back to polling
-        usingWebSocket = false;
+        subRef.usingWebSocket = false;
         if (subRef.pollTimer === null && !cancelled) {
           subRef.pollTimer = setInterval(() => {
             if (subRef !== undefined && !subRef.lastPollInFlight) {
@@ -152,7 +153,7 @@ export function useAccountSubscription<T>(
 
     // Fallback to polling if WebSocket not established after initial timeout
     const fallbackTimer = setTimeout(() => {
-      if (!usingWebSocket && subRef !== undefined && subRef.pollTimer === null && !cancelled) {
+      if (subRef !== undefined && !subRef.usingWebSocket && subRef.pollTimer === null && !cancelled) {
         subRef.pollTimer = setInterval(() => {
           if (subRef !== undefined && !subRef.lastPollInFlight) {
             subRef.lastPollInFlight = true;
