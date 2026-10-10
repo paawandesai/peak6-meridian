@@ -1,13 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { confirmedStatus, intentButton, priceInput, qtyInput, signButton } from "./support/ui";
 
-// AC1: Demo wallet test runs with NEXT_PUBLIC_CLUSTER=devnet against the local harness.
-// Run with E2E_DEMO_WALLET=1 to use global-setup-devnet.ts (starts app with devnet cluster).
-// Skipped in the default `make e2e` (localnet) since registerDemoWallet() requires devnet (AC6).
-test.skip(!process.env.E2E_DEMO_WALLET, "Demo wallet test requires E2E_DEMO_WALLET=1");
+// AC1/AC9: Demo wallet tests run with E2E_DEMO_WALLET=1 (devnet setup) or without (localnet).
+// With E2E_DEMO_WALLET=1: full demo wallet flow (connect, fund, trade).
+// Without (default make e2e): verify "Try the demo" is absent (AC9 non-devnet check).
 
-test.describe("Demo wallet (M4-07 AC9)", () => {
+test.describe("Demo wallet (M4-07)", () => {
   test("offers demo wallet, connects, funds, and places a trade", async ({ page }) => {
+    test.skip(!process.env.E2E_DEMO_WALLET, "Requires E2E_DEMO_WALLET=1 (devnet setup)");
+
     // Navigate to markets (root page)
     await page.goto("/");
 
@@ -46,9 +47,11 @@ test.describe("Demo wallet (M4-07 AC9)", () => {
     expect(sigCount, "AC9: exactly one auto-signed transaction").toBe(1);
   });
 
-  test("demo wallet not offered on non-devnet", async () => {
-    // AC6: This e2e would need NEXT_PUBLIC_CLUSTER=localnet, but the spec runs with E2E_DEMO_WALLET=1
-    // (devnet). The AC6 guard (no registration on non-devnet) is verified by unit tests.
-    test.skip(true, "AC6 guard tested in unit tests; e2e runs devnet-only via E2E_DEMO_WALLET");
+  test("demo wallet not offered on non-devnet", async ({ page }) => {
+    test.skip(!!process.env.E2E_DEMO_WALLET, "Runs in localnet project (E2E_DEMO_WALLET unset)");
+    // AC9: Verify "Try the demo" is absent when cluster is not devnet (default make e2e: localnet).
+    await page.goto("/");
+    await page.getByRole("button", { name: /connect wallet/i }).click();
+    await expect(page.getByRole("button", { name: /try the demo/i })).not.toBeVisible();
   });
 });
