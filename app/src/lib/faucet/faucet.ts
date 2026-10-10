@@ -113,10 +113,6 @@ async function buildClaim(
       }),
     );
   }
-  // Transfer SOL for transaction fees (0.01 SOL = 10M lamports)
-  instructions.push(
-    SystemProgram.transfer({ fromPubkey: payer, toPubkey: wallet, lamports: 10_000_000n }),
-  );
   const ata = getAssociatedTokenAddressSync(deps.mint, wallet);
   instructions.push(
     createAssociatedTokenAccountIdempotentInstruction(payer, ata, wallet, deps.mint),
