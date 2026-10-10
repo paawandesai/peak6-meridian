@@ -55,7 +55,9 @@ function renderState(m: typeof open, cfg: AppConfig, nowSecs: number) {
       })}
       actions={fake.actions}
       wallet={USER}
-      marketData={{ prices: {}, pricesUnavailable: [] }}
+      marketData={{ prices: {}, pricesUnavailable: [], books: {} }}
+      fairValues={{ status: "loading", byMarket: {}, refreshFailed: false }}
+      ladder={[]}
       explorerUrl={(s) => s}
       debounceMs={0}
     />,
@@ -220,7 +222,9 @@ describe("Settled (UI-04 AC7)", () => {
         reader={fakeReader({ getWallet: () => Promise.resolve({ ...EMPTY_WALLET, no: 5n }) })}
         actions={fake.actions}
         wallet={USER}
-        marketData={{ prices: {}, pricesUnavailable: [] }}
+        marketData={{ prices: {}, pricesUnavailable: [], books: {} }}
+        fairValues={{ status: "loading", byMarket: {}, refreshFailed: false }}
+        ladder={[]}
         explorerUrl={(s) => s}
         debounceMs={0}
       />,

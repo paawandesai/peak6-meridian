@@ -109,7 +109,9 @@ function renderView(o: Overrides = {}) {
       })}
       actions={o.noWallet ? null : fake.actions}
       wallet={o.noWallet ? null : USER}
-      marketData={o.prices ?? { prices: {}, pricesUnavailable: ["NVDA"] }}
+      marketData={o.prices ?? { prices: {}, pricesUnavailable: ["NVDA"], books: {} }}
+      fairValues={{ status: "loading", byMarket: {}, refreshFailed: false }}
+      ladder={[]}
       explorerUrl={(signature) => `https://explorer.example/tx/${signature}`}
       debounceMs={0}
     />,
@@ -495,7 +497,9 @@ describe("the book (UI-04 AC4, AC9)", () => {
         reader={fakeReader({ getBook: () => Promise.reject(new Error("rpc down")) })}
         actions={null}
         wallet={null}
-        marketData={{ prices: {}, pricesUnavailable: [] }}
+        marketData={{ prices: {}, pricesUnavailable: [], books: {} }}
+        fairValues={{ status: "loading", byMarket: {}, refreshFailed: false }}
+        ladder={[]}
         explorerUrl={() => ""}
       />,
     );

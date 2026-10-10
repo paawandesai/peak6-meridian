@@ -15,6 +15,7 @@ import { useAsync } from "@/components/use-async";
 import { useNow } from "@/components/use-now";
 import { explorerTxUrl } from "@/lib/admin-chain";
 import { loadPublicConfig } from "@/lib/config";
+import { useFairValues } from "@/lib/fair-values";
 import { useMarketData } from "@/lib/market-data";
 import { partitionMarkets } from "@/lib/markets";
 
@@ -45,6 +46,7 @@ function Page({ address }: { readonly address: string }) {
           (m) => m.ticker === market.ticker && m.tradingDate === market.tradingDate,
         );
   const marketData = useMarketData(ladder);
+  const fairValues = useFairValues();
   const tradeReader = useMemo(
     () => (market === undefined ? null : createTradeReader(config, market)),
     [config, market],
@@ -80,6 +82,8 @@ function Page({ address }: { readonly address: string }) {
           actions={actions}
           wallet={publicKey}
           marketData={marketData}
+          fairValues={fairValues}
+          ladder={ladder}
           explorerUrl={(signature) => explorerTxUrl(signature, config)}
         />
         <TickerInsight market={market} ladder={ladder} books={marketData.books} nowSecs={nowSecs} />

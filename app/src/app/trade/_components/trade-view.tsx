@@ -13,9 +13,11 @@ import type { TradeReader } from "../_lib/reader";
 import { badgeProps, nextTransition, panelState } from "../_lib/state";
 import type { TradeActions } from "../_lib/tx";
 import { usePolled } from "../_lib/use-polled";
-import { Countdown, StateBadge } from "@/components/ui";
+import { Countdown, StateBadge, FairValueEdge } from "@/components/ui";
+import { DistributionChartSection } from "@/components/distribution-chart/distribution-chart-section";
 import { PythPrice, PythPricePlaceholder, PythPriceUnavailable } from "@/components/pyth-price";
 import type { AppConfig } from "@/lib/chain";
+import type { FairValues } from "@/lib/fair-values";
 import type { MarketData } from "@/lib/market-data";
 import type { MarketRow } from "@/lib/markets";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
@@ -28,7 +30,9 @@ type Props = {
   /** `null` until a wallet is connected. */
   readonly actions: TradeActions | null;
   readonly wallet: PublicKey | null;
-  readonly marketData: Pick<MarketData, "prices" | "pricesUnavailable">;
+  readonly marketData: Pick<MarketData, "prices" | "pricesUnavailable" | "books">;
+  readonly fairValues: FairValues;
+  readonly ladder: readonly MarketRow[];
   readonly explorerUrl: (signature: string) => string;
   readonly debounceMs?: number;
 };
@@ -58,7 +62,7 @@ function LivePrice({ market, nowSecs }: { readonly market: MarketRow; readonly n
 
 /** The Trade page body for one strike (FR-17, FR-18; design.md §2 Trade, §5 Trade). */
 export function TradeView(props: Props) {
-  const { market, config, nowSecs, reader, actions, wallet, explorerUrl } = props;
+  const { market, config, nowSecs, reader, actions, wallet, fairValues, ladder, explorerUrl } = props;
   const walletKey = wallet?.toBase58() ?? "";
   const book = usePolled(() => reader.getBook(), 1_000, market.address);
   const walletView = usePolled(
@@ -104,6 +108,28 @@ export function TradeView(props: Props) {
     walletView.refresh();
   };
 
+  // P0-7: Fair value and edge for this market
+  const fairValue = fairValues.byMarket[market.address];
+  const bookData = props.marketData.books[market.address];
+  const marketPriceCents =
+    bookData?.state === "ready" && bookData.quotes.yesMid !== null
+      ? bookData.quotes.yesMid
+      : null;
+  const fairValueCents = fairValue?.fair_cents ?? null;
+
+  // P0-7: Distribution chart points from the ladder
+  const distributionPoints = ladder.map((m) => {
+    const bookData = props.marketData.books[m.address];
+    const yesMid = bookData?.state === "ready" ? bookData.quotes.yesMid : null;
+    const fair = fairValues.byMarket[m.address];
+    return {
+      market: m.address,
+      strikeCents: m.strikeCents,
+      yesCents: yesMid,
+      fairCents: fair?.fair_cents ?? null,
+    };
+  });
+
   return (
     <div className="grid gap-mer-6">
       <header className="grid gap-mer-2">
@@ -119,6 +145,7 @@ export function TradeView(props: Props) {
             <Countdown secondsLeft={transition.secondsLeft} label={transition.label} />
           )}
           <LivePrice market={market} nowSecs={nowSecs} />
+          <FairValueEdge marketPriceCents={marketPriceCents} fairValueCents={fairValueCents} />
         </div>
         <p className="text-mer-xs text-mer-ink-muted">{MIDPOINT_NOTE}</p>
       </header>
@@ -130,6 +157,9 @@ export function TradeView(props: Props) {
               Could not read the book: {book.state.message}
             </p>
           ) : null}
+          <div className="mt-mer-6">
+            <DistributionChartSection ticker={market.ticker} points={distributionPoints} />
+          </div>
         </div>
         <div className="order-1 grid gap-mer-6 md:order-2">
           <OrderPanel
