@@ -14,6 +14,8 @@
 #   7. independent byte check: bytes 0..1076 identical to the devnet clone, size 1,144
 #   8. post-migration smoke: update_config, create_strike_market, mint_pair, place_order,
 #      settle_market via the Pyth path, settle_funds, winner redeem
+#   9. rollback drill: the old binary redeployed over the migrated Config still works and
+#      leaves every byte unchanged
 #
 # Usage: scripts/rehearse-config-migration.sh
 # Env: DEVNET_URL (default https://api.devnet.solana.com; read-only), REHEARSAL_RPC_PORT (8999),
@@ -157,5 +159,19 @@ PY
 
 say "9. post-migration smoke"
 smoke post-migration
+
+say "10. rollback drill: redeploy the old devnet binary over the migrated Config"
+solana account "$CONFIG" -u "$LOCAL_URL" --output json --output-file "$WORK/config.pre-rollback.json" >/dev/null
+solana program deploy "$WORK/old.so" --program-id "$PROGRAM_ID" \
+  --upgrade-authority "$WORK/upgrade-authority.json" -k "$WORK/upgrade-authority.json" -u "$LOCAL_URL"
+sleep 2
+smoke check-old
+solana account "$CONFIG" -u "$LOCAL_URL" --output json --output-file "$WORK/config.post-rollback.json" >/dev/null
+python3 - "$WORK/config.pre-rollback.json" "$WORK/config.post-rollback.json" <<'PY'
+import base64, json, sys
+pre, post = (base64.b64decode(json.load(open(p))["account"]["data"][0]) for p in sys.argv[1:3])
+assert len(pre) == len(post) == 1144 and pre == post, "old program changed the migrated Config"
+print("old binary reads and writes the 1,144-byte Config (pause + unpause) and leaves every byte, including the Pyth tail, unchanged: rollback is safe without un-migrating")
+PY
 
 say "REHEARSAL PASSED"
