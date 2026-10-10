@@ -155,7 +155,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
         stdio: ["ignore", appLog, appLog],
         env: {
           ...process.env,
-          NEXT_PUBLIC_CLUSTER: "localnet",
+          NEXT_PUBLIC_CLUSTER: "devnet",
           NEXT_PUBLIC_RPC_URL: RPC_URL,
           NEXT_PUBLIC_PROGRAM_ID: programId,
           NEXT_PUBLIC_USDC_MINT: usdcMint,
