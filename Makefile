@@ -12,9 +12,9 @@ export NEXT_TELEMETRY_DISABLED := 1
 
 PIP_AUDIT_VERSION := 2.10.1
 
-.PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
+.PHONY: help toolchain install install-rust install-js-py build-local build-devnet \
 	client lint lint-rust lint-js-py typecheck test test-rust-unit test-js-py-unit test-security \
-	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet deploy-vercel deploy-railway test-deploy-devnet e2e dev
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet deploy-vercel deploy-railway test-deploy-devnet e2e e2e-ui e2e-ui-browser dev
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -25,7 +25,7 @@ PNPM_R_FLAGS ?=
 BUILD_LOCAL := $(if $(MERIDIAN_PREBUILT),,build-local)
 
 help:
-	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e dev"
+	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e e2e-ui dev"
 
 ## Toolchain (once per machine): pinned Rust, Agave CLI, Anchor, Node, pnpm, uv, cargo tools.
 toolchain:
@@ -135,6 +135,16 @@ deploy-devnet:
 ## End-to-end smoke on a local validator.
 e2e:
 	scripts/e2e.sh
+
+## Playwright UI smoke (M2-13): validator, seed, app and an injected test wallet (tests/e2e/playwright).
+## Needs the local-oracle build; `E2E_PREBUILT=1` skips rebuilding when CI already built it.
+e2e-ui:
+	@[ "$$E2E_PREBUILT" = "1" ] || $(MAKE) build-local
+	pnpm --filter e2e exec playwright test
+
+## Chromium for the Playwright smoke (CI; `--with-deps` installs the system libraries too).
+e2e-ui-browser:
+	pnpm --filter e2e exec playwright install --with-deps chromium
 
 dev:
 	scripts/dev.sh

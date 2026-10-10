@@ -4,6 +4,8 @@
  * services/automation/railway.json, uploads with the Railway CLI, and checks `/health` with the
  * bearer token. Variable values and tokens never reach logs or errors.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   assertComplete,
   childEnv,
@@ -210,6 +212,27 @@ export async function checkHealth(
   );
 }
 
+/**
+ * Railway rejects `railwayConfigFile` now that Config as Code is deprecated, so the settings in
+ * railway.json (still the source of truth) are applied directly as service instance fields.
+ */
+export function serviceSettings(repoRoot: string): Json {
+  const config = asRecord(JSON.parse(readFileSync(join(repoRoot, CONFIG_FILE), "utf8")));
+  const build = asRecord(config.build);
+  const deploy = asRecord(config.deploy);
+  const input: Json = {};
+  if (typeof build.builder === "string") input.builder = build.builder;
+  if (typeof build.buildCommand === "string") input.buildCommand = build.buildCommand;
+  if (typeof deploy.startCommand === "string") input.startCommand = deploy.startCommand;
+  if (typeof deploy.restartPolicyType === "string") {
+    input.restartPolicyType = deploy.restartPolicyType;
+  }
+  if (typeof deploy.restartPolicyMaxRetries === "number") {
+    input.restartPolicyMaxRetries = deploy.restartPolicyMaxRetries;
+  }
+  return input;
+}
+
 export async function deployRailway(
   deps: PlatformDeps,
   options: RailwayOptions,
@@ -241,7 +264,7 @@ export async function deployRailway(
     `mutation($serviceId: String!, $environmentId: String!, $input: ServiceInstanceUpdateInput!) {
        serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input)
      }`,
-    { serviceId, environmentId: target.environmentId, input: { railwayConfigFile: CONFIG_FILE } },
+    { serviceId, environmentId: target.environmentId, input: serviceSettings(options.repoRoot) },
   );
   const domain = await ensureDomain(gql, target, serviceId);
 
@@ -270,12 +293,57 @@ export async function deployRailway(
     throw new Error(redactSecrets(message, secrets));
   }
   const url = `https://${domain}`;
-  await checkHealth(
-    deps,
-    url,
-    collected.values.SERVICE_TOKEN ?? "",
-    options.healthAttempts ?? 3,
-    options.healthIntervalMs ?? 120_000,
-  );
+  try {
+    await checkHealth(
+      deps,
+      url,
+      collected.values.SERVICE_TOKEN ?? "",
+      options.healthAttempts ?? 3,
+      options.healthIntervalMs ?? 120_000,
+    );
+  } catch (error) {
+    await logRecentDeployLogs(deps, gql, target, serviceId, secrets);
+    throw error;
+  }
   return { url };
+}
+
+/** On a failed health check, prints the latest deployment's status and runtime log tail (redacted). */
+async function logRecentDeployLogs(
+  deps: PlatformDeps,
+  gql: Gql,
+  target: Target,
+  serviceId: string,
+  secrets: readonly string[],
+): Promise<void> {
+  try {
+    const data = await gql(
+      "deployments",
+      `query($input: DeploymentListInput!) { deployments(input: $input, first: 1) { edges { node { id status } } } }`,
+      {
+        input: {
+          projectId: target.projectId,
+          environmentId: target.environmentId,
+          serviceId,
+        },
+      },
+    );
+    const latest = edges(data.deployments)[0];
+    if (latest === undefined || typeof latest.id !== "string") return;
+    deps.log(`railway: latest deployment ${latest.id} status ${String(latest.status)}`);
+    const logs = await gql(
+      "deploymentLogs",
+      `query($id: String!) { deploymentLogs(deploymentId: $id, limit: 80) { message } }`,
+      { id: latest.id },
+    );
+    const lines = Array.isArray(logs.deploymentLogs) ? logs.deploymentLogs : [];
+    for (const line of lines) {
+      const message = asRecord(line).message;
+      if (typeof message === "string") deps.log(redactSecrets(`railway log: ${message}`, secrets));
+    }
+  } catch (error) {
+    deps.log(
+      `railway: could not read deployment logs (${error instanceof Error ? error.message : "error"})`,
+    );
+  }
 }
