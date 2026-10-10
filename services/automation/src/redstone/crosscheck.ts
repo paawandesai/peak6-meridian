@@ -8,13 +8,16 @@ import type { OfficialClose, CrossCheckResult } from "./types.js";
 const MAX_DEVIATION_BPS = 5;
 
 /**
- * Calculate basis points deviation (integer arithmetic)
+ * Calculate basis points deviation (integer arithmetic, fail-closed).
+ * Uses ceiling to ensure 5.01 bps rounds to 6, not 5 (fails AC2's <=5 bp check).
  */
 function bpsDeviation(value: number, reference: number): number {
-  if (reference === 0) return Infinity;
-  // |value - reference| * 10000 / reference
+  if (reference === 0) {
+    throw new Error("Cross-check reference price is zero");
+  }
+  // |value - reference| * 10000 / reference, rounded UP (fail-closed)
   const diff = Math.abs(value - reference);
-  return Math.floor((diff * 10000) / reference);
+  return Math.ceil((diff * 10000) / reference);
 }
 
 /**
