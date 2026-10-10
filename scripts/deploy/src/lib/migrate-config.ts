@@ -7,9 +7,11 @@
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 
-import { type PythConfigInput, TICKER_COUNT } from "@meridian/client";
+import { type ConfigParamsInput, type PythConfigInput, TICKER_COUNT } from "@meridian/client";
 import { PublicKey } from "@solana/web3.js";
 import { z } from "zod";
+
+import type { OnChainConfig } from "./config-plan";
 
 /** v1 Config size, discriminator included (the devnet account before M3-10b). */
 export const CONFIG_V1_LEN = 1_076;
@@ -54,7 +56,9 @@ export const MIGRATE_USAGE = `Usage: make migrate-config [DRY_RUN=1]
 Grows the v1 Config account (1,076 bytes) to the current layout (1,144 bytes) with the admin-only
 migrate_config instruction, then verifies every old byte is unchanged and the new fields are as
 expected. Devnet (genesis-hash checked) or localnet (loopback URL) only. Safe to re-run: an
-already-migrated account is verified and nothing is sent.
+already-migrated account is verified and nothing is sent, unless PYTH_LAZER_SIGNER is given: then
+the Pyth fields of the migrated account are set with update_config, every other field resent
+unchanged from chain and verified afterwards (D-055 Pyth settlement runbook).
 
 Environment (public keys and key FILE PATHS only):
   SOLANA_RPC_URL       RPC endpoint (required)
@@ -271,6 +275,70 @@ export function verifyMigrated(params: {
     problems.push(
       `the account holds ${lamports} lamports, below rent-exempt ${rentExemptLamports}`,
     );
+  }
+  return problems;
+}
+
+/**
+ * `update_config` parameters that set only the Pyth fields of an already-migrated Config.
+ * `update_config` overwrites every scalar field, so each is resent from chain; no ticker slot is
+ * listed, so every slot keeps its value.
+ */
+export function pythUpdateParams(onChain: OnChainConfig, pyth: PythConfigInput): ConfigParamsInput {
+  return {
+    automationAuthority: onChain.automationAuthority,
+    maxStalenessSlots: onChain.maxStalenessSlots,
+    maxConfBps: onChain.maxConfBps,
+    overrideDelaySecs: onChain.overrideDelaySecs,
+    tickers: [],
+    pyth,
+  };
+}
+
+function describeTickers(config: OnChainConfig): string {
+  return config.tickers
+    .map(
+      (t) =>
+        `${t.symbol}:${t.feeds.map((f) => f.toBase58()).join("/")}:` +
+        t.feedHashes.map((h) => Buffer.from(h).toString("hex")).join("/"),
+    )
+    .join(",");
+}
+
+/**
+ * Everything wrong after a Pyth-only `update_config`: any non-Pyth field that changed, and any
+ * Pyth field that is not what was asked. Empty when the update did exactly that.
+ */
+export function verifyPythUpdate(
+  before: OnChainConfig,
+  after: OnChainConfig,
+  pyth: PythConfigInput,
+): string[] {
+  const problems: string[] = [];
+  const same = (name: string, a: string, b: string): void => {
+    if (a !== b) {
+      problems.push(`${name} changed: ${a} -> ${b}`);
+    }
+  };
+  same("admin", before.admin.toBase58(), after.admin.toBase58());
+  same(
+    "automation_authority",
+    before.automationAuthority.toBase58(),
+    after.automationAuthority.toBase58(),
+  );
+  same("usdc_mint", before.usdcMint.toBase58(), after.usdcMint.toBase58());
+  same("max_staleness_slots", String(before.maxStalenessSlots), String(after.maxStalenessSlots));
+  same("max_conf_bps", String(before.maxConfBps), String(after.maxConfBps));
+  same("override_delay_secs", String(before.overrideDelaySecs), String(after.overrideDelaySecs));
+  same("tickers", describeTickers(before), describeTickers(after));
+  if (!after.pyth.lazerSigner.equals(pyth.lazerSigner)) {
+    problems.push(`pyth_lazer_signer is ${after.pyth.lazerSigner.toBase58()}`);
+  }
+  if (after.pyth.feedIds.join(",") !== pyth.feedIds.join(",")) {
+    problems.push(`pyth_feed_ids are ${after.pyth.feedIds.join(",")}`);
+  }
+  if (after.pyth.maxAgeSecs !== pyth.maxAgeSecs) {
+    problems.push(`pyth_max_age_secs is ${after.pyth.maxAgeSecs}`);
   }
   return problems;
 }

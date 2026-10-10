@@ -1,7 +1,7 @@
 import { Keypair } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 
-import { parseEnv, parseKeypair } from "./config";
+import { parseEnv, parseKeypair, parsePythSettlementEnv } from "./config";
 
 const ENV = {
   SOLANA_RPC_URL: "http://127.0.0.1:8899",
@@ -95,5 +95,47 @@ describe("parseKeypair", () => {
 
   it("rejects 64 bytes that are not a keypair", () => {
     expect(() => parseKeypair(JSON.stringify(Array(64).fill(1)))).toThrow(/AUTOMATION_KEYPAIR/);
+  });
+});
+
+describe("parsePythSettlementEnv (PYTH_SETTLEMENT_ENABLED, D-055)", () => {
+  const TOKEN = "pyth-secret-token-123";
+
+  it("is off by default and when set to false", () => {
+    expect(parsePythSettlementEnv({})).toBeNull();
+    expect(parsePythSettlementEnv({ PYTH_SETTLEMENT_ENABLED: "" })).toBeNull();
+    expect(
+      parsePythSettlementEnv({ PYTH_SETTLEMENT_ENABLED: "false", PYTH_API_TOKEN: TOKEN }),
+    ).toBeNull();
+  });
+
+  it("when on, needs the token and defaults the Lazer URL", () => {
+    expect(
+      parsePythSettlementEnv({ PYTH_SETTLEMENT_ENABLED: "true", PYTH_API_TOKEN: TOKEN }),
+    ).toEqual({
+      apiToken: TOKEN,
+      baseUrl: "https://pyth-lazer.dourolabs.app",
+    });
+    expect(() => parsePythSettlementEnv({ PYTH_SETTLEMENT_ENABLED: "true" })).toThrow(
+      /PYTH_API_TOKEN/,
+    );
+  });
+
+  it("rejects anything but true/false and never echoes the token", () => {
+    for (const env of [
+      { PYTH_SETTLEMENT_ENABLED: "yes", PYTH_API_TOKEN: TOKEN },
+      { PYTH_SETTLEMENT_ENABLED: "true", PYTH_API_TOKEN: TOKEN, PYTH_LAZER_URL: "not a url" },
+      { PYTH_SETTLEMENT_ENABLED: "true", PYTH_API_TOKEN: "short" },
+    ]) {
+      let message = "";
+      try {
+        parsePythSettlementEnv(env);
+      } catch (error) {
+        message = error instanceof Error ? error.message : "";
+      }
+      expect(message).toMatch(/^invalid environment: PYTH_/);
+      expect(message).not.toContain(TOKEN);
+      expect(message).not.toContain("short");
+    }
   });
 });

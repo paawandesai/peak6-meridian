@@ -218,6 +218,8 @@ describe("AB-19 what the automation service can ever send", () => {
    */
   const METHODS_BY_FILE: Record<string, string[]> = {
     "services/automation/src/cli/createMarkets.ts": ["createStrikeMarket"],
+    // The Pyth settlement path (D-055, off by default): settle_market with the Ed25519 index.
+    "services/automation/src/pythSettle.ts": ["settleMarket"],
     "services/automation/src/settleTx.ts": ["settleMarket"],
     "services/automation/src/switchboard.ts": ["localOracleSet"],
   };
@@ -259,11 +261,15 @@ describe("AB-19 what the automation service can ever send", () => {
   /**
    * The only production files allowed to build or send transactions: market creation
    * (`create_strike_market`), the settlement transaction builder (`settle_market`, permissionless),
-   * the local-oracle / Switchboard adapters, and the executor that signs and sends what they plan.
+   * the local-oracle / Switchboard adapters, the Pyth settlement builder (`settle_market`, payer
+   * only: see the test below), the read-only wallet whose signing calls always reject (see the
+   * test below), and the executor that signs and sends what they plan.
    */
   const MAY_SIGN = [
     "services/automation/src/cli/createMarkets.ts",
     "services/automation/src/executor.ts",
+    "services/automation/src/pythSettle.ts",
+    "services/automation/src/readOnlyWallet.ts",
     "services/automation/src/settleTx.ts",
     "services/automation/src/switchboard.ts",
   ];
@@ -275,6 +281,28 @@ describe("AB-19 what the automation service can ever send", () => {
       .sort();
     // A new signing path must be added to MAY_SIGN deliberately, with its own test.
     expect(offenders).toEqual(MAY_SIGN);
+  });
+
+  it("the Pyth settlement path builds only settle_market and adds no signer beyond the payer", () => {
+    const code = productionSources().get("services/automation/src/pythSettle.ts") ?? "";
+    expect([...code.matchAll(/\bmethods\s*\.\s*([A-Za-z0-9_]+)/g)].map((m) => m[1])).toEqual([
+      "settleMarket",
+    ]);
+    // Every send passes an empty extra-signer list: the executor signs with the payer alone.
+    const sends = [...code.matchAll(/\.send\(([^)]*)\)/g)].map((m) => m[1]);
+    expect(sends).toEqual(["tx, []"]);
+    expect(code).not.toMatch(/Keypair/);
+  });
+
+  it("the read-only wallet signs nothing: every signing call rejects, no key, no send", () => {
+    const code = productionSources().get("services/automation/src/readOnlyWallet.ts") ?? "";
+    expect(code).not.toBe("");
+    const signers = [...code.matchAll(/(signTransaction|signAllTransactions)\s*:\s*([^,\n]+)/g)];
+    expect(signers.map((m) => m[1]).sort()).toEqual(["signAllTransactions", "signTransaction"]);
+    for (const [, , body] of signers) {
+      expect(body).toMatch(/^\(\)\s*=>\s*Promise\.reject\(/);
+    }
+    expect(code).not.toMatch(/Keypair|secretKey|\.send\(|sendTransaction|sendRawTransaction/);
   });
 
   it("the test-only local oracle (admin-signed local_oracle_set) is reachable only on localnet", () => {

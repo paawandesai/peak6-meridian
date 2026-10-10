@@ -1,0 +1,15 @@
+{
+  "source": "POST https://pyth-lazer.dourolabs.app/v1/price (formats [solana], channel fixed_rate@200ms, properties price/exponent/confidence), recorded 2026-10-10T20:39:58.643Z",
+  "ticker": "META",
+  "feedId": 1272,
+  "closeTs": 1791576000,
+  "requestedTimestampUs": "1791576000000000",
+  "timestampUs": "1791576000000000",
+  "price": "71838179",
+  "exponent": -5,
+  "confidence": "20821",
+  "priceCents": "71838",
+  "confidenceBps": 2.89,
+  "signer": "80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c",
+  "solanaHex": "b9011a82f575a77def75339bb534016973ce7290703ea35ddd40322d7b1b26b52476d3a81688889a283cdfea8d5a022a92c07b4c977302ef83fdffd3c3df7ae018360c0980efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c280075d3c793007011cb6d5d06000301f80400000300e32948040000000004fbff055551000000000000"
+}

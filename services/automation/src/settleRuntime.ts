@@ -4,6 +4,7 @@ import type { IncidentClient } from "./incidents";
 import type { OpenMarket, SettleChain } from "./jobs/settle";
 import type { Logger } from "./log";
 import type { PrevCloseResult } from "./prevCloses";
+import type { PythSettler } from "./pythSettle";
 import type { TxExecutor } from "./settleTx";
 import type { OracleUpdateAdapter } from "./switchboard";
 import type { PublicKey, TransactionInstruction } from "@solana/web3.js";
@@ -20,6 +21,8 @@ export interface CommonRuntime {
     feeds: readonly [PublicKey, PublicKey],
   ) => Promise<TransactionInstruction[]>;
   readonly executor: TxExecutor;
+  /** Present only when Pyth settlement is enabled. */
+  readonly pyth?: PythSettler | undefined;
   readonly alerter: Alerter;
   readonly incidents: IncidentClient;
   readonly log: Logger;

@@ -14,10 +14,18 @@ import { z } from "zod";
 
 import { createAlerter } from "./alerts";
 import type { ClusterName } from "./cluster";
+import type { PythSettlementEnv } from "./config";
 import { createIncidentClient } from "./incidents";
 import { consoleLogger } from "./log";
 import { fetchPrevClose, type HttpGet } from "./prevCloses";
 import { connectionExecutor } from "./executor";
+import { fetchSignedPrice, type LazerHttpPost } from "./pythLazer";
+import {
+  buildPythSettleInstructions,
+  createPythSettler,
+  readPythConfig,
+  type PythSettler,
+} from "./pythSettle";
 import { programSettleChain } from "./settleChain";
 import type { CommonRuntime } from "./settleRuntime";
 import { buildSettleInstructions } from "./settleTx";
@@ -30,6 +38,8 @@ import {
 
 const httpGet: HttpGet = (url, init) =>
   fetch(url, { headers: { ...init.headers }, signal: init.signal });
+const httpPost: LazerHttpPost = (url, init) =>
+  fetch(url, { method: "POST", headers: init.headers, body: init.body, signal: init.signal });
 
 /** A keypair file (JSON array of 64 bytes). Errors never include the path or the content. */
 export function readKeypairFile(path: string): Keypair {
@@ -50,6 +60,8 @@ export interface RuntimeEnv {
   readonly serviceToken?: string | undefined;
   /** Local validator only: the Config admin that signs `local_oracle_set`. */
   readonly adminKeypair?: Keypair | undefined;
+  /** Pyth settlement (D-055); null or absent keeps the default oracle-update path. */
+  readonly pyth?: PythSettlementEnv | null | undefined;
 }
 
 export function buildRuntime(
@@ -90,6 +102,34 @@ export function buildRuntime(
     },
   });
 
+  const executor = connectionExecutor(connection, payer);
+  const pythEnv = env.pyth;
+  const pyth: PythSettler | undefined =
+    pythEnv === null || pythEnv === undefined
+      ? undefined
+      : createPythSettler({
+          readConfig: () => readPythConfig(program, config),
+          fetchSigned: (feedId, timestampUs) =>
+            fetchSignedPrice({
+              post: httpPost,
+              token: pythEnv.apiToken,
+              baseUrl: pythEnv.baseUrl,
+              feedId,
+              timestampUs,
+            }),
+          buildSettleIxs: (markets, feeds) =>
+            buildPythSettleInstructions({
+              program,
+              config,
+              payer: payer.publicKey,
+              markets: markets.map((m) => m.address),
+              feeds,
+            }),
+          payer: payer.publicKey,
+          executor,
+          now: () => new Date(),
+        });
+
   return {
     program,
     chain: programSettleChain(program, config, payer.publicKey),
@@ -108,7 +148,8 @@ export function buildRuntime(
         markets: markets.map((m) => m.address),
         feeds,
       }),
-    executor: connectionExecutor(connection, payer),
+    executor,
+    pyth,
     alerter: createAlerter({ webhookUrl: env.alertWebhookUrl, post, log }),
     incidents: createIncidentClient({
       url: env.opsAgentUrl,

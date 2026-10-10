@@ -1831,6 +1831,21 @@ export type Meridian = {
       name: "configLayoutMismatch";
       msg: "Config account is not a v1 Config (discriminator, size or bump mismatch)";
     },
+    {
+      code: 6050;
+      name: "pythWrongSigner";
+      msg: "Pyth update is not signed by the pyth_lazer_signer pinned in the config";
+    },
+    {
+      code: 6051;
+      name: "pythConfidenceTooWide";
+      msg: "Pyth confidence is missing or wider than max_conf_bps of the price";
+    },
+    {
+      code: 6052;
+      name: "pythAfterCloseWindow";
+      msg: "Pyth update is later than close_ts + pyth_max_age_secs";
+    },
   ];
   types: [
     {
@@ -2028,8 +2043,10 @@ export type Meridian = {
           {
             name: "pythMaxAgeSecs";
             docs: [
-              "Maximum age of Pyth timestamp in seconds (D-055). Pyth timestamps are in microseconds",
-              "and checked against clock.unix_timestamp (not slot-based like Core feeds).",
+              "Close window for Pyth updates, in seconds (D-055): `settle_market` accepts a signed",
+              "update only if it was taken in `[close_ts, close_ts + pyth_max_age_secs]`. Anchored on",
+              "the close, not on the current time, so a permissionless settler cannot pick a later",
+              "after-hours price. The name is kept from the v2 layout.",
             ];
             type: "i64";
           },

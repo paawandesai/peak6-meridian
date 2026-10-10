@@ -25,6 +25,15 @@ const SESSION: DemoSession = {
 };
 
 describe("demoSessionsSchema", () => {
+  it("accepts an optional base58 programId and rejects anything else", () => {
+    const programId = "H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm";
+    expect(demoSessionsSchema.parse({ programId, sessions: [] }).programId).toBe(programId);
+    expect(demoSessionsSchema.parse({ sessions: [] }).programId).toBeUndefined();
+    for (const bad of ["", "0OIl0OIl0OIl0OIl0OIl0OIl0OIl0OIl", "short", 42]) {
+      expect(demoSessionsSchema.safeParse({ programId: bad, sessions: [] }).success).toBe(false);
+    }
+  });
+
   it("round-trips a registry through JSON unchanged", () => {
     const registry = { sessions: [SESSION] };
     const parsed = demoSessionsSchema.parse(JSON.parse(JSON.stringify(registry)));
