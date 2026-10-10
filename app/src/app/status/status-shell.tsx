@@ -70,7 +70,9 @@ function Page() {
         ) : null}
         {data.status === "loading" ? <p>Loading status…</p> : null}
         {data.status === "error" ? <p role="alert">Could not load status: {data.message}</p> : null}
-        {data.status === "ready" ? <StatusView data={data.value} /> : null}
+        {data.status === "ready" ? (
+          <StatusView data={data.value} showTestMarkets={showTestMarkets} />
+        ) : null}
       </main>
     </>
   );

@@ -1,7 +1,7 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { formatUsdcBalance } from "@/lib/display";
-import { formatStrike, formatTradingDate } from "@/lib/markets";
+import { formatStrike, formatTradingDate, isSessionMarket } from "@/lib/markets";
 import {
   BOOK_COVERAGE_TEXT,
   buildDays,
@@ -188,7 +188,13 @@ function Day({ day }: { readonly day: DayLiveness }) {
 }
 
 /** Read-only /status body: no wallet needed. */
-export function StatusView({ data }: { readonly data: StatusData }) {
+export function StatusView({
+  data,
+  showTestMarkets = false,
+}: {
+  readonly data: StatusData;
+  readonly showTestMarkets?: boolean;
+}) {
   if (data.markets.length === 0) return <p>{EMPTY_TEXT}</p>;
   const rows = data.markets.map((market) =>
     marketStatusRow(
@@ -197,16 +203,36 @@ export function StatusView({ data }: { readonly data: StatusData }) {
       data.facts.get(market.address) ?? NO_FACTS,
     ),
   );
-  const days = buildDays(rows);
+  // P0-1 AC: "No page mixes session and test markets in one list"
+  // Partition rows into session and test when toggle is on
+  const { sessionRows, testRows } = useMemo(() => {
+    if (!showTestMarkets) return { sessionRows: rows, testRows: [] };
+    return {
+      sessionRows: rows.filter((row) => isSessionMarket(row.market)),
+      testRows: rows.filter((row) => !isSessionMarket(row.market)),
+    };
+  }, [rows, showTestMarkets]);
+
+  const sessionDays = buildDays(sessionRows);
+  const testDays = buildDays(testRows);
+
   return (
     <div className="flex flex-col gap-mer-6">
       <p className="text-mer-sm text-mer-ink-muted">
         Vault must equal pairs outstanding × $1.00 exactly. {BOOK_COVERAGE_TEXT}. Times are Eastern
         Time; oracle age counts slots between the oracle reading and the settle transaction.
       </p>
-      {days.map((day) => (
+      {sessionDays.map((day) => (
         <Day key={day.tradingDate} day={day} />
       ))}
+      {testRows.length > 0 ? (
+        <>
+          <h3 className="text-mer-lg font-semibold">Test Markets</h3>
+          {testDays.map((day) => (
+            <Day key={day.tradingDate} day={day} />
+          ))}
+        </>
+      ) : null}
     </div>
   );
 }

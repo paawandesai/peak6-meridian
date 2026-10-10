@@ -507,6 +507,20 @@ export function PortfolioView(props: PortfolioViewProps) {
   );
   const shown =
     filter === "resting" ? [] : sorted.filter((row) => FILTER_STATES[filter].includes(row.state));
+  // P0-1 AC: "No page mixes session and test markets in one list"
+  // Partition shown rows into session and test when toggle is on
+  const { sessionRows, testRows } = useMemo(() => {
+    if (!showTestMarkets || marketsAll.status !== "ready") {
+      return { sessionRows: shown, testRows: [] };
+    }
+    const { session, test } = partitionMarkets(marketsAll.value);
+    const sessionAddrs = new Set(session.map((m) => m.address));
+    const testAddrs = new Set(test.map((m) => m.address));
+    return {
+      sessionRows: shown.filter((row) => sessionAddrs.has(row.market.address)),
+      testRows: shown.filter((row) => testAddrs.has(row.market.address)),
+    };
+  }, [shown, showTestMarkets, marketsAll]);
   const busy = tx !== null && tx.state !== "confirmed" && tx.state !== "failed";
 
   async function run(
@@ -616,17 +630,37 @@ export function PortfolioView(props: PortfolioViewProps) {
       ) : shown.length === 0 ? (
         <p>{filter === "open" ? "No open positions." : "No closed positions."}</p>
       ) : (
-        <PositionsTable
-          rows={shown}
-          nowSecs={nowSecs}
-          overrideDelaySecs={overrideDelaySecs}
-          onRedeem={(market) => {
-            const item = redeemAll.find((candidate) => candidate.market.address === market.address);
-            if (item !== undefined) void run((actions) => actions.redeem([item]));
-          }}
-          busy={busy}
-          firstUse={firstUseKeys(shown)}
-        />
+        <>
+          {sessionRows.length > 0 ? (
+            <PositionsTable
+              rows={sessionRows}
+              nowSecs={nowSecs}
+              overrideDelaySecs={overrideDelaySecs}
+              onRedeem={(market) => {
+                const item = redeemAll.find((candidate) => candidate.market.address === market.address);
+                if (item !== undefined) void run((actions) => actions.redeem([item]));
+              }}
+              busy={busy}
+              firstUse={firstUseKeys(sessionRows)}
+            />
+          ) : null}
+          {testRows.length > 0 ? (
+            <div className="flex flex-col gap-mer-2">
+              <h3 className="text-mer-lg font-semibold">Test Markets</h3>
+              <PositionsTable
+                rows={testRows}
+                nowSecs={nowSecs}
+                overrideDelaySecs={overrideDelaySecs}
+                onRedeem={(market) => {
+                  const item = redeemAll.find((candidate) => candidate.market.address === market.address);
+                  if (item !== undefined) void run((actions) => actions.redeem([item]));
+                }}
+                busy={busy}
+                firstUse={firstUseKeys(testRows)}
+              />
+            </div>
+          ) : null}
+        </>
       )}
 
       <MmBlock
