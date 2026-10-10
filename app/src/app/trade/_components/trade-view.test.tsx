@@ -90,7 +90,7 @@ type Overrides = {
   nowSecs?: number;
   cfg?: AppConfig;
   m?: ReturnType<typeof market>;
-  openTime?: number | null;
+  openTime?: number | null | "unavailable" | Error;
   noWallet?: boolean;
   prices?: Parameters<typeof TradeView>[0]["marketData"];
 };
@@ -105,7 +105,10 @@ function renderView(o: Overrides = {}) {
       reader={fakeReader({
         getWallet: () => Promise.resolve(o.wallet ?? EMPTY_WALLET),
         getBook: () => Promise.resolve(o.book ?? BOOK),
-        getOpenTime: () => Promise.resolve(o.openTime ?? null),
+        getOpenTime: () =>
+          o.openTime instanceof Error
+            ? Promise.reject(o.openTime)
+            : Promise.resolve(o.openTime ?? null),
       })}
       actions={o.noWallet ? null : fake.actions}
       wallet={o.noWallet ? null : USER}
@@ -566,6 +569,25 @@ describe("the page header (UI-04 AC9, AC10, M2-06 AC6)", () => {
       expect(screen.getByTestId("open-close")).toHaveTextContent("Opened — · Closes 16:00 ET"),
     );
     await screen.findByTestId("simulated");
+  });
+
+  it("an unreachable open-time index reads 'Open time unavailable', never a time (P1-4)", async () => {
+    renderView({ openTime: new Error("open times could not be read (502)") });
+    await waitFor(() =>
+      expect(screen.getByTestId("open-close")).toHaveTextContent(
+        "Open time unavailable · Closes 16:00 ET",
+      ),
+    );
+    await screen.findByTestId("simulated");
+  });
+
+  it("an index still rebuilding after a restart reads 'Open time unavailable' (P1-4)", async () => {
+    renderView({ openTime: "unavailable" });
+    await waitFor(() =>
+      expect(screen.getByTestId("open-close")).toHaveTextContent(
+        "Open time unavailable · Closes 16:00 ET",
+      ),
+    );
   });
 
   it("shows Closing soon with a live remaining time in the badge", async () => {

@@ -10,6 +10,7 @@ import {
   type MarketRow,
 } from "@/lib/markets";
 import { formatUsdCents } from "@/lib/display";
+import type { OpenTime } from "@/lib/open-times-core";
 import { etTradingDate, formatEtHm } from "@/lib/time";
 
 export const MIDPOINT_NOTE =
@@ -42,8 +43,14 @@ export function timeline(market: MarketRow): string {
   );
 }
 
-/** `Opened 09:00 ET · Closes 16:00 ET`; an unreadable creation time reads `—`. */
-export function openClose(market: MarketRow, openTs: number | null): string {
+/**
+ * `Opened 09:00 ET · Closes 16:00 ET`; an unknown creation time reads `—`, and an unreadable
+ * open-time index reads `Open time unavailable` (P1-4), never a guessed time.
+ */
+export function openClose(market: MarketRow, openTs: OpenTime): string {
+  if (openTs === "unavailable") {
+    return `Open time unavailable · Closes ${formatEtHm(market.closeTs)} ET`;
+  }
   // A market created the evening before shows its date, so "Opened 18:00 ET" is never ambiguous.
   const date = openTs !== null && etTradingDate(openTs) !== market.tradingDate;
   const opened =
