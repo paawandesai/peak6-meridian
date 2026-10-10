@@ -28,7 +28,6 @@ import os
 import threading
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 import httpx
 from solana.rpc.async_api import AsyncClient
@@ -48,6 +47,7 @@ from .chain import ChainMarketSource, ChainOrderClient
 from .config import MMConfig
 from .loop import MarketMakerLoop
 from .onchain import HttpFairValueSource
+from .session import session_trading_date
 from .types import MarketState
 
 logging.basicConfig(
@@ -97,15 +97,12 @@ class OnChainSources:
     def markets(self) -> list[MarketInfo]:
         """Get open markets from cache (populated by MM loop).
 
-        Filters to today's ET trading_date only. Prior-day markets stay Open for
-        settlement (AB-11) but should not appear on /fair-values for M3-03.
+        Filters to the current session's trading_date (meridian_quant.mm.session). Prior-day
+        markets stay Open for settlement (AB-11) but should not appear on /fair-values for M3-03.
         """
-        # Get today's trading date (YYYYMMDD in ET)
-        now = datetime.now(UTC)
-        et_now = now.astimezone(ZoneInfo("America/New_York"))
-        today_trading_date = int(et_now.strftime("%Y%m%d"))
-
+        # The current session's trading date, the same rule the MM loop quotes by
         cached_markets = self._market_cache.get()
+        today_trading_date = session_trading_date(cached_markets, datetime.now(UTC))
         return [
             MarketInfo(
                 market=m.market,
