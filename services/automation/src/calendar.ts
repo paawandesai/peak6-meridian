@@ -97,22 +97,6 @@ export function previousTradingDay(date: IsoDate): IsoDate {
   }
 }
 
-/**
- * The next trading day strictly after the ET date (P0-1 weekend header).
- *
- * @throws RangeError if the search leaves SUPPORTED_YEARS.
- */
-export function nextTradingDay(date: IsoDate): IsoDate {
-  let day = parseDate(date);
-  for (;;) {
-    day = day.plus({ days: 1 });
-    const iso = day.toISODate();
-    if (isTradingDay(iso)) {
-      return iso;
-    }
-  }
-}
-
 /** Parses an ISO date at ET midnight; rejects malformed dates and unsupported years. */
 function parseDate(date: IsoDate): DateTime<true> {
   const day = ISO_DATE.test(date) ? DateTime.fromISO(date, { zone: ET_ZONE }) : null;

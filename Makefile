@@ -14,7 +14,7 @@ PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
 	client lint lint-rust lint-js-py check-links typecheck test test-rust-unit test-js-py-unit test-security \
-	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet test-deploy-devnet e2e dev demo-ops
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet test-deploy-devnet e2e e2e-ui e2e-ui-browser dev demo-ops
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -140,11 +140,11 @@ deploy-devnet:
 e2e-ui-browser:
 	pnpm --filter e2e exec playwright install chromium --with-deps
 
+e2e-ui:
+	pnpm --filter e2e run test
+
 e2e:
 	scripts/e2e.sh
-
-e2e-ui:
-	pnpm --filter e2e run test:ui
 
 dev:
 	scripts/dev.sh

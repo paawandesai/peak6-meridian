@@ -1,4 +1,4 @@
-import { Countdown, StateBadge, TestMarketBadge } from "../ui";
+import { Countdown, StateBadge } from "../ui";
 import { FairEdge } from "../fair-value/fair-edge";
 import type { BookQuotes } from "@meridian/client";
 import {
@@ -9,7 +9,7 @@ import {
   rangeText,
   yesView,
 } from "@/lib/market-view";
-import { formatStrike, isSessionMarket, marketStatus, type MarketRow } from "@/lib/markets";
+import { formatStrike, marketStatus, type MarketRow } from "@/lib/markets";
 import type { FairValue } from "@/lib/fair-values";
 
 /** What the page knows about one strike's book and fair value. */
@@ -96,25 +96,21 @@ export function StrikeRow({
   const view = yesView(data.quotes);
   const transition = nextTransition(market, status, ctx.nowSecs, ctx.overrideDelaySecs);
   const strike = formatStrike(market.strikeCents);
-  const isTest = !isSessionMarket(market);
   return (
     <tr className="relative border-t border-mer-rule align-top">
       <td className="py-mer-2 pr-mer-3">
-        <div className="flex items-center gap-mer-1">
-          {tradeHref === undefined ? (
-            <span className="mer-num font-medium">{strike}</span>
-          ) : (
-            <a
-              href={tradeHref(market)}
-              className="mer-num font-medium underline-offset-4 after:absolute after:inset-0 hover:underline"
-            >
-              {strike} <span className="font-normal text-mer-ink-muted">Trade</span>
-            </a>
-          )}
-          {isTest ? <TestMarketBadge /> : null}
-        </div>
+        {tradeHref === undefined ? (
+          <span className="mer-num font-medium">{strike}</span>
+        ) : (
+          <a
+            href={tradeHref(market)}
+            className="mer-num font-medium underline-offset-4 after:absolute after:inset-0 hover:underline"
+          >
+            {strike} <span className="font-normal text-mer-ink-muted">Trade</span>
+          </a>
+        )}
         <span className="block text-mer-xs text-mer-ink-muted sm:hidden">
-          {openCloseText(data.openedAt, market.closeTs, !isTest)}
+          {openCloseText(data.openedAt, market.closeTs)}
         </span>
         {markerAbove ? (
           <span
@@ -163,7 +159,7 @@ export function StrikeRow({
         )}
       </td>
       <td className="hidden py-mer-2 pr-mer-3 text-mer-xs text-mer-ink-muted sm:table-cell">
-        {openCloseText(data.openedAt, market.closeTs, !isTest)}
+        {openCloseText(data.openedAt, market.closeTs)}
       </td>
       <td className="mer-num py-mer-2 text-right text-mer-ink-muted">
         {market.pairsOutstanding.toLocaleString("en-US")}
