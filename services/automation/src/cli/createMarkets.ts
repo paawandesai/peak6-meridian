@@ -22,6 +22,28 @@ import { computeStrikes } from "../strikes";
 /** Ticker order of the config (docs/domain.md § Glossary: MAG7). */
 export const TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"] as const;
 
+/**
+ * P0-1 guard (AC5): refuse --close-in-secs on devnet unless --allow-test-close is set.
+ * Exported for unit testing.
+ */
+export function checkTestMarketGuard(params: {
+  readonly hasCloseInSecs: boolean;
+  readonly allowTestClose: boolean;
+  readonly resolvedCluster: "devnet" | "localnet";
+}): void {
+  if (
+    params.hasCloseInSecs &&
+    params.resolvedCluster === "devnet" &&
+    !params.allowTestClose
+  ) {
+    throw new Error(
+      "create-markets: --close-in-secs is not allowed on devnet " +
+        "without --allow-test-close. Real markets only on the shared devnet deployment; " +
+        "test markets use a local validator.",
+    );
+  }
+}
+
 /** `YYYY-MM-DD` naming a real calendar date (so `2026-02-30` and `2026-13-01` are refused). */
 export const isoDateSchema = z
   .string()

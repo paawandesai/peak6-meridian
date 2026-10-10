@@ -3,7 +3,7 @@
  * with HTTP 429, so every reader shares this connection and retries 429/503 with exponential
  * backoff plus full jitter (honouring `Retry-After`) instead of web3.js's fixed retry schedule.
  */
-import { Connection, PublicKey } from "@solana/web3.js";
+import { Connection } from "@solana/web3.js";
 
 export type RetryOptions = {
   readonly retries?: number;
@@ -79,24 +79,4 @@ export function dedupe<T>(load: () => Promise<T>, ttlMs: number, now = Date.now)
     });
     return promise;
   };
-}
-
-/**
- * `getMultipleParsedAccounts` wrapper that chunks keys into batches of at most 99 to stay under
- * the Solana RPC 100-key limit. Useful for /status and any multi-key read. Results are returned
- * in the same order as `keys`. Each chunk is fetched serially to avoid bursts.
- */
-export async function getMultipleChunked<T>(
-  connection: { getMultipleParsedAccounts(keys: PublicKey[], opts?: unknown): Promise<{ value: T[] }> },
-  keys: PublicKey[],
-  opts?: unknown,
-): Promise<T[]> {
-  const CHUNK_SIZE = 99;
-  const results: T[] = [];
-  for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
-    const chunk = keys.slice(i, i + CHUNK_SIZE);
-    const { value } = await connection.getMultipleParsedAccounts(chunk, opts);
-    results.push(...value);
-  }
-  return results;
 }

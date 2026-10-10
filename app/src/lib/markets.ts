@@ -1,5 +1,6 @@
 /** Market view model: status, grouping by ticker and display formatting. */
 import { strikeCentsToDollars } from "@meridian/client";
+import { sessionCloseTs } from "./time";
 
 /**
  * Market state per docs/design.md §3. The chain stores only Open or Settled; the rest is derived
@@ -45,6 +46,43 @@ export function marketStatus(market: MarketRow, nowSecs: number): MarketStatus {
   if (now < market.closeTs + SETTLING_START_SECS) return "Closed";
   if (now < market.closeTs + SETTLEMENT_DELAYED_SECS) return "Settling";
   return "SettlementDelayed";
+}
+
+/**
+ * Session market check (P0-1): true when the market's closeTs matches the NYSE session close
+ * for its trading date (16:00 ET on regular days, 13:00 ET on early-close days).
+ * Test markets (created with --close-in-secs) have different close times and return false.
+ */
+export function isSessionMarket(market: MarketRow): boolean {
+  const sessionClose = sessionCloseTs(market.tradingDate);
+  return sessionClose !== null && Number(market.closeTs) === sessionClose;
+}
+
+/**
+ * Filters to session markets only (P0-1). Test markets are excluded from all lists by default
+ * unless explicitly requested (design.md §3, P0-1 AC3-4).
+ */
+export function sessionMarketsOnly(markets: readonly MarketRow[]): MarketRow[] {
+  return markets.filter(isSessionMarket);
+}
+
+/**
+ * Partitions markets into session and test markets (P0-1).
+ */
+export function partitionMarkets(markets: readonly MarketRow[]): {
+  readonly session: MarketRow[];
+  readonly test: MarketRow[];
+} {
+  const session: MarketRow[] = [];
+  const test: MarketRow[] = [];
+  for (const market of markets) {
+    if (isSessionMarket(market)) {
+      session.push(market);
+    } else {
+      test.push(market);
+    }
+  }
+  return { session, test };
 }
 
 /** Groups by ticker (alphabetical), newest trading date first, then ascending strike. */
