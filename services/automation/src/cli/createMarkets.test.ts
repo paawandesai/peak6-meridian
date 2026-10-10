@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { computeStrikes } from "../strikes";
 import {
+  checkTestMarketGuard,
   createMarkets,
   isoDateSchema,
   type MarketOps,
@@ -165,5 +166,47 @@ describe("inputs", () => {
     ]) {
       expect(isoDateSchema.safeParse(bad).success, bad).toBe(false);
     }
+  });
+});
+
+describe("checkTestMarketGuard (P0-1: refuse test markets on devnet)", () => {
+  it("allows --close-in-secs on localnet without --allow-test-close", () => {
+    expect(() =>
+      checkTestMarketGuard({
+        hasCloseInSecs: true,
+        allowTestClose: false,
+        resolvedCluster: "localnet",
+      }),
+    ).not.toThrow();
+  });
+
+  it("allows --close-in-secs on devnet WITH --allow-test-close", () => {
+    expect(() =>
+      checkTestMarketGuard({
+        hasCloseInSecs: true,
+        allowTestClose: true,
+        resolvedCluster: "devnet",
+      }),
+    ).not.toThrow();
+  });
+
+  it("refuses --close-in-secs on devnet without --allow-test-close", () => {
+    expect(() =>
+      checkTestMarketGuard({
+        hasCloseInSecs: true,
+        allowTestClose: false,
+        resolvedCluster: "devnet",
+      }),
+    ).toThrow(/not allowed on devnet.*--allow-test-close/);
+  });
+
+  it("allows real markets (no --close-in-secs) on devnet", () => {
+    expect(() =>
+      checkTestMarketGuard({
+        hasCloseInSecs: false,
+        allowTestClose: false,
+        resolvedCluster: "devnet",
+      }),
+    ).not.toThrow();
   });
 });
