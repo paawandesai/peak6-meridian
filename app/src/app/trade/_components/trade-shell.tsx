@@ -11,6 +11,7 @@ import { FaucetButton } from "@/components/faucet-button";
 import { TickerInsight } from "@/components/fair-value/ticker-insight";
 import { Providers } from "@/components/providers";
 import { useReader } from "@/components/reader-context";
+import { useTestMarkets } from "@/components/test-market-context";
 import { useAsync } from "@/components/use-async";
 import { useNow } from "@/components/use-now";
 import { explorerTxUrl } from "@/lib/admin-chain";
@@ -26,14 +27,16 @@ function Page({ address }: { readonly address: string }) {
   const { connection } = useConnection();
   const { publicKey, signTransaction } = useWallet();
   const config = useMemo(() => loadPublicConfig(), []);
+  const { showTestMarkets } = useTestMarkets();
   const marketsAll = useAsync(() => reader.listMarkets(), [reader]);
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
-  // P0-1 AC4: Filter to session markets only
+  // P0-1 AC3-4: Filter to session markets; include test markets when toggle is on
   const markets = useMemo(() => {
     if (marketsAll.status !== "ready") return marketsAll;
-    const { session } = partitionMarkets(marketsAll.value);
-    return { ...marketsAll, value: session };
-  }, [marketsAll]);
+    const { session, test } = partitionMarkets(marketsAll.value);
+    const filtered = showTestMarkets ? [...session, ...test] : session;
+    return { ...marketsAll, value: filtered };
+  }, [marketsAll, showTestMarkets]);
   const market =
     markets.status === "ready" ? markets.value.find((m) => m.address === address) : undefined;
   // Live prices, plus the books of the ticker's ladder for the distribution chart. The Trade

@@ -40,6 +40,7 @@ vi.mock("../_lib/tx", () => ({
 }));
 
 import { NOT_FOUND_TEXT, TradeShell } from "./trade-shell";
+import { TestMarketProvider } from "@/components/test-market-context";
 import { market, reader, withReader } from "@/test-utils";
 
 // The shared dev box can be heavily loaded; generous waits keep these from flaking.
@@ -65,7 +66,14 @@ afterEach(() => {
 });
 
 function shell(address: string, listMarkets = () => Promise.resolve([ROW])) {
-  return render(withReader(reader({ listMarkets }), <TradeShell address={address} />));
+  return render(
+    withReader(
+      reader({ listMarkets }),
+      <TestMarketProvider>
+        <TradeShell address={address} />
+      </TestMarketProvider>,
+    ),
+  );
 }
 
 describe("TradeShell", () => {
