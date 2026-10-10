@@ -30,8 +30,8 @@ export function LandingHeader({ demoWalletButton }: Props) {
       <div className="flex items-start justify-between gap-mer-3">
         <div className="flex-1 space-y-mer-2">
           <p className="text-mer-sm text-mer-ink">
-            Will META close at or above $680 at today's 4:00 PM ET close? Buy YES or NO. The
-            winning side pays $1.00 per contract; you know your max loss before you sign.
+            Will META close at or above $680 at today's 4:00 PM ET close? Buy YES or NO. The winning
+            side pays $1.00 per contract; you know your max loss before you sign.
           </p>
           <div className="flex flex-wrap items-center gap-mer-2">
             <button

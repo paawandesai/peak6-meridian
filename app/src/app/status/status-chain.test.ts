@@ -71,7 +71,12 @@ describe("status-chain", () => {
         .fn()
         .mockImplementation(byHash({ redeem2: none, redeem1: none, settle: tx, old: tx })),
     });
-    const out = await loadMarketFacts(rpc, { ...good, address: key }, programId, Math.floor(Date.now() / 1000));
+    const out = await loadMarketFacts(
+      rpc,
+      { ...good, address: key },
+      programId,
+      Math.floor(Date.now() / 1000),
+    );
     expect(out).toMatchObject({ createdAt: fixture.blockTime, settleSlot: 777, oracleSlot: 321n });
     expect(out.settledAt).toBe(fixture.blockTime);
   });
@@ -96,7 +101,12 @@ describe("status-chain", () => {
       getSignaturesForAddress: vi.fn().mockResolvedValue(sigs),
       getTransactions: vi.fn().mockImplementation(byHash({})),
     });
-    const out = await loadMarketFacts(rpc, { ...good, address: key }, programId, Math.floor(Date.now() / 1000));
+    const out = await loadMarketFacts(
+      rpc,
+      { ...good, address: key },
+      programId,
+      Math.floor(Date.now() / 1000),
+    );
     expect(out.settledAt).toBeNull();
     const calls = (rpc.getTransactions as unknown as { mock: { calls: string[][][] } }).mock.calls;
     expect(calls.flatMap((call) => call[0] ?? []).length).toBeLessThanOrEqual(1 + MAX_SETTLE_SCAN);
@@ -109,13 +119,27 @@ describe("status-chain", () => {
       getSignaturesForAddress: vi.fn().mockResolvedValue(full),
       getTransactions: vi.fn().mockResolvedValue([]),
     });
-    expect(await loadMarketFacts(rpc, { ...bad, address: key }, programId, Math.floor(Date.now() / 1000))).toEqual(NO_FACTS);
+    expect(
+      await loadMarketFacts(
+        rpc,
+        { ...bad, address: key },
+        programId,
+        Math.floor(Date.now() / 1000),
+      ),
+    ).toEqual(NO_FACTS);
     expect(rpc.getTransactions).not.toHaveBeenCalled();
     const none = rpcWith({
       getTransactions: vi.fn().mockResolvedValue([null, { slot: 1, meta: { logMessages: null } }]),
       getSignaturesForAddress: vi.fn().mockResolvedValue([sig("a"), sig("b")]),
     });
-    expect(await loadMarketFacts(none, { ...good, address: key }, programId, Math.floor(Date.now() / 1000))).toEqual(NO_FACTS);
+    expect(
+      await loadMarketFacts(
+        none,
+        { ...good, address: key },
+        programId,
+        Math.floor(Date.now() / 1000),
+      ),
+    ).toEqual(NO_FACTS);
   });
 
   it("loads only the newest two trading dates", async () => {
@@ -124,9 +148,16 @@ describe("status-chain", () => {
     const rpc = rpcWith({
       getMultipleParsedAccounts: vi.fn().mockResolvedValue({ value: [parsed("0")] }),
     });
-    const out = await loadStatusData(rpc, [mk(1), mk(3), mk(2)], programId, Math.floor(Date.now() / 1000));
+    const out = await loadStatusData(
+      rpc,
+      [mk(1), mk(3), mk(2)],
+      programId,
+      Math.floor(Date.now() / 1000),
+    );
     expect(out.markets.map((m) => m.tradingDate).sort()).toEqual([2, 3]);
-    expect((await loadStatusData(rpc, [], programId, Math.floor(Date.now() / 1000))).markets).toEqual([]);
+    expect(
+      (await loadStatusData(rpc, [], programId, Math.floor(Date.now() / 1000))).markets,
+    ).toEqual([]);
   });
 
   it("uses chunked reads to handle 150 markets without hitting the 100-key limit", async () => {

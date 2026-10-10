@@ -232,31 +232,50 @@ describe("fairStaleness and stale points (P0-FV: shown, flagged)", () => {
   const [a190, a170, a180] = ladder();
   const addr = (m: { readonly address: string } | undefined): string => m?.address ?? "";
 
-  it("flags a value marked stale, an old one, and every value after a failed refresh", () => {
-    const old = new Date((NOW - 30) * 1000).toISOString();
+  it("flags a value the server marked stale, not one whose spot is merely old (P0-FV)", () => {
+    const old = new Date((NOW - 20 * 3_600) * 1000).toISOString();
     const byMarket = {
       [addr(a170)]: fair({ market: addr(a170) }),
       [addr(a180)]: fair({ market: addr(a180), stale: true }),
       [addr(a190)]: fair({ market: addr(a190), as_of: old }),
     };
-    const s = fairStaleness(byMarket, false, NOW);
-    expect(s[addr(a170)]).toEqual({ stale: false, asOfSecs: NOW - 2 });
-    expect(s[addr(a180)]?.stale).toBe(true);
-    expect(s[addr(a190)]).toEqual({ stale: true, asOfSecs: NOW - 30 });
-    expect(Object.values(fairStaleness(byMarket, true, NOW)).every((v) => v.stale)).toBe(true);
+    const s = fairStaleness(byMarket, NOW - 1, NOW);
+    expect(s[addr(a170)]).toEqual({ stale: false, asOfSecs: NOW - 2, reasons: [] });
+    expect(s[addr(a180)]).toEqual({
+      stale: true,
+      asOfSecs: NOW - 2,
+      reasons: [{ kind: "server" }],
+    });
+    expect(s[addr(a190)]).toEqual({ stale: false, asOfSecs: NOW - 20 * 3_600, reasons: [] });
   });
 
-  it("carries the flag and as_of onto the points, and leaves a missing value unflagged", () => {
+  it("flags every value once no read has succeeded for over 30 s, or ever", () => {
+    const byMarket = {
+      [addr(a170)]: fair({ market: addr(a170) }),
+      [addr(a180)]: fair({ market: addr(a180) }),
+    };
+    expect(Object.values(fairStaleness(byMarket, NOW - 30, NOW)).some((v) => v.stale)).toBe(false);
+    const late = Object.values(fairStaleness(byMarket, NOW - 31, NOW));
+    expect(late.every((v) => v.stale)).toBe(true);
+    expect(late[0]?.reasons).toEqual([{ kind: "no-update", secs: 31 }]);
+    const never = Object.values(fairStaleness(byMarket, null, NOW));
+    expect(never.every((v) => v.stale)).toBe(true);
+  });
+
+  it("carries the flag, as_of and reasons onto the points, and leaves a missing value unflagged", () => {
+    const reasons = [{ kind: "server" }] as const;
     const points = distributionPoints(
       [a190, a170, a180] as never,
       {},
       { [addr(a170)]: 70 },
-      { [addr(a170)]: { stale: true, asOfSecs: NOW - 45 } },
+      { [addr(a170)]: { stale: true, asOfSecs: NOW - 45, reasons } },
     );
-    expect(points.map((pt) => [pt.fairCents, pt.fairStale, pt.fairAsOfSecs])).toEqual([
-      [70, true, NOW - 45],
-      [null, false, null],
-      [null, false, null],
+    expect(
+      points.map((pt) => [pt.fairCents, pt.fairStale, pt.fairAsOfSecs, pt.fairStaleReasons]),
+    ).toEqual([
+      [70, true, NOW - 45, reasons],
+      [null, false, null, []],
+      [null, false, null, []],
     ]);
   });
 });

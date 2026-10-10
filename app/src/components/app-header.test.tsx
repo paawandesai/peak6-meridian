@@ -69,7 +69,9 @@ describe("next close (AC4)", () => {
       nowSecs: early - 3_600,
       markets: [market({ tradingDate: 20261127, closeTs: BigInt(early) })],
     });
-    expect(screen.getByTestId("next-close")).toHaveTextContent("NYSE close 1:00 PM ET · in 1:00:00");
+    expect(screen.getByTestId("next-close")).toHaveTextContent(
+      "NYSE close 1:00 PM ET · in 1:00:00",
+    );
   });
 
   it("a market in its final 15 minutes still drives the countdown, not 'Closed · settling'", () => {

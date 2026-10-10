@@ -1,18 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import {
-  MarketsEmpty,
-  MarketsLoading,
-  StalePriceLabel,
-  StalePriceBanner,
-} from "./markets-states";
+import { MarketsEmpty, MarketsLoading, StalePriceLabel, StalePriceBanner } from "./markets-states";
 
 describe("MarketsEmpty", () => {
   it("displays default message", () => {
     render(<MarketsEmpty />);
 
     expect(
-      screen.getByText(/No markets today\. Markets are created each trading day\./)
+      screen.getByText(/No markets today\. Markets are created each trading day\./),
     ).toBeInTheDocument();
   });
 

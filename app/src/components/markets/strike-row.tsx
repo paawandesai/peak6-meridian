@@ -22,7 +22,8 @@ export type StrikeData = {
   readonly openedAt: OpenTime;
   readonly fair?: FairValue;
   readonly fairStatus: "loading" | "ready" | "unavailable";
-  readonly fairRefreshFailed: boolean;
+  /** When fair values were last read successfully (unix seconds), `null` when never. */
+  readonly fairLastSuccessSecs: number | null;
 };
 
 function YesCell({ view }: { readonly view: ReturnType<typeof yesView> }) {
@@ -150,7 +151,7 @@ export function StrikeRow({
           yesCents={view.kind === "mid" ? view.yes : null}
           fair={data.fair}
           status={data.fairStatus}
-          refreshFailed={data.fairRefreshFailed}
+          lastSuccessSecs={data.fairLastSuccessSecs}
           nowSecs={ctx.nowSecs}
         />
       </td>

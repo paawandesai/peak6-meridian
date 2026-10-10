@@ -19,7 +19,7 @@ type UseTickerSelectionOptions = {
  * - Returns current ticker and setter
  */
 export function useTickerSelection(
-  options: UseTickerSelectionOptions = {}
+  options: UseTickerSelectionOptions = {},
 ): [TickerOrAll, (ticker: TickerOrAll) => void] {
   const { defaultTicker = "All" } = options;
   const searchParams = useSearchParams();

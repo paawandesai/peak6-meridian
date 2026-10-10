@@ -49,10 +49,7 @@ describe("TickerTabs", () => {
   });
 
   it("renders all 7 tickers plus All tab", () => {
-    const tickerGroups: TickerGroup[] = [
-      createMockGroup("AAPL", 3),
-      createMockGroup("META", 2),
-    ];
+    const tickerGroups: TickerGroup[] = [createMockGroup("AAPL", 3), createMockGroup("META", 2)];
 
     render(<TickerTabs tickerGroups={tickerGroups} />);
 

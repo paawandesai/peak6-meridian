@@ -35,41 +35,41 @@ export function CompactStrikeRow({
         className="w-full px-mer-3 py-mer-2 text-left hover:bg-mer-surface-hover"
       >
         <div className="flex items-center justify-between gap-mer-2">
-        {/* Strike */}
-        <div className="flex-shrink-0 font-mer-medium text-mer-sm text-mer-ink">
-          {formatStrike(market.strikeCents)}
-        </div>
+          {/* Strike */}
+          <div className="flex-shrink-0 font-mer-medium text-mer-sm text-mer-ink">
+            {formatStrike(market.strikeCents)}
+          </div>
 
-        {/* YES · NO · Implied % */}
-        <div className="flex flex-1 items-center gap-mer-2 text-mer-xs">
-          <span className="text-mer-yes">{yesPriceCents}¢</span>
-          <span className="text-mer-ink-muted">·</span>
-          <span className="text-mer-no">{noPriceCents}¢</span>
-          <span className="text-mer-ink-muted">·</span>
-          <span className="text-mer-ink-muted">{impliedPercent}%</span>
-        </div>
+          {/* YES · NO · Implied % */}
+          <div className="flex flex-1 items-center gap-mer-2 text-mer-xs">
+            <span className="text-mer-yes">{yesPriceCents}¢</span>
+            <span className="text-mer-ink-muted">·</span>
+            <span className="text-mer-no">{noPriceCents}¢</span>
+            <span className="text-mer-ink-muted">·</span>
+            <span className="text-mer-ink-muted">{impliedPercent}%</span>
+          </div>
 
-        {/* Probability bar */}
-        <div className="h-2 w-16 flex-shrink-0 overflow-hidden rounded-full bg-mer-surface">
-          <div
-            className="h-full bg-mer-yes"
-            style={{ width: `${impliedPercent}%` }}
-            aria-label={`${impliedPercent}% probability`}
-          />
-        </div>
+          {/* Probability bar */}
+          <div className="h-2 w-16 flex-shrink-0 overflow-hidden rounded-full bg-mer-surface">
+            <div
+              className="h-full bg-mer-yes"
+              style={{ width: `${impliedPercent}%` }}
+              aria-label={`${impliedPercent}% probability`}
+            />
+          </div>
 
-        {/* Fair/Edge chip */}
-        {fairValueCents !== null && edgeCents !== null && (
-          <div
-            className={`
+          {/* Fair/Edge chip */}
+          {fairValueCents !== null && edgeCents !== null && (
+            <div
+              className={`
               flex-shrink-0 rounded-mer px-mer-1.5 py-mer-0.5 text-mer-xs
               ${edgeCents > 0 ? "bg-mer-gain/10 text-mer-gain" : edgeCents < 0 ? "bg-mer-loss/10 text-mer-loss" : "bg-mer-surface text-mer-ink-muted"}
             `}
-          >
-            {edgeCents > 0 ? "+" : ""}
-            {edgeCents}¢
-          </div>
-        )}
+            >
+              {edgeCents > 0 ? "+" : ""}
+              {edgeCents}¢
+            </div>
+          )}
         </div>
       </button>
     </div>
@@ -99,9 +99,7 @@ export function LivePriceMarker({ priceDollars, priceAsOf }: LivePriceMarkerProp
     <div className="flex items-center gap-mer-2 border-b border-mer-primary bg-mer-primary/5 px-mer-3 py-mer-1.5">
       <div className="h-0.5 flex-1 bg-mer-primary" />
       <div className="flex items-center gap-mer-1.5 text-mer-xs">
-        <span className="font-mer-medium text-mer-primary">
-          ${priceDollars.toFixed(2)}
-        </span>
+        <span className="font-mer-medium text-mer-primary">${priceDollars.toFixed(2)}</span>
         <span className="text-mer-ink-muted">as of {asOfTime}</span>
       </div>
       <div className="h-0.5 flex-1 bg-mer-primary" />

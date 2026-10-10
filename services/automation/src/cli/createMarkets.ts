@@ -27,11 +27,7 @@ export function checkTestMarketGuard(params: {
   readonly allowTestClose: boolean;
   readonly resolvedCluster: "devnet" | "localnet";
 }): void {
-  if (
-    params.hasCloseInSecs &&
-    params.resolvedCluster === "devnet" &&
-    !params.allowTestClose
-  ) {
+  if (params.hasCloseInSecs && params.resolvedCluster === "devnet" && !params.allowTestClose) {
     throw new Error(
       "create-markets: --close-in-secs is not allowed on devnet " +
         "without --allow-test-close. Real markets only on the shared devnet deployment; " +

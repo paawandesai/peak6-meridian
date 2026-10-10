@@ -17,7 +17,7 @@ vi.mock("@solana/wallet-adapter-react", async (importOriginal) => ({
 const mockFairValues = vi.hoisted(() => ({
   status: "ready" as const,
   byMarket: {} as Record<string, unknown>,
-  refreshFailed: false,
+  lastSuccessSecs: null as number | null,
 }));
 vi.mock("@/lib/fair-values", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/fair-values")>()),
@@ -446,6 +446,7 @@ describe("fair value and edge (M3-03: AC per-strike)", () => {
   it("mounts FairEdge on each strike row with that market's fair value", async () => {
     // Three strikes with distinct fair values
     const markets = [m(1), m(2), m(3)];
+    mockFairValues.lastSuccessSecs = NOW;
     mockFairValues.byMarket = {
       [addr(1)]: {
         market: addr(1),
@@ -495,5 +496,7 @@ describe("fair value and edge (M3-03: AC per-strike)", () => {
     // Each strike row should have a FairEdge (data-testid="fair-edge")
     const fairEdges = within(section).getAllByTestId("fair-edge");
     expect(fairEdges).toHaveLength(3);
+    // Read just now and not flagged by the server: no strike row reads stale (P0-FV).
+    for (const edge of fairEdges) expect(edge).toHaveAttribute("data-stale", "false");
   });
 });

@@ -47,6 +47,25 @@ export function formatEtHms(unixSecs: number | bigint): string {
   return hms.format(new Date(Number(unixSecs) * 1000));
 }
 
+const monthDay = new Intl.DateTimeFormat("en-US", {
+  timeZone: ZONE,
+  month: "short",
+  day: "numeric",
+});
+
+/**
+ * `19:59:59` when `unixSecs` is on today's ET date, `Fri 19:59:59` within the last week, and
+ * `Fri Oct 2 19:59:59` before that (a bare weekday would be ambiguous), all in ET.
+ */
+export function formatEtDayHms(unixSecs: number, nowSecs: number): string {
+  const time = formatEtHms(unixSecs);
+  if (etTradingDate(unixSecs) === etTradingDate(nowSecs)) return time;
+  const date = new Date(unixSecs * 1000);
+  const day = weekday.format(date);
+  const withinWeek = Math.abs(nowSecs - unixSecs) < 6 * 86_400;
+  return withinWeek ? `${day} ${time}` : `${day} ${monthDay.format(date)} ${time}`;
+}
+
 /** `16:05` for unix seconds, in ET (24-hour). */
 export function formatEtHm(unixSecs: number | bigint): string {
   return hm.format(new Date(Number(unixSecs) * 1000));

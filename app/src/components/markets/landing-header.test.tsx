@@ -24,20 +24,16 @@ describe("LandingHeader", () => {
     render(<LandingHeader />);
 
     expect(
-      screen.getByText(/Will META close at or above \$680 at today's 4:00 PM ET close\?/)
+      screen.getByText(/Will META close at or above \$680 at today's 4:00 PM ET close\?/),
     ).toBeInTheDocument();
     expect(screen.getByText(/Buy YES or NO/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/The winning side pays \$1\.00 per contract/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/The winning side pays \$1\.00 per contract/)).toBeInTheDocument();
   });
 
   it("renders connect CTA copy from design.md", () => {
     render(<LandingHeader />);
 
-    expect(
-      screen.getByText(/Connecting costs nothing and moves no funds/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Connecting costs nothing and moves no funds/)).toBeInTheDocument();
     expect(screen.getByText(/each trade asks for one signature/)).toBeInTheDocument();
   });
 
