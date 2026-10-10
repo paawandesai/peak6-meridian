@@ -9,7 +9,7 @@ const ADDR = "Mkt1111111111111111111111111111111111111111";
 const ready = (fairCents: number): FairValues => ({
   status: "ready",
   byMarket: { [ADDR]: fair({ fair_cents: fairCents }) },
-  refreshFailed: false,
+  lastSuccessSecs: NOW - 1,
 });
 
 describe("PriceFair (P0-7 AC3, US-15)", () => {
@@ -37,7 +37,7 @@ describe("PriceFair (P0-7 AC3, US-15)", () => {
       <PriceFair
         marketAddress={ADDR}
         yesCents={50}
-        fair={{ status: "unavailable", byMarket: {}, refreshFailed: true }}
+        fair={{ status: "unavailable", byMarket: {}, lastSuccessSecs: null }}
         nowSecs={NOW}
       />,
     );
@@ -56,7 +56,7 @@ describe("PriceFair (P0-7 AC3, US-15)", () => {
         fair={{
           status: "ready",
           byMarket: { [ADDR]: fair({ fair_cents: 41, stale: true, as_of: old }) },
-          refreshFailed: false,
+          lastSuccessSecs: NOW - 1,
         }}
         nowSecs={NOW}
       />,
@@ -64,22 +64,25 @@ describe("PriceFair (P0-7 AC3, US-15)", () => {
     expect(screen.getByTestId("fair-edge")).toHaveTextContent("Fair 41¢ · Edge −3¢ (cheap)");
     expect(screen.getByTestId("stale-tag")).toHaveAttribute(
       "title",
-      expect.stringContaining("40 s old"),
+      expect.stringContaining("the pricing service flagged it stale"),
     );
     expect(screen.queryByTestId("fair-edge-missing")).toBeNull();
   });
 
-  it("keeps the last values, tagged stale, after a failed refresh (P0-FV)", () => {
+  it("keeps the last values, tagged stale, after 30 s with no successful read (P0-FV)", () => {
     render(
       <PriceFair
         marketAddress={ADDR}
         yesCents={38}
-        fair={{ ...ready(41), refreshFailed: true }}
+        fair={{ ...ready(41), lastSuccessSecs: NOW - 31 }}
         nowSecs={NOW}
       />,
     );
     expect(screen.getByTestId("fair-edge")).toHaveTextContent("Fair 41¢");
-    expect(screen.getByTestId("stale-tag")).toBeInTheDocument();
+    expect(screen.getByTestId("stale-tag")).toHaveAttribute(
+      "title",
+      expect.stringContaining("no update from the pricing service for 31 s"),
+    );
     expect(screen.queryByTestId("fair-edge-missing")).toBeNull();
   });
 
@@ -88,7 +91,7 @@ describe("PriceFair (P0-7 AC3, US-15)", () => {
       <PriceFair
         marketAddress={ADDR}
         yesCents={50}
-        fair={{ status: "loading", byMarket: {}, refreshFailed: false }}
+        fair={{ status: "loading", byMarket: {}, lastSuccessSecs: null }}
         nowSecs={NOW}
       />,
     );

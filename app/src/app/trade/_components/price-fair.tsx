@@ -46,7 +46,7 @@ export function PriceFair({
           yesCents={yesCents}
           fair={value}
           status={fair.status}
-          refreshFailed={fair.refreshFailed}
+          lastSuccessSecs={fair.lastSuccessSecs}
           nowSecs={nowSecs}
         />
       )}

@@ -33,7 +33,7 @@ const config = parsePublicConfig({
   usdcMint: "GKuoE1akZCNnA4ouVdB6P3ngSnanBM28oydPS54fSnT5",
 });
 const APP_CONFIG: AppConfig = { paused: false, overrideDelaySecs: 3600n, admin: "A" };
-const NO_FAIR: FairValues = { status: "unavailable", byMarket: {}, refreshFailed: false };
+const NO_FAIR: FairValues = { status: "unavailable", byMarket: {}, lastSuccessSecs: null };
 const NOW_SECS = 1_900_000_000; // every market below is open (close 2_000_000_000)
 const TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"] as const;
 const strikes = (ticker: string): MarketRow[] =>

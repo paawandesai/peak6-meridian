@@ -32,7 +32,7 @@ export function TickerInsightView({ market, ladder, books, fair, nowSecs }: View
   const fairByAddress = Object.fromEntries(
     Object.entries(fair.byMarket).map(([addr, fv]) => [addr, fv.fair_cents]),
   );
-  const staleness = fairStaleness(fair.byMarket, fair.refreshFailed, nowSecs);
+  const staleness = fairStaleness(fair.byMarket, fair.lastSuccessSecs, nowSecs);
   const points = distributionPoints(ladder, quotes, fairByAddress, staleness);
   const own = quotes[market.address];
   const headingId = `fair-heading-${market.ticker}`;
@@ -46,7 +46,7 @@ export function TickerInsightView({ market, ladder, books, fair, nowSecs }: View
         yesCents={displayedYes(own)}
         fair={marketFair}
         status={fair.status}
-        refreshFailed={fair.refreshFailed}
+        lastSuccessSecs={fair.lastSuccessSecs}
         nowSecs={nowSecs}
       />
       <DistributionChart ticker={market.ticker} points={points} nowSecs={nowSecs} />

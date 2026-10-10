@@ -18,7 +18,7 @@ import {
   type DistributionPoint,
   violations,
 } from "./distribution";
-import { EdgeLabel, StaleTag, staleDetail } from "@/components/fair-value/fair-edge";
+import { EdgeLabel, fairDetail, StaleTag } from "@/components/fair-value/fair-edge";
 import { edgeCents } from "@/lib/fair-values";
 import { formatStrike } from "@/lib/markets";
 
@@ -53,11 +53,16 @@ function FairCell({
   if (point.fairCents === null) return <>—</>;
   if (point.fairStale !== true) return <>{cents(point.fairCents)}</>;
   const asOf = point.fairAsOfSecs ?? null;
+  const reasons = point.fairStaleReasons ?? [];
   return (
     <span className="text-mer-ink-muted">
       {cents(point.fairCents)}
       <StaleTag
-        detail={asOf === null ? "Fair value is the service's last one" : staleDetail(asOf, nowSecs)}
+        detail={
+          asOf === null
+            ? "Fair value is the service's last one"
+            : fairDetail(asOf, reasons, nowSecs)
+        }
       />
     </span>
   );
@@ -158,8 +163,8 @@ export function DistributionChart({
       )}
       {anyStale ? (
         <p className="text-mer-xs text-mer-ink-muted" data-testid="distribution-stale-note">
-          Fair values tagged stale are the last ones the pricing service published; each tag gives
-          its age.
+          Fair values tagged stale are the last ones the pricing service published; each tag says
+          why.
         </p>
       ) : null}
       <div className="overflow-x-auto">

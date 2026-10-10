@@ -91,7 +91,7 @@ export function MarketsView({
       ...(book?.state === "ready" ? { quotes: book.quotes } : {}),
       fair: fairValue,
       fairStatus: fairValues.status,
-      fairRefreshFailed: fairValues.refreshFailed,
+      fairLastSuccessSecs: fairValues.lastSuccessSecs,
     };
   };
 

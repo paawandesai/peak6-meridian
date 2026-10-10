@@ -86,13 +86,18 @@ describe("DistributionChart (M3-03 AC3, AC5)", () => {
     expect(edges[1]).toHaveClass("text-mer-yes");
   });
 
-  it("shows a stale fair value muted with a stale tag giving its age (P0-FV)", () => {
+  it("shows a stale fair value muted with a stale tag giving its spot time and why (P0-FV)", () => {
     render(
       <DistributionChart
         nowSecs={NOW}
         ticker="NVDA"
         points={[
-          { ...pt(170, 71, 70), fairStale: true, fairAsOfSecs: NOW - 45 },
+          {
+            ...pt(170, 71, 70),
+            fairStale: true,
+            fairAsOfSecs: NOW - 45,
+            fairStaleReasons: [{ kind: "no-update", secs: 40 }],
+          },
           { ...pt(180, 56, 58), fairStale: true },
           pt(190, 31, 30),
         ]}
@@ -102,7 +107,9 @@ describe("DistributionChart (M3-03 AC3, AC5)", () => {
     expect(tags).toHaveLength(2);
     expect(tags[0]).toHaveAttribute(
       "title",
-      expect.stringMatching(/^Fair value as of \d\d:\d\d:\d\d ET, 45 s old$/),
+      expect.stringMatching(
+        /^Spot as of \d\d:\d\d:\d\d ET; no update from the pricing service for 40 s$/,
+      ),
     );
     expect(tags[1]).toHaveAttribute("title", "Fair value is the service's last one");
     // The stale value is still printed and its edge still computed, muted.
@@ -111,7 +118,7 @@ describe("DistributionChart (M3-03 AC3, AC5)", () => {
     expect(within(rows[1] as HTMLElement).getByTestId("edge")).toHaveClass("text-mer-ink-muted");
     expect(rows[3]).not.toHaveTextContent("stale");
     expect(screen.getByTestId("distribution-stale-note")).toHaveTextContent(
-      "Fair values tagged stale are the last ones the pricing service published; each tag gives its age.",
+      "Fair values tagged stale are the last ones the pricing service published; each tag says why.",
     );
   });
 

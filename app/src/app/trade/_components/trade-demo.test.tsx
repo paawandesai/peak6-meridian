@@ -229,7 +229,7 @@ describe("fair value, distribution and the vault chip on Trade (P0-7 AC3–AC5)"
         [NVDA.address]: fair({ market: NVDA.address, fair_cents: 62, as_of: asOf }),
         [NVDA_170.address]: fair({ market: NVDA_170.address, fair_cents: 70, as_of: asOf }),
       },
-      refreshFailed: false,
+      lastSuccessSecs: OPEN_NOW - 1,
     },
   };
 
@@ -279,7 +279,9 @@ describe("fair value, distribution and the vault chip on Trade (P0-7 AC3–AC5)"
       expect(rows[0]).toHaveTextContent("70¢stale");
       expect(within(rows[0] as HTMLElement).getByTestId("stale-tag")).toHaveAttribute(
         "title",
-        expect.stringMatching(/^Fair value as of \d\d:\d\d:\d\d ET, 45 s old$/),
+        expect.stringMatching(
+          /^Spot as of \d\d:\d\d:\d\d ET; the pricing service flagged it stale$/,
+        ),
       );
       // This strike's value is fresh: its row has no tag, nor does the price line.
       expect(rows[1]).not.toHaveTextContent("stale");
