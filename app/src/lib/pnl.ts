@@ -113,11 +113,13 @@ export type TradeExtraction = {
  * After settlement, a one-sided redeem pays the winning side 100¢ and the losing side 0¢.
  *
  * `events` must be oldest first. `outcomes` is the settled outcome per market address.
+ * `settledAt` is the unix timestamp of settlement per market (0 if not settled).
  */
 export function tradesFromEvents(
   events: readonly MeridianEvent[],
   wallet: string,
   outcomes: Readonly<Record<string, MarketOutcomeName>> = {},
+  settledAt: Readonly<Record<string, number>> = {},
 ): TradeExtraction {
   const groups: MeridianEvent[][] = [];
   const index = new Map<string, MeridianEvent[]>();
@@ -186,26 +188,40 @@ export function tradesFromEvents(
         }
       } else if (event.kind === "Redeemed" && event.user === wallet) {
         const q = queue(event.market);
+        const outcome = outcomes[event.market] ?? "None";
+        const settled = settledAt[event.market] ?? 0;
+        const isWinnerMode =
+          settled > 0 &&
+          event.blockTime !== null &&
+          event.blockTime >= settled &&
+          q.bid.length === 0;
+
         if (event.yesQty === event.noQty) {
+          // Equal-qty redeem: consume bid queue first (Sell NO or live pair-redeem).
           let rest = event.yesQty;
           for (const chunk of takeFrom(q.bid, event.yesQty)) {
             // Sell NO: the YES bought at p nets out, leaving NO sold at 100 − p.
             add(event.market, "NO", "sell", chunk.qty, cents(PAIR_PRICE_CENTS - chunk.price));
             rest -= chunk.qty;
           }
-          if (rest > 0n) {
+          // Leftover: winner-mode redeem after settlement, or pair-redeem at 50c/50c.
+          if (rest > 0n && isWinnerMode && outcome !== "None") {
+            const yesUnit = outcome === "Yes" ? BASE_UNITS_PER_USDC : 0n;
+            add(event.market, "YES", "sell", rest, yesUnit);
+            add(event.market, "NO", "sell", rest, BASE_UNITS_PER_USDC - yesUnit);
+          } else if (rest > 0n) {
             add(event.market, "YES", "sell", rest, cents(PAIR_PRICE_CENTS / 2));
             add(event.market, "NO", "sell", rest, cents(PAIR_PRICE_CENTS / 2));
           }
-        } else {
-          const outcome = outcomes[event.market] ?? "None";
-          if (outcome === "None") {
-            skipped += 1;
-            continue;
-          }
+        } else if (outcome !== "None" && isWinnerMode) {
+          // Unequal post-settlement winner redeem: book at 100c/0c.
           const yesUnit = outcome === "Yes" ? BASE_UNITS_PER_USDC : 0n;
           add(event.market, "YES", "sell", event.yesQty, yesUnit);
           add(event.market, "NO", "sell", event.noQty, BASE_UNITS_PER_USDC - yesUnit);
+        } else {
+          // Unequal pre-settlement redeem: skip (need outcome).
+          skipped += 1;
+          continue;
         }
       }
     }

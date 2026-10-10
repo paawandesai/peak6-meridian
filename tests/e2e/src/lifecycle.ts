@@ -752,6 +752,7 @@ async function main(): Promise<void> {
       outcome: "yes" in account.outcome ? "Yes" : "No",
       settlePriceScaled: BigInt(account.settlePriceScaled.toString()),
       pairsOutstanding: BigInt(account.pairsOutstanding.toString()),
+      settledAt: BigInt(account.settledAt.toString()),
     };
     for (const trader of traders) {
       const yes = await amount(trader.yes);

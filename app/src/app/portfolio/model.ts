@@ -93,8 +93,12 @@ const SIDES: readonly Side[] = ["YES", "NO"];
 export function buildPortfolio(input: PortfolioInput): PortfolioModel {
   const { snapshot, markets } = input;
   const outcomes: Record<string, MarketOutcomeName> = {};
-  for (const market of markets) outcomes[market.address] = market.outcome;
-  const extraction = tradesFromEvents(snapshot.events, input.wallet, outcomes);
+  const settledAt: Record<string, number> = {};
+  for (const market of markets) {
+    outcomes[market.address] = market.outcome;
+    settledAt[market.address] = Number(market.settledAt);
+  }
+  const extraction = tradesFromEvents(snapshot.events, input.wallet, outcomes, settledAt);
   const positions = ledger(extraction.trades);
 
   const restingAsks = new Map<string, bigint>();
