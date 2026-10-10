@@ -14,15 +14,12 @@ import {
   type RowState,
 } from "./model";
 import { useReader } from "@/components/reader-context";
-import { useTestMarkets } from "@/components/test-market-context";
 import {
   Countdown,
   Pnl,
   SideLabel,
   StateBadge,
   type StateBadgeProps,
-  TestMarketBadge,
-  TestMarketToggle,
   TxStatus,
   type TxStatusProps,
 } from "@/components/ui";
@@ -39,10 +36,8 @@ import { type MarketData, type MarketDataSources, useMarketData } from "@/lib/ma
 import {
   formatStrike,
   formatTradingDate,
-  isSessionMarket,
   type MarketRow,
   marketStatus,
-  partitionMarkets,
   SETTLING_START_SECS,
 } from "@/lib/markets";
 import { tenthsToBase, type YesQuotes } from "@/lib/pnl";
@@ -198,10 +193,7 @@ function PositionsTable({
           {rows.map((row) => (
             <tr key={row.key} className="border-t border-mer-rule align-top">
               <th scope="row" className="py-mer-2 pr-mer-2 text-left font-medium">
-                <div className="flex items-center gap-mer-1">
-                  {marketLabel(row.market)}
-                  {!isSessionMarket(row.market) ? <TestMarketBadge /> : null}
-                </div>
+                {marketLabel(row.market)}
               </th>
               <td className="py-mer-2 pr-mer-2">
                 <SideLabel
@@ -408,7 +400,6 @@ export function PortfolioView(props: PortfolioViewProps) {
   const { connection } = useConnection();
   const { setVisible } = useWalletModal();
   const reader = useReader();
-  const { showTestMarkets, setShowTestMarkets } = useTestMarkets();
   const config = useMemo(() => loadPublicConfig(), []);
   const source = useMemo(
     () => props.source ?? createPortfolioSource(config),
@@ -418,14 +409,7 @@ export function PortfolioView(props: PortfolioViewProps) {
   const [filter, setFilter] = useState<Filter>("open");
   const [tx, setTx] = useState<TxStatusProps | null>(null);
 
-  const marketsAll = useAsync(() => reader.listMarkets(), [reader]);
-  // P0-1 AC3-4: Filter to session markets only (test markets hidden by default)
-  const { testMarketCount, markets } = useMemo(() => {
-    if (marketsAll.status !== "ready") return { testMarketCount: 0, markets: marketsAll };
-    const { session, test } = partitionMarkets(marketsAll.value);
-    const filtered = showTestMarkets ? [...session, ...test] : session;
-    return { testMarketCount: test.length, markets: { ...marketsAll, value: filtered } };
-  }, [marketsAll, showTestMarkets]);
+  const markets = useAsync(() => reader.listMarkets(), [reader]);
   const settings = useAsync(() => reader.getConfig(), [reader]);
   const wallet = publicKey;
   const snapshot = useAsync(
@@ -599,13 +583,6 @@ export function PortfolioView(props: PortfolioViewProps) {
         </div>
         <p className="text-mer-xs text-mer-ink-muted">{MARK_FOOTNOTE}</p>
       </div>
-      {testMarketCount > 0 ? (
-        <TestMarketToggle
-          testMarketCount={testMarketCount}
-          showTestMarkets={showTestMarkets}
-          onToggle={() => setShowTestMarkets(!showTestMarkets)}
-        />
-      ) : null}
 
       {filter === "resting" ? (
         model.resting.length === 0 ? (

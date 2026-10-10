@@ -46,15 +46,12 @@ import { market, reader, withReader } from "@/test-utils";
 configure({ asyncUtilTimeout: 10_000 });
 vi.setConfig({ testTimeout: 60_000 });
 
-/** Unix seconds for a UTC ISO string. */
-const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
-
 const ROW = market({
   address: "MarketAddr1111111111111111111111111111111111",
   ticker: "NVDA",
   tradingDate: 20261008,
   strikeCents: 18_000n,
-  closeTs: BigInt(utc("2026-10-08T20:00:00Z")), // Session close 16:00 ET
+  closeTs: BigInt(Math.floor(Date.now() / 1000) + 7200),
 });
 
 afterEach(() => {

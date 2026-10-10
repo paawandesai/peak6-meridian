@@ -3,6 +3,7 @@
  *
  * Fetches live equity prices from Pyth Pro (Lazer) API with authenticated bearer token.
  * PYTH_API_TOKEN is server-only and never exposed to the client bundle.
+ * 2s server cache plus in-flight dedupe to limit upstream load (P0-4).
  */
 
 import { NextResponse } from "next/server";
@@ -11,6 +12,7 @@ import { Decimal } from "decimal.js";
 
 import { MAG7, type Mag7Ticker } from "@/lib/market-data-shared";
 import { type PythQuotesResponse, type PythQuote } from "@/lib/pyth-quotes";
+import { cache, inFlight, CACHE_TTL_MS } from "./cache";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +132,30 @@ async function fetchPythPrice(
   }
 }
 
+/** Fetches and caches quotes for all tickers. Shares in-flight requests and caches for 2s. */
+async function fetchAllQuotes(tickers: readonly Mag7Ticker[], apiToken: string): Promise<PythQuotesResponse> {
+  // Fetch all tickers in parallel with 10s timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const results = await Promise.all(
+      tickers.map((ticker) => fetchPythPrice(ticker, apiToken, controller.signal)),
+    );
+
+    const quotes = results.filter((q): q is PythQuote => q !== null);
+    const unavailable = tickers.filter((ticker) => !quotes.some((q) => q.ticker === ticker));
+
+    return {
+      quotes,
+      unavailable,
+      server_time: Date.now(),
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export async function GET(request: Request): Promise<NextResponse> {
   const raw = new URL(request.url).searchParams.get("tickers");
   const parsed =
@@ -147,26 +173,38 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Pyth API not configured" }, { status: 503 });
   }
 
-  // Fetch all tickers in parallel with 10s timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  // Key by sorted ticker list to prevent cross-contamination (Markets uses all MAG7, Trade uses subsets)
+  const cacheKey = [...parsed.data].sort().join(",");
+
+  // Check cache first (2s TTL)
+  const now = Date.now();
+  const cached = cache.get(cacheKey);
+  if (cached !== undefined && now - cached.at < CACHE_TTL_MS) {
+    return NextResponse.json(cached.data, { headers: { "Cache-Control": "no-store" } });
+  }
+
+  // Share in-flight requests for the same ticker set
+  let promise = inFlight.get(cacheKey);
+  if (promise === undefined) {
+    promise = fetchAllQuotes(parsed.data, apiToken);
+    inFlight.set(cacheKey, promise);
+    promise
+      .then((data) => {
+        cache.set(cacheKey, { data, at: Date.now() });
+      })
+      .catch(() => {
+        // Failed fetch is not cached
+      })
+      .finally(() => {
+        inFlight.delete(cacheKey);
+      });
+  }
 
   try {
-    const results = await Promise.all(
-      parsed.data.map((ticker) => fetchPythPrice(ticker, apiToken, controller.signal)),
-    );
-
-    const quotes = results.filter((q): q is PythQuote => q !== null);
-    const unavailable = parsed.data.filter((ticker) => !quotes.some((q) => q.ticker === ticker));
-
-    const body: PythQuotesResponse = {
-      quotes,
-      unavailable,
-      server_time: Date.now(),
-    };
-
+    const body = await promise;
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
-  } finally {
-    clearTimeout(timeoutId);
+  } catch (error) {
+    console.error("Failed to fetch Pyth quotes:", error);
+    return NextResponse.json({ error: "Failed to fetch quotes" }, { status: 503 });
   }
 }
