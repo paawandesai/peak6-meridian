@@ -6,6 +6,7 @@
 import { BASE_UNITS_PER_USDC } from "@meridian/client";
 
 import type { PortfolioSnapshot, RestingOrder, TokenSlice } from "./data";
+import { buildMmBlock, type MmBlockModel } from "./mm";
 import type { MarketRow } from "@/lib/markets";
 import {
   ifRightPays,
@@ -41,12 +42,7 @@ export type PositionRow = {
   readonly walletQty: bigint;
 };
 
-export type MmStrike = {
-  readonly market: MarketRow;
-  /** YES-equivalent exposure: YES held less NO held. */
-  readonly net: bigint;
-  readonly resting: number;
-};
+export type { MmStrike } from "./mm";
 
 export type PortfolioModel = {
   readonly rows: readonly PositionRow[];
@@ -57,14 +53,7 @@ export type PortfolioModel = {
     readonly unrealized: bigint;
     readonly realized: bigint;
   };
-  readonly mm: {
-    readonly strikes: readonly MmStrike[];
-    readonly openOrders: number;
-    readonly unsettledUsdc: bigint;
-    readonly unsettledYes: bigint;
-    /** Markets with something to withdraw. */
-    readonly withdrawable: readonly MarketRow[];
-  };
+  readonly mm: MmBlockModel;
   /** Winning wallet tokens to redeem per settled market. */
   readonly redeemable: readonly {
     readonly market: MarketRow;
@@ -179,22 +168,17 @@ export function buildPortfolio(input: PortfolioInput): PortfolioModel {
     const marketRow = byMarket.get(order.market);
     return marketRow === undefined ? [] : [{ ...order, marketRow }];
   });
-  const unsettled = snapshot.openOrders.filter((row) => row.freeUsdc > 0n || row.freeYes > 0n);
-  const strikeMarkets = new Set([
-    ...snapshot.openOrders.filter((row) => row.restingCount > 0).map((row) => row.market),
-    ...unsettled.map((row) => row.market),
-  ]);
-  const strikes: MmStrike[] = [];
-  for (const market of markets) {
-    if (!strikeMarkets.has(market.address)) continue;
-    const yes = rows.find((row) => row.key === positionKey(market.address, "YES"))?.qty ?? 0n;
-    const no = rows.find((row) => row.key === positionKey(market.address, "NO"))?.qty ?? 0n;
-    strikes.push({
-      market,
-      net: yes - no,
-      resting: openOrdersByMarket.get(market.address)?.restingCount ?? 0,
-    });
+  const netByMarket = new Map<string, bigint>();
+  for (const row of rows) {
+    const signed = row.side === "YES" ? row.qty : -row.qty;
+    netByMarket.set(row.market.address, (netByMarket.get(row.market.address) ?? 0n) + signed);
   }
+  const mm = buildMmBlock({
+    markets,
+    openOrders: snapshot.openOrders,
+    resting: snapshot.resting,
+    netByMarket,
+  });
 
   const sum = (values: Iterable<bigint | null>): bigint => {
     let total = 0n;
@@ -210,16 +194,7 @@ export function buildPortfolio(input: PortfolioInput): PortfolioModel {
       unrealized: sum(rows.map((row) => row.unrealized)),
       realized: sum(rows.map((row) => row.realized)),
     },
-    mm: {
-      strikes,
-      openOrders: snapshot.openOrders.reduce((total, row) => total + row.restingCount, 0),
-      unsettledUsdc: sum(unsettled.map((row) => row.freeUsdc)),
-      unsettledYes: sum(unsettled.map((row) => row.freeYes)),
-      withdrawable: unsettled.flatMap((row) => {
-        const market = byMarket.get(row.market);
-        return market === undefined ? [] : [market];
-      }),
-    },
+    mm,
     redeemable,
     incompleteHistory: incomplete,
   };
