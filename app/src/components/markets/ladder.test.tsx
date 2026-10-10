@@ -13,6 +13,16 @@ vi.mock("@solana/wallet-adapter-react", async (importOriginal) => ({
   useWallet: () => wallet,
 }));
 
+const mockFairValues = vi.hoisted(() => ({
+  status: "ready" as const,
+  byMarket: {} as Record<string, unknown>,
+  refreshFailed: false,
+}));
+vi.mock("@/lib/fair-values", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/fair-values")>()),
+  useFairValues: () => mockFairValues,
+}));
+
 const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 const NOW = utc("2026-10-08T19:00:00Z"); // 15:00 ET
 const TODAY = 20261008;
@@ -133,38 +143,39 @@ const rowFor = async (strikeText: string) =>
     row.textContent?.includes(strikeText),
   ) as HTMLElement;
 
-describe("active date scoping (AC1)", () => {
+describe("all open markets shown (updated behavior)", () => {
   const earlier = (n: number) => m(n, { address: addr(n + 5), tradingDate: 20261007 });
 
-  it("shows only today's markets when today has markets, and no 'Showing markets from' line", async () => {
+  it("shows all open markets across all dates, no 'Showing markets from' line", async () => {
     renderView([m(1), earlier(2)]);
-    expect(await screen.findAllByRole("row")).toHaveLength(2); // header + one strike
+    expect(await screen.findAllByRole("row")).toHaveLength(3); // header + two strikes (both dates)
     expect(screen.queryByText(/Showing markets from/)).toBeNull();
   });
 
-  it("with the clock on the earlier date, that date is today: only its markets, no 'Showing' line", async () => {
+  it("with the clock on the earlier date, shows all open markets from both dates", async () => {
     // Two NVDA dates: Oct 7 (3 strikes) and Oct 8 (1 strike); the clock is on Oct 7 (15:00 ET).
     renderView([earlier(1), earlier(2), earlier(3), m(4)], { now: utc("2026-10-07T19:00:00Z") });
     const section = await screen.findByRole("region", { name: "NVDA" });
-    expect(within(section).getAllByRole("row")).toHaveLength(4); // header + the 3 earlier strikes
-    expect(within(section).getByText(/^3 strikes/)).toBeInTheDocument();
+    expect(within(section).getAllByRole("row")).toHaveLength(5); // header + all 4 strikes
+    expect(within(section).getByText(/^4 strikes/)).toBeInTheDocument();
     expect(screen.queryByText(/Showing markets from/)).toBeNull();
   });
 
-  it("with the clock on the later date, each ladder has its own strike count and ONE live marker", async () => {
+  it("with the clock on the later date, shows all open markets from both dates", async () => {
     mockPythQuotes([{ ticker: "NVDA", price_cents: 21_142 }]);
     renderView([earlier(1), earlier(2), m(3), m(4), m(5)]);
     const section = await screen.findByRole("region", { name: "NVDA" });
     await vi.waitFor(() => expect(section).toHaveTextContent("$211.42"));
-    expect(within(section).getByText(/^3 strikes/)).toBeInTheDocument(); // not 5: Oct 7 is excluded
-    expect(section.querySelectorAll('[data-testid="live-marker"]')).toHaveLength(1);
-    expect(within(section).getAllByRole("row")).toHaveLength(4);
+    expect(within(section).getByText(/^5 strikes/)).toBeInTheDocument(); // all 5 strikes shown
+    expect(within(section).getAllByRole("row")).toHaveLength(7); // header + 5 strikes + 1 price marker row
   });
 
-  it("falls back to the most recent date with a 'Showing markets from' line when today has none", async () => {
-    renderView([earlier(1), earlier(2)], { now: utc("2026-10-10T15:00:00Z") }); // Saturday
-    expect(await screen.findByText("Showing markets from 2026-10-07 (closed)")).toBeInTheDocument();
-    expect(screen.getAllByRole("row")).toHaveLength(3);
+  it("shows open markets from any date, even when it's not today", async () => {
+    // Saturday (Oct 10) but markets from Oct 7 are still open (not settled)
+    renderView([earlier(1), earlier(2)], { now: utc("2026-10-10T15:00:00Z") });
+    const section = await screen.findByRole("region", { name: "NVDA" });
+    expect(screen.queryByText(/Showing markets from/)).toBeNull();
+    expect(within(section).getAllByRole("row")).toHaveLength(3); // header + 2 strikes
   });
 
   it("an empty reader result is the only 'No markets today'", async () => {
@@ -268,46 +279,50 @@ describe("displayed price (AC7, AC4)", () => {
   const withBook = async (bid: number | null, ask: number | null) => {
     renderView([m(1)], { sources: sources({ books: { [addr(1)]: q(bid, ask) } }) });
     await vi.waitFor(async () =>
-      expect((await rowFor("$180")).textContent).toMatch(/\d+¢ (YES|NO)/),
+      expect((await rowFor("$180")).textContent).toMatch(/\d+¢/),
     );
     return rowFor("$180");
   };
 
   it("midpoint with a derived NO and a probability when the spread is 10c or less", async () => {
     const row = await withBook(50, 60);
-    expect(row).toHaveTextContent("55¢ YES · 55%");
-    expect(row).toHaveTextContent("45¢ NO");
+    expect(row).toHaveTextContent("55¢");
+    expect(row).toHaveTextContent("45¢");
+    expect(row).toHaveTextContent("55%");
     expect(within(row).getByTestId("bar-fill")).toHaveStyle({ width: "55%" });
-    expect(row).not.toHaveTextContent("wide spread");
+    expect(row).not.toHaveTextContent("wide");
   });
 
   it("a bid and ask range, 'wide spread', the NO range, no probability and an outlined bar at 11c", async () => {
     const row = await withBook(50, 61);
-    expect(row).toHaveTextContent("50–61¢ YES");
-    expect(row).toHaveTextContent("wide spread");
-    expect(row).toHaveTextContent("39–50¢ NO");
-    expect(row.textContent).not.toMatch(/%/);
+    expect(row).toHaveTextContent("50–61¢");
+    expect(row).toHaveTextContent("wide");
+    expect(row).toHaveTextContent("39–50¢");
+    expect(row.textContent).not.toMatch(/\d+%/);
     expect(within(row).queryByTestId("bar-fill")).toBeNull();
     expect(within(row).getByTestId("bar-range")).toBeInTheDocument();
   });
 
   it("a one-sided book is a range with only the derived side", async () => {
     const row = await withBook(40, null);
-    expect(row).toHaveTextContent("40¢ YES");
-    expect(row).toHaveTextContent("60¢ NO");
-    expect(row.textContent).not.toMatch(/%/);
+    expect(row).toHaveTextContent("40¢");
+    expect(row).toHaveTextContent("60¢");
+    expect(row.textContent).not.toMatch(/\d+%/);
   });
 
   it("no live book shows a dash, never a number", async () => {
     renderView([m(1)]);
     const row = await rowFor("$180");
-    expect(row.textContent).not.toMatch(/\d+¢ (YES|NO)/);
+    expect(row.textContent).not.toMatch(/\d+¢/);
     expect(within(row).getAllByText("—").length).toBeGreaterThan(0);
   });
 
-  it("every row says NO is derived", async () => {
+  it("YES and NO labels are in column headers, not individual cells", async () => {
     renderView([m(1)]);
-    expect(await rowFor("$180")).toHaveTextContent("NO is 100 − YES; YES + NO = 100¢");
+    const section = await screen.findByRole("region", { name: "NVDA" });
+    const headers = within(section).getAllByRole("columnheader");
+    expect(headers.some(h => h.textContent === "YES")).toBe(true);
+    expect(headers.some(h => h.textContent === "NO")).toBe(true);
   });
 });
 
@@ -354,7 +369,7 @@ describe("page notes and landing (AC7)", () => {
 });
 
 describe("live price (header line)", () => {
-  it("shows the live Pyth price with freshness indicator and puts one decorative marker between strikes", async () => {
+  it("shows the live Pyth price with freshness indicator and a price marker row between strikes", async () => {
     mockPythQuotes([{ ticker: "NVDA", price_cents: 18_142 }]);
     renderView([m(1), m(2), m(3)]);
     const section = await screen.findByRole("region", { name: "NVDA" });
@@ -362,10 +377,11 @@ describe("live price (header line)", () => {
     // Check for Pyth badge and freshness (M3-10)
     expect(section).toHaveTextContent(/\ds ago/); // e.g., "2s ago"
     expect(section).toHaveTextContent("Pyth");
-    const markers = section.querySelectorAll('[data-testid="live-marker"]');
-    expect(markers).toHaveLength(1); // strikes 180 (n=1), 190 (n=2): $181.42 sits below the 190 strike
-    expect(markers[0]?.getAttribute("aria-hidden")).toBe("true");
-    expect(within(section).getAllByRole("row")).toHaveLength(4); // header + 3, the marker is not a row
+    // Price marker is now a row, not an inline marker element
+    const rows = within(section).getAllByRole("row");
+    expect(rows).toHaveLength(5); // header + 3 strikes + 1 price marker row
+    // Check for price marker row with Pyth label
+    expect(section.textContent).toMatch(/Pyth.*\$181\.42/);
   });
 
   it("shows loading placeholder when Pyth price is not yet available", async () => {
@@ -374,5 +390,61 @@ describe("live price (header line)", () => {
     const section = await screen.findByRole("region", { name: "NVDA" });
     await vi.waitFor(() => expect(section).toHaveTextContent("Pyth price loading"));
     expect(within(section).getByRole("heading", { level: 2 })).toHaveTextContent(/^NVDA$/);
+  });
+});
+
+describe("fair value and edge (M3-03: AC per-strike)", () => {
+  it("mounts FairEdge on each strike row with that market's fair value", async () => {
+    // Three strikes with distinct fair values
+    const markets = [m(1), m(2), m(3)];
+    mockFairValues.byMarket = {
+      [addr(1)]: {
+        market: addr(1),
+        fair_cents: 50,
+        ticker: "NVDA",
+        strike_cents: 18000,
+        sigma: 0.3,
+        spot: 18142,
+        as_of: new Date(NOW * 1000).toISOString(),
+        stale: false,
+      },
+      [addr(2)]: {
+        market: addr(2),
+        fair_cents: 45,
+        ticker: "NVDA",
+        strike_cents: 19000,
+        sigma: 0.3,
+        spot: 18142,
+        as_of: new Date(NOW * 1000).toISOString(),
+        stale: false,
+      },
+      [addr(3)]: {
+        market: addr(3),
+        fair_cents: 40,
+        ticker: "NVDA",
+        strike_cents: 20000,
+        sigma: 0.3,
+        spot: 18142,
+        as_of: new Date(NOW * 1000).toISOString(),
+        stale: false,
+      },
+    };
+    renderView(markets, {
+      sources: sources({
+        books: {
+          [addr(1)]: q(50, 52), // $180 strike: 51¢ mid
+          [addr(2)]: q(45, 47), // $190 strike: 46¢ mid
+          [addr(3)]: q(40, 42), // $200 strike: 41¢ mid
+        },
+      }),
+    });
+
+    const section = await screen.findByRole("region", { name: "NVDA" });
+    // Header + 3 strikes = 4 rows
+    expect(within(section).getAllByRole("row")).toHaveLength(4);
+
+    // Each strike row should have a FairEdge (data-testid="fair-edge")
+    const fairEdges = within(section).getAllByTestId("fair-edge");
+    expect(fairEdges).toHaveLength(3);
   });
 });

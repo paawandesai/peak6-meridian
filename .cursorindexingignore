@@ -1,0 +1,4 @@
+# Indexed out but still readable on demand
+pnpm-lock.yaml
+Cargo.lock
+uv.lock

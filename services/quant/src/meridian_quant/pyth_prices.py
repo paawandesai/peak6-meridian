@@ -12,7 +12,6 @@ Security (AC3, AB-17):
 - All responses validated with pydantic; any failure raises PriceError
 """
 
-import json
 from datetime import UTC, datetime
 from decimal import Decimal
 

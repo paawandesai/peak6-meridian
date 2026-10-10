@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
+
 from meridian_quant.prices import PriceError, fetch_daily_closes, fetch_spot
 
 

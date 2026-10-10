@@ -15,10 +15,13 @@ const LAST_CLOSE_AFTER_SECS = 15 * 60;
 export function PythPrice({
   quote,
   nowMs,
+  showLabel,
 }: {
   readonly quote: PythQuote;
   /** Current time in milliseconds. */
   readonly nowMs: number;
+  /** Show "Pyth" label prefix (for inline displays). */
+  readonly showLabel?: boolean;
 }) {
   const priceCents = BigInt(quote.price_cents);
   const confCents = BigInt(quote.conf_cents);
@@ -32,6 +35,9 @@ export function PythPrice({
 
   return (
     <span className="flex flex-wrap items-baseline gap-x-mer-2">
+      {showLabel ? (
+        <span className="font-medium">Pyth</span>
+      ) : null}
       <span className="mer-num text-mer-md font-medium">
         {formatUsdCents(priceCents)}
         {confCents > 0n ? (
@@ -45,9 +51,11 @@ export function PythPrice({
         {stale && !lastClose ? "stale · " : ""}
         {age}
       </span>
-      <span className="rounded-mer bg-mer-pyth px-mer-2 py-1 text-mer-xs font-medium text-white">
-        Pyth
-      </span>
+      {!showLabel ? (
+        <span className="rounded-mer bg-mer-pyth px-mer-2 py-1 text-mer-xs font-medium text-white">
+          Pyth
+        </span>
+      ) : null}
     </span>
   );
 }

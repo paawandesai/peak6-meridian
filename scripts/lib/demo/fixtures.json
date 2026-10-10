@@ -1,0 +1,21 @@
+{
+  "reports": [
+    {
+      "name": "tiingo",
+      "close": {
+        "name": "tiingo",
+        "close_cents": 68000,
+        "as_of": "2026-10-09T20:05:00Z"
+      }
+    },
+    {
+      "name": "twelvedata",
+      "close": {
+        "name": "twelvedata",
+        "close_cents": 68000,
+        "as_of": "2026-10-09T20:05:00Z"
+      }
+    }
+  ],
+  "settlement_log": "Settlement attempted at 16:05 ET, failed confidence check (2% spread)"
+}

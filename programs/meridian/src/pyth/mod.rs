@@ -124,10 +124,7 @@ pub fn parse_pyth_lazer_message(data: &[u8]) -> Result<(Pubkey, PythReading)> {
     let payload_end = payload_start
         .checked_add(payload_len)
         .ok_or(MeridianError::MathOverflow)?;
-    require!(
-        data.len() >= payload_end,
-        MeridianError::OracleInvalidValue
-    );
+    require!(data.len() >= payload_end, MeridianError::OracleInvalidValue);
 
     let payload = data
         .get(payload_start..payload_end)
@@ -186,7 +183,7 @@ pub fn parse_pyth_lazer_message(data: &[u8]) -> Result<(Pubkey, PythReading)> {
             0 => {
                 // Price property (Option<i64>)
                 require!(
-                    payload.len() >= property_offset + 9,
+                    payload.len() >= property_offset.saturating_add(9),
                     MeridianError::OracleInvalidValue
                 );
                 let has_value = *payload
@@ -206,7 +203,7 @@ pub fn parse_pyth_lazer_message(data: &[u8]) -> Result<(Pubkey, PythReading)> {
             4 => {
                 // Exponent property (i16)
                 require!(
-                    payload.len() >= property_offset + 2,
+                    payload.len() >= property_offset.saturating_add(2),
                     MeridianError::OracleInvalidValue
                 );
                 exponent = Some(i16::from_le_bytes(read_array(payload, property_offset)?));
@@ -217,7 +214,7 @@ pub fn parse_pyth_lazer_message(data: &[u8]) -> Result<(Pubkey, PythReading)> {
             5 => {
                 // Confidence property (Option<i64>)
                 require!(
-                    payload.len() >= property_offset + 9,
+                    payload.len() >= property_offset.saturating_add(9),
                     MeridianError::OracleInvalidValue
                 );
                 let has_value = *payload
@@ -297,10 +294,7 @@ pub fn check_pyth_reading(
     );
 
     // Check 2: Value must be strictly positive
-    require!(
-        reading.value_scaled > 0,
-        MeridianError::OracleInvalidValue
-    );
+    require!(reading.value_scaled > 0, MeridianError::OracleInvalidValue);
 
     // Check 3: Timestamp must be at or after close_ts (convert to seconds for comparison)
     let timestamp_seconds = reading
@@ -326,10 +320,7 @@ pub fn check_pyth_reading(
     require!(age <= max_staleness_seconds, MeridianError::OracleStale);
 
     // Reject zero timestamp (like oracle::check_reading rejects slot == 0)
-    require!(
-        reading.timestamp_us > 0,
-        MeridianError::OracleInvalidValue
-    );
+    require!(reading.timestamp_us > 0, MeridianError::OracleInvalidValue);
 
     Ok(CloseReading {
         value_scaled: reading.value_scaled,
@@ -364,14 +355,12 @@ pub fn read_pyth_lazer_close(
     max_staleness_seconds: i64,
 ) -> Result<CloseReading> {
     // Load the Ed25519Program instruction at the specified index
-    let ed25519_ix =
-        load_instruction_at_checked(ed25519_ix_index as usize, instructions_sysvar)?;
+    let ed25519_ix = load_instruction_at_checked(ed25519_ix_index as usize, instructions_sysvar)?;
 
     // Check 1: Ed25519 instruction must have already executed (prevent sysvar bypass)
     // Require ed25519_ix_index < current_index to ensure the signature was verified
     // before this instruction runs. An attacker cannot supply a later unverified ix.
-    let current_index = u16::try_from(load_current_index_checked(instructions_sysvar)?)
-        .map_err(|_| MeridianError::OracleInvalidValue)?;
+    let current_index = load_current_index_checked(instructions_sysvar)?;
     require!(
         ed25519_ix_index < current_index,
         MeridianError::OracleInvalidValue
@@ -400,7 +389,7 @@ pub fn read_pyth_lazer_close(
     require!(ix_data.len() >= 14, MeridianError::OracleInvalidValue);
 
     // Parse Ed25519 instruction header
-    let num_signatures = *ix_data.get(0).ok_or(MeridianError::OracleInvalidValue)?;
+    let num_signatures = *ix_data.first().ok_or(MeridianError::OracleInvalidValue)?;
     require!(num_signatures == 1, MeridianError::OracleInvalidValue);
 
     let _signature_offset = u16::from_le_bytes(read_array(ix_data, 2)?) as usize;
@@ -434,7 +423,8 @@ pub fn read_pyth_lazer_close(
     let pubkey_bytes = ix_data
         .get(public_key_offset..pubkey_end)
         .ok_or(MeridianError::OracleInvalidValue)?;
-    let signer_pubkey = Pubkey::try_from(pubkey_bytes).map_err(|_| MeridianError::OracleInvalidValue)?;
+    let signer_pubkey =
+        Pubkey::try_from(pubkey_bytes).map_err(|_| MeridianError::OracleInvalidValue)?;
 
     require_keys_eq!(
         signer_pubkey,
@@ -469,10 +459,7 @@ pub fn read_pyth_lazer_close(
 /// This is the payload portion that was signed (without SolanaMessage envelope).
 fn parse_pyth_lazer_payload(payload: &[u8]) -> Result<(Pubkey, PythReading)> {
     // Minimum: 4 (magic) + 8 (timestamp) + 1 (channel) + 1 (num_feeds) + 5 (feed header)
-    require!(
-        payload.len() >= 19,
-        MeridianError::OracleInvalidValue
-    );
+    require!(payload.len() >= 19, MeridianError::OracleInvalidValue);
 
     let payload_magic = u32::from_le_bytes(read_array(payload, 0)?);
     require!(
@@ -514,7 +501,7 @@ fn parse_pyth_lazer_payload(payload: &[u8]) -> Result<(Pubkey, PythReading)> {
             0 => {
                 // Price
                 require!(
-                    payload.len() >= property_offset + 9,
+                    payload.len() >= property_offset.saturating_add(9),
                     MeridianError::OracleInvalidValue
                 );
                 let has_value = *payload
@@ -540,7 +527,7 @@ fn parse_pyth_lazer_payload(payload: &[u8]) -> Result<(Pubkey, PythReading)> {
             5 => {
                 // Confidence
                 require!(
-                    payload.len() >= property_offset + 9,
+                    payload.len() >= property_offset.saturating_add(9),
                     MeridianError::OracleInvalidValue
                 );
                 let has_value = *payload
@@ -630,13 +617,8 @@ mod tests {
         };
 
         // Correct feed ID passes
-        let result = check_pyth_reading(
-            &reading,
-            922,
-            &clock(100, 1_791_316_812),
-            1_791_316_800,
-            30,
-        );
+        let result =
+            check_pyth_reading(&reading, 922, &clock(100, 1_791_316_812), 1_791_316_800, 30);
         assert!(result.is_ok());
 
         // Wrong feed ID fails
@@ -660,13 +642,7 @@ mod tests {
             exponent: -2,
         };
 
-        let result = check_pyth_reading(
-            &reading,
-            922,
-            &clock(100, 1_791_316_812),
-            0,
-            30,
-        );
+        let result = check_pyth_reading(&reading, 922, &clock(100, 1_791_316_812), 0, 30);
         assert!(result.is_err());
     }
 
@@ -718,13 +694,8 @@ mod tests {
             exponent: -2,
         };
 
-        let result = check_pyth_reading(
-            &reading,
-            922,
-            &clock(100, 1_791_316_812),
-            1_791_316_800,
-            30,
-        );
+        let result =
+            check_pyth_reading(&reading, 922, &clock(100, 1_791_316_812), 1_791_316_800, 30);
         assert!(result.is_err());
     }
 
@@ -739,13 +710,8 @@ mod tests {
         };
 
         // Current time is 1_791_316_800, price is from future
-        let result = check_pyth_reading(
-            &reading,
-            922,
-            &clock(100, 1_791_316_800),
-            1_791_316_800,
-            30,
-        );
+        let result =
+            check_pyth_reading(&reading, 922, &clock(100, 1_791_316_800), 1_791_316_800, 30);
         assert!(result.is_err());
     }
 
@@ -761,7 +727,7 @@ mod tests {
     #[test]
     fn parse_pyth_lazer_payload_rejects_missing_price() {
         // Payload with only Exponent property, missing Price (property 0)
-        let mut payload = vec![0u8; 100];
+        let mut payload = [0u8; 100];
         payload[0..4].copy_from_slice(&PAYLOAD_FORMAT_MAGIC.to_le_bytes());
         payload[4..12].copy_from_slice(&1_791_316_800_000_000i64.to_le_bytes());
         payload[12] = 1; // channel_id
@@ -778,7 +744,7 @@ mod tests {
     #[test]
     fn parse_pyth_lazer_payload_rejects_missing_exponent() {
         // Payload with only Price property, missing Exponent (property 4)
-        let mut payload = vec![0u8; 100];
+        let mut payload = [0u8; 100];
         payload[0..4].copy_from_slice(&PAYLOAD_FORMAT_MAGIC.to_le_bytes());
         payload[4..12].copy_from_slice(&1_791_316_800_000_000i64.to_le_bytes());
         payload[12] = 1; // channel_id
@@ -795,7 +761,7 @@ mod tests {
 
     #[test]
     fn parse_pyth_lazer_payload_rejects_unknown_property() {
-        let mut payload = vec![0u8; 100];
+        let mut payload = [0u8; 100];
         payload[0..4].copy_from_slice(&PAYLOAD_FORMAT_MAGIC.to_le_bytes());
         payload[4..12].copy_from_slice(&1_791_316_800_000_000i64.to_le_bytes());
         payload[12] = 1; // channel_id

@@ -50,7 +50,14 @@ describe("server env names in client code", () => {
 
   it("collects the documented server variables and excludes NEXT_PUBLIC_*", () => {
     expect(names).toEqual(
-      expect.arrayContaining(["FAUCET_KEYPAIR", "TIINGO_API_KEY", "USDC_MINT"]),
+      expect.arrayContaining([
+        "FAUCET_KEYPAIR",
+        "TIINGO_API_KEY",
+        "USDC_MINT",
+        "SERVICE_TOKEN",
+        "QUANT_URL",
+        "PYTH_API_TOKEN",
+      ]),
     );
     expect(names.some((name) => name.startsWith("NEXT_PUBLIC_"))).toBe(false);
   });
