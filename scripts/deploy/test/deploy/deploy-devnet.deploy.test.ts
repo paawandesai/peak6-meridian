@@ -676,7 +676,7 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
       }
       const settle = (tiingo: PublicKey, twelve: PublicKey) =>
         program.methods
-          .settleMarket()
+          .settleMarket(null)
           .accountsStrict({
             config: findConfigPda(programId).address,
             market: addresses.market,
@@ -684,6 +684,7 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
             feedTwelveData: twelve,
             redstonePrice: null,
             oracleConfig: null,
+            instructionsSysvar: null,
             payer: admin.keypair.publicKey,
           })
           .rpc({ commitment: "confirmed" });
