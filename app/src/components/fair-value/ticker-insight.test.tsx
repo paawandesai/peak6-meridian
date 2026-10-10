@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { TickerInsight, TickerInsightView } from "./ticker-insight";
+import { TickerInsightView } from "./ticker-insight";
 import { fair, ladder, NOW, ready } from "./test-support";
 
-vi.mock("../../price-history-chart/price-history-chart", () => ({
+vi.mock("@/components/price-history-chart/price-history-chart", () => ({
   PriceHistoryChart: () => null,
 }));
 
@@ -51,7 +51,7 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
   });
 
   it("returns null when the service has no fair value (probability shown in dedicated column)", () => {
-    const { container } = render(
+    render(
       <TickerInsightView
         market={a180 as never}
         ladder={ladder()}
