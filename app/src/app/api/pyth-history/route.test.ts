@@ -7,15 +7,15 @@ describe("GET /api/pyth-history", () => {
     vi.restoreAllMocks();
   });
 
-  it("returns 503 when PYTH_API_TOKEN is not configured", async () => {
+  it("returns 200 {s:no_data} when PYTH_API_TOKEN is not configured", async () => {
     vi.stubEnv("PYTH_API_TOKEN", "");
     const request = new Request(
       "http://localhost/api/pyth-history?symbol=Equity.US.AAPL/USD&resolution=5&from=1000000&to=2000000",
     );
     const response = await GET(request as never);
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(200);
     const data = await response.json();
-    expect(data).toEqual({ error: "PYTH_API_TOKEN not configured" });
+    expect(data).toEqual({ s: "no_data" });
   });
 
   it("returns 400 for invalid symbol", async () => {
@@ -82,7 +82,7 @@ describe("GET /api/pyth-history", () => {
     expect(data).toEqual({ s: "no_data" });
   });
 
-  it("returns 502 on upstream error", async () => {
+  it("returns 200 {s:no_data} on upstream error", async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
@@ -92,7 +92,9 @@ describe("GET /api/pyth-history", () => {
       "http://localhost/api/pyth-history?symbol=Equity.US.TSLA/USD&resolution=1&from=1000000&to=2000000",
     );
     const response = await GET(request as never);
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data).toEqual({ s: "no_data" });
   });
 
   it("never includes PYTH_API_TOKEN in response", async () => {
@@ -108,5 +110,57 @@ describe("GET /api/pyth-history", () => {
     const response = await GET(request as never);
     const text = await response.text();
     expect(text).not.toContain("test-token");
+  });
+
+  it("caches responses for 60s per ticker + bucket", async () => {
+    const mockData = { s: "ok" as const, t: [1000000], c: [100.0] };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockData,
+    });
+    global.fetch = fetchMock;
+
+    // First request
+    const request1 = new Request(
+      "http://localhost/api/pyth-history?symbol=Equity.US.NVDA/USD&resolution=60&from=1000000&to=1500000",
+    );
+    const response1 = await GET(request1 as never);
+    expect(response1.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Second request (same bucket, should use cache)
+    const request2 = new Request(
+      "http://localhost/api/pyth-history?symbol=Equity.US.NVDA/USD&resolution=60&from=1000000&to=1500000",
+    );
+    const response2 = await GET(request2 as never);
+    expect(response2.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // Still 1, used cache
+
+    const data1 = await response1.json();
+    const data2 = await response2.json();
+    expect(data1).toEqual(data2);
+  });
+
+  it("uses 5-minute buckets for cache keys", async () => {
+    const mockData = { s: "ok" as const, t: [1000000], c: [100.0] };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => mockData,
+    });
+    global.fetch = fetchMock;
+
+    // Requests with different 'to' but same 5-min bucket should share cache
+    const request1 = new Request(
+      "http://localhost/api/pyth-history?symbol=Equity.US.AAPL/USD&resolution=60&from=1000000&to=1500000",
+    );
+    await GET(request1 as never);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Same bucket (1500000 rounds to 1499700)
+    const request2 = new Request(
+      "http://localhost/api/pyth-history?symbol=Equity.US.AAPL/USD&resolution=60&from=1000000&to=1500299",
+    );
+    await GET(request2 as never);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // Used cache
   });
 });

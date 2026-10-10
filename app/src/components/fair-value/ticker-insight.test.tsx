@@ -92,7 +92,9 @@ describe("TickerInsight (reads the proxy)", () => {
         fair={{
           status: "ready",
           refreshFailed: false,
-          byMarket: { [a180?.address ?? ""]: fair({ market: a180?.address ?? "", fair_cents: 52 }) },
+          byMarket: {
+            [a180?.address ?? ""]: fair({ market: a180?.address ?? "", fair_cents: 52 }),
+          },
         }}
         nowSecs={NOW}
       />,

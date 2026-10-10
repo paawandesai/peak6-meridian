@@ -116,8 +116,7 @@ describe("demo-wallet StandardWalletAdapter compatibility", () => {
 
     // Verify both sign features have the required properties
     const signTx = wallet.features["solana:signTransaction"] as
-      | { version: string; supportedTransactionVersions: readonly (string | number)[] }
-      | undefined;
+      { version: string; supportedTransactionVersions: readonly (string | number)[] } | undefined;
     expect(signTx).toBeDefined();
     expect(signTx?.version).toBe("1.0.0");
     expect(signTx?.supportedTransactionVersions).toBeDefined();
@@ -127,8 +126,7 @@ describe("demo-wallet StandardWalletAdapter compatibility", () => {
     expect(signTx?.supportedTransactionVersions).toContain(0);
 
     const signAndSendTx = wallet.features["solana:signAndSendTransaction"] as
-      | { version: string; supportedTransactionVersions: readonly (string | number)[] }
-      | undefined;
+      { version: string; supportedTransactionVersions: readonly (string | number)[] } | undefined;
     expect(signAndSendTx).toBeDefined();
     expect(signAndSendTx?.version).toBe("1.0.0");
     expect(signAndSendTx?.supportedTransactionVersions).toBeDefined();

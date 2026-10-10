@@ -129,7 +129,7 @@ export function createTradeReader(config: PublicConfig, row: MarketRow): TradeRe
 
       // Parse token accounts (accounts 0-2). SPL token layout: amount at offset 64 (u64 LE).
       // Throw on decode failures so Trade's fail-closed logic (holdings = null) triggers.
-      const parseTokenBalance = (accountInfo: typeof accounts[0]): bigint => {
+      const parseTokenBalance = (accountInfo: (typeof accounts)[0]): bigint => {
         if (!accountInfo) return 0n;
         const data = accountInfo.data;
         if (data.length < 72) {

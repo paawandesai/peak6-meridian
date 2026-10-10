@@ -35,9 +35,7 @@ export function PythPrice({
 
   return (
     <span className="flex flex-wrap items-baseline gap-x-mer-2">
-      {showLabel ? (
-        <span className="font-medium">Pyth</span>
-      ) : null}
+      {showLabel ? <span className="font-medium">Pyth</span> : null}
       <span className="mer-num text-mer-md font-medium">
         {formatUsdCents(priceCents)}
         {confCents > 0n ? (
