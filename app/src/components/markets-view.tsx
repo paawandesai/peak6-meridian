@@ -1,6 +1,9 @@
 "use client";
 
-import { Landing, PageNotes } from "./markets/notes";
+import { PageNotes } from "./markets/notes";
+import { LandingHeader } from "./markets/landing-header";
+import { TickerTabs } from "./markets/ticker-tabs";
+import { MarketsEmpty, MarketsLoading } from "./markets/markets-states";
 import { useMarketSources } from "./markets/data-context";
 import { TickerLadder } from "./markets/ticker-ladder";
 import type { StrikeData } from "./markets/strike-row";
@@ -14,6 +17,7 @@ import { groupByTicker, marketStatus, partitionMarkets, type MarketRow } from "@
 import { tradeHref } from "@/app/trade/_lib/href";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
 import { useFairValues } from "@/lib/fair-values";
+import { useTickerSelection } from "@/hooks/use-ticker-selection";
 
 /** Inert sources for pages without a data provider: nothing is live, so rows show "—". */
 const NO_SOURCES: MarketDataSources = {
@@ -59,11 +63,20 @@ export function MarketsView({
   const pythQuotes = usePythQuotes();
   // M3-03: Fair values for edge calculation and distribution chart
   const fairValues = useFairValues();
+  // P0-3 MR A: Ticker selection with ?t= deep link
+  const [selectedTicker] = useTickerSelection();
 
   if (state.status === "loading" || clock === null) {
-    return <p role="status">Loading markets…</p>;
+    return (
+      <div className="space-y-mer-6">
+        <LandingHeader />
+        <MarketsLoading />
+      </div>
+    );
   }
-  if (state.status === "error") return <p role="alert">Could not load markets: {state.message}</p>;
+  if (state.status === "error") {
+    return <p role="alert">Could not load markets: {state.message}</p>;
+  }
 
   // After the early returns above, clock is guaranteed to be a number.
   const now = clock;
@@ -124,9 +137,19 @@ export function MarketsView({
   // AC3: Mount toggle before empty-state check so test markets can be revealed
   const hasNoMarkets = session.length === 0 && (!showTestMarkets || test.length === 0);
 
+  // P0-3 MR A: Filter by selected ticker
+  const tickerGroups = groupByTicker(allMarkets);
+  const filteredMarkets =
+    selectedTicker === "All"
+      ? allMarkets
+      : allMarkets.filter((m) => m.ticker === selectedTicker);
+  const filteredSession = filteredMarkets.filter((m) => session.includes(m));
+  const filteredTest = filteredMarkets.filter((m) => test.includes(m));
+
   return (
     <div className="space-y-mer-6">
-      <Landing />
+      <LandingHeader />
+      <TickerTabs tickerGroups={tickerGroups} />
       <PageNotes showSettleNote={needsSettleNote} />
       {test.length > 0 ? (
         <TestMarketToggle
@@ -136,14 +159,14 @@ export function MarketsView({
         />
       ) : null}
       {hasNoMarkets ? (
-        <p>No markets today. Markets are created each trading day.</p>
+        <MarketsEmpty />
       ) : (
         <>
-          {session.length > 0 ? renderLadders(session) : null}
-          {showTestMarkets && test.length > 0 ? (
+          {filteredSession.length > 0 ? renderLadders(filteredSession) : null}
+          {showTestMarkets && filteredTest.length > 0 ? (
             <div className="space-y-mer-4">
               <h3 className="text-mer-lg font-semibold">Test Markets</h3>
-              {renderLadders(test)}
+              {renderLadders(filteredTest)}
             </div>
           ) : null}
         </>

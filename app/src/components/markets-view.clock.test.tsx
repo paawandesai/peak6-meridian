@@ -7,6 +7,15 @@ vi.mock("@solana/wallet-adapter-react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@solana/wallet-adapter-react")>()),
   useWallet: () => ({ publicKey: null }),
 }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/",
+}));
 
 import { MarketsView } from "./markets-view";
 import { TestMarketProvider } from "./test-market-context";
