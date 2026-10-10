@@ -33,11 +33,15 @@ type DemoWalletFeatures = {
     on(event: string, listener: (props: { accounts?: WalletAccount[] }) => void): () => void;
   };
   "solana:signTransaction": {
+    version: string;
+    supportedTransactionVersions: readonly (string | number)[];
     signTransaction(
       ...inputs: { transaction: Uint8Array; account?: WalletAccount; chain?: string }[]
     ): Promise<{ signedTransaction: Uint8Array }[]>;
   };
   "solana:signAndSendTransaction": {
+    version: string;
+    supportedTransactionVersions: readonly (string | number)[];
     signAndSendTransaction(
       ...inputs: { transaction: Uint8Array; account?: WalletAccount; chain?: string }[]
     ): Promise<{ signature: Uint8Array }[]>;
@@ -52,6 +56,7 @@ type DemoWalletFeatures = {
 export class DemoWallet implements Wallet {
   readonly #keypair: Keypair;
   readonly #listeners = new Set<(props: { accounts?: WalletAccount[] }) => void>();
+  #accounts: WalletAccount[] = [];
   #connection: Connection | null = null;
   #signatureCount = 0;
   #hasFunded = false;
@@ -65,9 +70,10 @@ export class DemoWallet implements Wallet {
   readonly icon =
     "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSIjZmY2NjAwIi8+PC9zdmc+" as const;
   readonly chains = [DEVNET_CHAIN] as const;
-  // FIX: accounts must be a public enumerable property, not a getter over a private field.
-  // The Wallet Standard adapter reads wallet.accounts.length at construction.
-  accounts: WalletAccount[] = [];
+
+  get accounts(): readonly WalletAccount[] {
+    return this.#accounts;
+  }
 
   readonly features: DemoWalletFeatures = {
     "standard:connect": {
@@ -82,16 +88,16 @@ export class DemoWallet implements Wallet {
             "solana:signMessage",
           ],
         };
-        this.accounts = [account];
-        this.#listeners.forEach((l) => l({ accounts: this.accounts }));
+        this.#accounts = [account];
+        this.#listeners.forEach((l) => l({ accounts: this.#accounts }));
         await this.#autoFund();
-        return { accounts: [...this.accounts] };
+        return { accounts: [...this.#accounts] };
       },
     },
     "standard:disconnect": {
       disconnect: async () => {
-        this.accounts = [];
-        this.#listeners.forEach((l) => l({ accounts: this.accounts }));
+        this.#accounts = [];
+        this.#listeners.forEach((l) => l({ accounts: this.#accounts }));
       },
     },
     "standard:events": {
@@ -101,6 +107,8 @@ export class DemoWallet implements Wallet {
       },
     },
     "solana:signTransaction": {
+      version: "1.0.0",
+      supportedTransactionVersions: ["legacy", 0],
       signTransaction: async (...inputs) => {
         this.#signatureCount += inputs.length;
         return inputs.map(({ transaction }) => {
@@ -111,6 +119,8 @@ export class DemoWallet implements Wallet {
       },
     },
     "solana:signAndSendTransaction": {
+      version: "1.0.0",
+      supportedTransactionVersions: ["legacy", 0],
       signAndSendTransaction: async (...inputs) => {
         this.#signatureCount += inputs.length;
         const connection = this.#getConnection();
