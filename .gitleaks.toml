@@ -48,6 +48,7 @@ commits = [
   "5413bf8b39e129eb68a4ced830fc77f2af4b3dc9", # MR !78: public RedStone signer address map (keyrock-1 line) in oracle-config.ts, pre-allowlist form
   "22417ce499c7c845800c936890b7582041709e6d", # MR !85 (demo replay): fake Tiingo apiKey fixture in tiingo.test.ts, branch-only
   "4c5449883a823725df74da14943e4c88d6862dd7", # MR !86 (Pyth): fake sensitiveToken fixture in client.test.ts, branch-only
+  "3fee17916c7ea253f85af407b4f820363cfd92b3", # MR !86 (Pyth): 'sk-pyth-secret-12345' in client.test.ts (rebased, superseded)
 ]
 
 [[allowlists]]
