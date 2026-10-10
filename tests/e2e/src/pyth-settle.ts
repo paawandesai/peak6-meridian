@@ -91,7 +91,8 @@ const say = (line: string): void => console.log(`[pyth-e2e] ${line}`);
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const feedIds = (): number[] => TICKERS.map((t) => PYTH_FEED_IDS[t] ?? 0);
 const errorCode = (name: string): number => {
-  const found = program.idl.errors.find((e) => e.name === name);
+  // Anchor's TS IDL camel-cases error names (PythWrongSigner -> pythWrongSigner).
+  const found = program.idl.errors.find((e) => e.name.toLowerCase() === name.toLowerCase());
   if (found === undefined) {
     throw new Error(`no error ${name} in the IDL`);
   }
