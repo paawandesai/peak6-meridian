@@ -15,7 +15,6 @@ import { sharedConnection } from "@/lib/rpc";
 
 import type { BookOrder, FullBook } from "./book-view";
 import type { PublicConfig } from "@/lib/config";
-import { fetchUsdcBalance } from "@/lib/chain";
 import type { MarketRow } from "@/lib/markets";
 
 export type WalletView = {
