@@ -445,6 +445,30 @@ test:js-py:
       fi
     - make test-js-py-unit test-js-py-security
 
+# MM AC1 validator test (M3-02): runs on heavy runner with Solana toolchain.
+# Needs prebuilt meridian.so from build job. Skipped on light runner (no solana CLI).
+test:validator:
+  stage: test
+  extends: .light-on-app-change
+  needs:
+    - job: build
+      artifacts: true
+  resource_group: meridian-heavy
+  timeout: 30 minutes
+  tags:
+    - heavy
+  variables:
+    TOOLCHAIN: apt rust solana anchor node uv
+    CACHE_GROUP: sbf
+  cache:
+    - *cache-toolchain
+    - *cache-cargo
+    - *cache-pnpm
+    - *cache-uv
+  script:
+    - make install
+    - uv run pytest services/quant/tests/mm/test_local_validator.py -v
+
 # Coverage gate: automatic on main, manual (non-blocking) on MRs that change code (.e2e-paths:
 # Rust, app, packages, services, tests). meridian-book has no dependencies, so its own small
 # cargo cache stays separate from `sbf`.
