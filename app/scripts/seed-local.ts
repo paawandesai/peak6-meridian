@@ -25,6 +25,7 @@ import {
   MERIDIAN_PROGRAM_ID,
   marketAddresses,
   parseUsdc,
+  PYTH_DISABLED,
   dollarsToStrikeCents,
   symbolBytes,
   type TickerInput,
@@ -96,6 +97,7 @@ async function main(): Promise<void> {
       maxStalenessSlots: DEFAULT_MAX_STALENESS_SLOTS,
       maxConfBps: DEFAULT_MAX_CONF_BPS,
       overrideDelaySecs: DEFAULT_OVERRIDE_DELAY_SECS,
+      pyth: PYTH_DISABLED,
     },
     tickers,
   );

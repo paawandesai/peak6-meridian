@@ -2,7 +2,7 @@ import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 
-import { configParamsArg } from "./config";
+import { configParamsArg, PYTH_DISABLED, pythConfigArg } from "./config";
 import {
   createMeridianProgram,
   idlInstructionNames,
@@ -31,6 +31,7 @@ const INTERFACE = [
   "version",
   "set_oracle_config",
   "post_redstone_price",
+  "migrate_config",
 ];
 
 function offlineProvider(): AnchorProvider {
@@ -84,6 +85,7 @@ describe("generated client", () => {
           feedHashes: [new Uint8Array(32).fill(1), new Uint8Array(32).fill(2)],
         },
       })),
+      pyth: PYTH_DISABLED,
     });
     const [configPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("config")],
@@ -100,5 +102,31 @@ describe("generated client", () => {
     expect(instruction.keys[1]?.isSigner).toBe(true);
     // 8-byte discriminator + 32 + 8 + 2 + 8 scalars + 32 (pyth_lazer_signer) + 28 (pyth_feed_ids) + 8 (pyth_max_age_secs) + 4-byte vec length + 6 × (1 + 136) slots.
     expect(instruction.data.length).toBe(8 + 50 + 68 + 4 + 6 * 137);
+  });
+
+  it("encodes migrate_config with and without Pyth parameters (M3-10b)", async () => {
+    const program = createMeridianProgram(offlineProvider());
+    const admin = PublicKey.unique();
+    const [configPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config")],
+      MERIDIAN_PROGRAM_ID,
+    );
+    const accounts = { config: configPda, admin, systemProgram: PublicKey.default };
+    const none = await program.methods.migrateConfig(null).accountsStrict(accounts).instruction();
+    expect(none.keys.map((key) => [key.pubkey.toBase58(), key.isSigner, key.isWritable])).toEqual([
+      [configPda.toBase58(), false, true],
+      [admin.toBase58(), true, true],
+      [PublicKey.default.toBase58(), false, false],
+    ]);
+    // 8-byte discriminator + Option tag.
+    expect(none.data.length).toBe(9);
+    const some = await program.methods
+      .migrateConfig(
+        pythConfigArg({ lazerSigner: admin, feedIds: [1, 2, 3, 4, 5, 6, 7], maxAgeSecs: 30n }),
+      )
+      .accountsStrict(accounts)
+      .instruction();
+    // 8 + Option tag + 32 signer + 7 × 4 feed ids + 8 max age.
+    expect(some.data.length).toBe(8 + 1 + 68);
   });
 });
