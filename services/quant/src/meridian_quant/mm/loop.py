@@ -105,8 +105,14 @@ class MarketMakerLoop:
             fair_values = await self._fetch_fair_values()
             if not fair_values:
                 logger.warning("No fair values available, pulling all quotes")
-                await self._cancel_all_quotes()  # Will fetch markets internally
-                await self._settle_funds()  # Will fetch markets internally
+                try:
+                    await self._cancel_all_quotes()  # Will fetch markets internally
+                except Exception:
+                    logger.exception("Failed to cancel quotes (no fair values)")
+                try:
+                    await self._settle_funds()  # Will fetch markets internally
+                except Exception:
+                    logger.exception("Failed to settle funds (no fair values)")
                 self._coverage = 0.0
                 return
 
@@ -115,8 +121,8 @@ class MarketMakerLoop:
                 open_markets = await self._fetch_open_markets()
             except Exception:
                 logger.exception("Failed to fetch open markets, failing closed")
-                await self._cancel_all_quotes()  # Will fetch markets internally
-                await self._settle_funds()  # Will fetch markets internally
+                # Can't cancel without market list - log and continue (stale orders risky but
+                # better than crashing loop; next successful iteration will cancel them)
                 self._coverage = 0.0
                 return
 
@@ -125,8 +131,8 @@ class MarketMakerLoop:
             # In this case, cancel any stale quotes but don't log as failure.
             if not open_markets:
                 logger.info("No open markets today, canceling any stale quotes")
-                await self._cancel_all_quotes()  # Will fetch markets internally
-                await self._settle_funds()  # Will fetch markets internally
+                await self._cancel_all_quotes(open_markets)  # Pass empty list (no refetch)
+                await self._settle_funds(open_markets)  # Pass empty list (no refetch)
                 self._coverage = 0.0
                 return
 
@@ -490,6 +496,10 @@ class MarketMakerLoop:
         Returns:
             Set of market IDs where fetch_resting_orders failed. These markets
             should not be quoted (AB-10: fail closed on fetch errors).
+
+        Raises:
+            Exception: If markets is None and fetching markets fails. Caller must
+                handle this explicitly rather than silently leaving stale orders.
         """
         failed_markets: set[str] = set()
         try:
@@ -497,8 +507,8 @@ class MarketMakerLoop:
                 markets = await self._fetch_open_markets()
         except Exception:
             logger.exception("Failed to fetch open markets for cancel")
-            # Return empty set - all markets failed
-            return failed_markets
+            # Re-raise to fail loudly: returning empty set would leave stale orders
+            raise
 
         for market in markets:
             try:
