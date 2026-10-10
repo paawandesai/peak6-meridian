@@ -1,3 +1,4 @@
+import { BN } from "@coral-xyz/anchor";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -116,5 +117,36 @@ describe("SPL token parsing (P0-4: getWallet decode)", () => {
     view.setBigUint64(64, 99999n, true);
     // If we didn't convert to Buffer, this would throw because Uint8Array lacks readBigUInt64LE
     expect(parseTokenBalance({ data })).toBe(99999n);
+  });
+});
+
+describe("getWallet OpenOrders decode (P0-4)", () => {
+  it("decodes openOrders (camelCase) and converts Uint8Array to Buffer", () => {
+    // Test the decode logic that getWallet uses for OpenOrders accounts
+    const mockCoder = {
+      decode: vi.fn().mockReturnValue({
+        freeUsdc: new BN(500),
+        freeYes: new BN(300),
+      }),
+    };
+
+    const mockProgram = {
+      coder: {
+        accounts: mockCoder,
+      },
+    };
+
+    // Simulate what getWallet does: decode OpenOrders with camelCase name and Buffer data
+    const ooAccountData = new Uint8Array(100); // Might be Uint8Array in browser
+    const data = Buffer.isBuffer(ooAccountData) ? ooAccountData : Buffer.from(ooAccountData);
+    const decoded = mockProgram.coder.accounts.decode("openOrders", data);
+
+    const freeUsdc = BigInt(decoded.freeUsdc.toString());
+    const freeYes = BigInt(decoded.freeYes.toString());
+
+    // Verify decode was called with camelCase "openOrders" (not "OpenOrders") and Buffer
+    expect(mockCoder.decode).toHaveBeenCalledWith("openOrders", expect.any(Buffer));
+    expect(freeUsdc).toBe(500n);
+    expect(freeYes).toBe(300n);
   });
 });

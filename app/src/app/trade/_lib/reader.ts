@@ -149,7 +149,9 @@ export function createTradeReader(config: PublicConfig, row: MarketRow): TradeRe
       let freeUsdc = 0n;
       let freeYes = 0n;
       if (ooAccount) {
-        const decoded = program.coder.accounts.decode("OpenOrders", ooAccount.data);
+        // Program camelCases IDL account names: "openOrders" not "OpenOrders"
+        const data = Buffer.isBuffer(ooAccount.data) ? ooAccount.data : Buffer.from(ooAccount.data);
+        const decoded = program.coder.accounts.decode("openOrders", data);
         freeUsdc = BigInt(decoded.freeUsdc.toString());
         freeYes = BigInt(decoded.freeYes.toString());
       }
