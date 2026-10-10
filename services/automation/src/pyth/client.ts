@@ -104,7 +104,7 @@ export class PythClient {
   constructor(config: PythClientConfig) {
     this.#apiToken = config.apiToken;
     this.baseUrl =
-      config.baseUrl ?? "https://api.lazer.pyth.network"; // Placeholder URL
+      config.baseUrl ?? "https://api.lazer.pyth.network"; // TODO: Verify against official Pyth Pro docs
     this.timeoutMs = config.timeoutMs ?? 5000;
 
     // Never log the API token (AB-17, AC3)

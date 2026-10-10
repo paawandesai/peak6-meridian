@@ -5,7 +5,7 @@
  * Security: Never call live Pyth API in tests (use mocks)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PythClient, createPythClient, PYTH_FEED_IDS } from "./client";
 
 describe("PythClient", () => {
@@ -87,11 +87,84 @@ describe("PythClient", () => {
       );
     });
 
-    // TODO: Add mocked Pyth API tests with fetch mocking
-    // The implementation is complete but needs fetch mocking for full testing
-    // it("fetches price with valid auth", async () => { ... });
-    // it("handles API timeout", async () => { ... });
-    // it("validates response schema", async () => { ... });
+    it("fetches price with valid auth and structure", async () => {
+      const mockResponse = {
+        id: PYTH_FEED_IDS.AAPL,
+        price: {
+          price: "15000",
+          conf: "5",
+          expo: -2,
+          publish_time: 1791316801,
+        },
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const client = new PythClient({ apiToken: "test-token" });
+      const result = await client.getLatestPrice("AAPL");
+
+      expect(result.id).toBe(PYTH_FEED_IDS.AAPL);
+      expect(result.price.price).toBe("15000");
+      expect(result.price.expo).toBe(-2);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining(PYTH_FEED_IDS.AAPL!),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: "Bearer test-token",
+          }),
+        }),
+      );
+    });
+
+    it("handles API timeout", async () => {
+      global.fetch = vi.fn().mockImplementation(
+        () =>
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error("AbortError")), 100);
+          }),
+      );
+
+      const client = new PythClient({ apiToken: "test-token", timeoutMs: 50 });
+      await expect(client.getLatestPrice("AAPL")).rejects.toThrow();
+    });
+
+    it("rejects feed ID mismatch", async () => {
+      const mockResponse = {
+        id: "0xwrongfeedid000000000000000000000000000000000000000000000000000000",
+        price: {
+          price: "15000",
+          conf: "5",
+          expo: -2,
+          publish_time: 1791316801,
+        },
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const client = new PythClient({ apiToken: "test-token" });
+      await expect(client.getLatestPrice("AAPL")).rejects.toThrow(
+        "Feed ID mismatch",
+      );
+    });
+
+    it("handles API errors", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+      } as Response);
+
+      const client = new PythClient({ apiToken: "test-token" });
+      await expect(client.getLatestPrice("AAPL")).rejects.toThrow(
+        "Pyth API error: 500",
+      );
+    });
   });
 
   describe("getSignedUpdate", () => {
@@ -102,10 +175,64 @@ describe("PythClient", () => {
       );
     });
 
-    // TODO: Add mocked signed update tests with fetch mocking
-    // The implementation is complete but needs fetch mocking for full testing
-    // it("returns valid signed update bytes", async () => { ... });
-    // it("validates signature format", async () => { ... });
+    it("returns valid signed update bytes", async () => {
+      const mockPriceResponse = {
+        id: PYTH_FEED_IDS.AAPL,
+        price: {
+          price: "15000",
+          conf: "5",
+          expo: -2,
+          publish_time: 1791316801,
+        },
+      };
+
+      const mockSignedUpdate = new Uint8Array([1, 2, 3, 4, 5]); // Mock binary data
+
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockPriceResponse,
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => mockSignedUpdate.buffer,
+        } as Response);
+
+      const client = new PythClient({ apiToken: "test-token" });
+      const result = await client.getSignedUpdate("AAPL");
+
+      expect(result.feedId).toBe(PYTH_FEED_IDS.AAPL);
+      expect(result.price.price).toBe("15000");
+      expect(result.signedUpdate).toBeInstanceOf(Uint8Array);
+      expect(result.signedUpdate.length).toBeGreaterThan(0);
+    });
+
+    it("rejects empty signed update", async () => {
+      const mockPriceResponse = {
+        id: PYTH_FEED_IDS.AAPL,
+        price: {
+          price: "15000",
+          conf: "5",
+          expo: -2,
+          publish_time: 1791316801,
+        },
+      };
+
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockPriceResponse,
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          arrayBuffer: async () => new ArrayBuffer(0), // Empty
+        } as Response);
+
+      const client = new PythClient({ apiToken: "test-token" });
+      await expect(client.getSignedUpdate("AAPL")).rejects.toThrow(
+        "Empty signed update",
+      );
+    });
   });
 
   describe("security (AC3, AB-17)", () => {
@@ -132,9 +259,48 @@ describe("PythClient", () => {
       expect(typeof client.healthCheck).toBe("function");
     });
 
-    // TODO: Add health check tests with mocked API
-    // The implementation calls getLatestPrice("AAPL") which needs fetch mocking
-    // it("returns true when API is reachable", async () => { ... });
-    // it("returns false when API is unreachable", async () => { ... });
+    it("returns true when API is reachable", async () => {
+      const mockResponse = {
+        id: PYTH_FEED_IDS.AAPL,
+        price: {
+          price: "15000",
+          conf: "5",
+          expo: -2,
+          publish_time: 1791316801,
+        },
+      };
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const client = new PythClient({ apiToken: "test-token" });
+      const result = await client.healthCheck();
+
+      expect(result).toBe(true);
+    });
+
+    it("returns false when API is unreachable", async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+      } as Response);
+
+      const client = new PythClient({ apiToken: "test-token" });
+      const result = await client.healthCheck();
+
+      expect(result).toBe(false);
+    });
+
+    it("returns false on network error", async () => {
+      global.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+
+      const client = new PythClient({ apiToken: "test-token" });
+      const result = await client.healthCheck();
+
+      expect(result).toBe(false);
+    });
   });
 });
