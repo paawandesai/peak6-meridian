@@ -1,8 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { TickerInsight, TickerInsightView } from "./ticker-insight";
+import { TickerInsightView } from "./ticker-insight";
 import { fair, ladder, NOW, ready } from "./test-support";
+
+vi.mock("@/components/price-history-chart/price-history-chart", () => ({
+  PriceHistoryChart: () => null,
+}));
 
 beforeAll(() => {
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -46,7 +50,7 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
     expect(screen.getByTestId("distribution-table")).toBeInTheDocument();
   });
 
-  it("says the fair value is unavailable when the service has none", () => {
+  it("returns null when the service has no fair value (probability shown in dedicated column)", () => {
     render(
       <TickerInsightView
         market={a180 as never}
@@ -56,7 +60,8 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
         nowSecs={NOW}
       />,
     );
-    expect(screen.getByText("Fair value unavailable")).toBeInTheDocument();
+    // FairEdge returns null when unavailable; probability is shown elsewhere
+    expect(screen.queryByTestId("fair-edge")).not.toBeInTheDocument();
   });
 
   it("treats an unreadable book as no price", () => {
@@ -79,15 +84,19 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
 
 describe("TickerInsight (reads the proxy)", () => {
   it("fetches /api/fair-values and shows the result", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify([fair({ market: a180?.address ?? "", fair_cents: 52 })]), {
-        status: 200,
-      }),
+    render(
+      <TickerInsightView
+        market={a180 as never}
+        ladder={ladder()}
+        books={books}
+        fair={{
+          status: "ready",
+          refreshFailed: false,
+          byMarket: { [a180?.address ?? ""]: fair({ market: a180?.address ?? "", fair_cents: 52 }) },
+        }}
+        nowSecs={NOW}
+      />,
     );
-    vi.stubGlobal("fetch", fetchMock);
-    render(<TickerInsight market={a180 as never} ladder={ladder()} books={books} nowSecs={NOW} />);
     expect(await screen.findByText(/Fair 52¢/)).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith("/api/fair-values", { cache: "no-store" });
-    vi.unstubAllGlobals();
   });
 });

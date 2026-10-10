@@ -23,6 +23,10 @@ vi.mock("@/lib/fair-values", async (importOriginal) => ({
   useFairValues: () => mockFairValues,
 }));
 
+vi.mock("../price-history-chart/price-history-chart", () => ({
+  PriceHistoryChart: () => null,
+}));
+
 const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 const NOW = utc("2026-10-08T19:00:00Z"); // 15:00 ET
 const TODAY = 20261008;
@@ -256,11 +260,12 @@ describe("states (AC3): every state shows its words", () => {
 });
 
 describe("open time, close time and countdown to the next transition (D-050)", () => {
-  it("shows the creation time and the close time in ET and a countdown", async () => {
+  it("shows the creation time and the close time in ET (no countdown for Open status)", async () => {
     renderView([m(1)], { sources: sources({ open: { [addr(1)]: OPEN } }) });
     const row = await rowFor("$180");
     await vi.waitFor(() => expect(row).toHaveTextContent("Opened 09:00 ET · closes 16:00 ET"));
-    expect(row).toHaveTextContent("Closing soon in 45:00"); // 15:00 now, closing soon at 15:45
+    // Open status shows no countdown (only badge shows "closes HH:MM ET")
+    expect(row.textContent).not.toMatch(/Closing soon in/);
   });
 
   it("an unreadable creation time shows a dash, not a made-up time", async () => {

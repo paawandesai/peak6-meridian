@@ -6,7 +6,6 @@ import { complementPriceCents, type BookQuotes } from "@meridian/client";
 
 import { formatUsdCents, scaledToCentsFloor } from "./display";
 import {
-  CLOSING_SOON_SECS,
   SETTLEMENT_DELAYED_SECS,
   SETTLING_START_SECS,
   type MarketRow,
@@ -111,7 +110,8 @@ export function badgeProps(
 export type Transition = { readonly label: string; readonly secondsLeft: number };
 
 /**
- * The countdown to the next state change (D-050). Closing soon is omitted: its badge already
+ * The countdown to the next state change (D-050). Open and ClosingSoon omit the countdown:
+ * Open shows no countdown (only "closes HH:MM ET" in the badge), ClosingSoon's badge already
  * counts down to the close. Settled has no next transition.
  */
 export function nextTransition(
@@ -124,7 +124,9 @@ export function nextTransition(
   const left = (at: number) => Math.max(0, at - nowSecs);
   switch (status) {
     case "Open":
-      return { label: "Closing soon in", secondsLeft: left(close - Number(CLOSING_SOON_SECS)) };
+    case "ClosingSoon":
+    case "Settled":
+      return null;
     case "Closed":
       return {
         label: "Settlement starts in",
@@ -139,9 +141,6 @@ export function nextTransition(
       const at = close + Number(overrideDelaySecs);
       return nowSecs >= at ? null : { label: "Admin override opens in", secondsLeft: left(at) };
     }
-    case "ClosingSoon":
-    case "Settled":
-      return null;
   }
 }
 
