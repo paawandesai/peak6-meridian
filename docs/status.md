@@ -113,7 +113,7 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 
 ## Final Summary (M4-06)
 
-M1-M3 complete. M4 in progress (!62 fresh-clone, demo video pending). Code freeze Sun Oct 11 09:00 CT. Devnet program ID: `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`. App URL: `[TBD]`. Demo video: `[TBD]`.
+M1-M3 complete. M4 in progress (!62 fresh-clone, demo video pending). Code freeze Sun Oct 11 09:00 CT. Devnet program ID: `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`. App URL: `https://peak6-meridian.vercel.app`. Demo video: pending M4-05 recording (Paawan).
 
 **Version tag:** `v1.0.0-devnet-submission` (to be pushed when all M4 deps merge)
 
