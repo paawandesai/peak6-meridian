@@ -6,6 +6,7 @@ const baseTotals: PortfolioTotals = {
   usdcBalance: 1_000_000_000n, // $1,000.00
   redeemableNow: 250_000_000n, // $250.00
   unrealizedCents: 12345n, // +$123.45
+  realizedCents: 0n,
 };
 
 describe("PortfolioFilters", () => {
@@ -83,6 +84,7 @@ describe("PortfolioFilters", () => {
       usdcBalance: 1_234_567_890_000n, // $1,234,567.89
       redeemableNow: 0n,
       unrealizedCents: 0n,
+      realizedCents: 0n,
     };
     const onTabChange = vi.fn();
     render(<PortfolioFilters activeTab="open" onTabChange={onTabChange} totals={totals} />);
