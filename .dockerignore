@@ -1,0 +1,14 @@
+# Exclude build artifacts and dependencies from Docker context
+node_modules/
+target/
+.venv/
+.anchor/
+.next/
+dist/
+build/
+*.log
+.env
+.env.local
+deployments/
+.git/
+.gitlab-ci.yml
