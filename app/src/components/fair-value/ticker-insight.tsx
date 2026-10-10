@@ -1,7 +1,7 @@
 "use client";
 
-import { DistributionChart } from "@/components/distribution-chart/distribution-chart";
-import { displayedYes, distributionPoints } from "@/components/distribution-chart/distribution";
+import { displayedYes } from "@/components/distribution-chart/distribution";
+import { PriceHistoryChart } from "@/components/price-history-chart/price-history-chart";
 import { FairEdge } from "./fair-edge";
 import { type FairValues, useFairValues } from "@/lib/fair-values";
 import type { MarketBook } from "@/lib/market-data";
@@ -16,19 +16,11 @@ type ViewProps = {
   readonly nowSecs: number;
 };
 
-/** Pure view: the fair value and edge for `market`, and the ticker's distribution chart. */
-export function TickerInsightView({ market, ladder, books, fair, nowSecs }: ViewProps) {
-  const quotes = Object.fromEntries(
-    Object.entries(books).map(([address, book]) => [
-      address,
-      book.state === "ready" ? book.quotes : null,
-    ]),
-  );
-  const fairByAddress = Object.fromEntries(
-    Object.entries(fair.byMarket).map(([addr, fv]) => [addr, fv.fair_cents]),
-  );
-  const points = distributionPoints(ladder, quotes, fairByAddress);
-  const own = quotes[market.address];
+/** Pure view: the fair value and edge for `market`, and the ticker's price history chart. */
+export function TickerInsightView({ market, books, fair, nowSecs }: ViewProps) {
+  const own = books[market.address];
+  const quotes = own?.state === "ready" ? own.quotes : null;
+  const yesCents = displayedYes(quotes);
   const headingId = `fair-heading-${market.ticker}`;
   const marketFair = fair.byMarket[market.address];
   return (
@@ -37,13 +29,13 @@ export function TickerInsightView({ market, ladder, books, fair, nowSecs }: View
         Fair value
       </h2>
       <FairEdge
-        yesCents={displayedYes(own)}
+        yesCents={yesCents}
         fair={marketFair}
         status={fair.status}
         refreshFailed={fair.refreshFailed}
         nowSecs={nowSecs}
       />
-      <DistributionChart ticker={market.ticker} points={points} />
+      <PriceHistoryChart ticker={market.ticker} nowSecs={nowSecs} />
     </section>
   );
 }
