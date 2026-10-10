@@ -13,6 +13,8 @@ export interface RedstoneHistoricalResponse {
   readonly timestampMilliseconds: number;
   /** Complete RedStone payload bytes (hex-encoded) */
   readonly payload: string;
+  /** Median value from the package (8 decimals, per RedStone format) */
+  readonly value: number;
 }
 
 /** RedStone gateway client config */

@@ -33,6 +33,7 @@ describe("RedStone gateway client", () => {
       id: "AAPL",
       timestampMilliseconds: 1700000000000,
       payload: mockPayload,
+      value: 230_000_000_00, // 8 decimals: $230.00
     };
 
     global.fetch = vi.fn().mockResolvedValue({
@@ -42,7 +43,8 @@ describe("RedStone gateway client", () => {
 
     const result = await fetchRedstonePackages(mockConfig, "AAPL", 1700000000000);
 
-    expect(result).toBeInstanceOf(Uint8Array);
+    expect(result.payload).toBeInstanceOf(Uint8Array);
+    expect(result.valueCents).toBe(23000); // Converted to cents
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -57,6 +59,7 @@ describe("RedStone gateway client", () => {
             id: "AAPL",
             timestampMilliseconds: 1700000000000,
             payload: "0x1234",
+            value: 230_000_000_00,
           }],
         });
       }
@@ -78,6 +81,7 @@ describe("RedStone gateway client", () => {
           id: "AAPL",
           timestampMilliseconds: 1700000000000,
           payload: callCount === 1 ? "0x1234" : "0x5678", // Different payloads
+          value: 230_000_000_00,
         }],
       });
     });
@@ -97,6 +101,7 @@ describe("RedStone gateway client", () => {
           id: "AAPL",
           timestampMilliseconds: callCount === 1 ? 1700000000000 : 1700000001000, // Different timestamps
           payload: "0x1234",
+          value: 230_000_000_00,
         }],
       });
     });
@@ -137,11 +142,13 @@ describe("RedStone gateway client", () => {
         id: "AAPL",
         timestampMilliseconds: 1700000000000,
         payload: mockPayload,
+        value: 230_000_000_00,
       }],
     });
 
     const result = await fetchRedstonePackages(mockConfig, "AAPL", 1700000000000);
 
-    expect(result).toEqual(new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]));
+    expect(result.payload).toEqual(new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]));
+    expect(result.valueCents).toBe(23000);
   });
 });

@@ -158,21 +158,26 @@ export class RedstoneOracleSource implements OracleSource {
     const twelveDataClose = source0.source === "twelvedata" ? source0 : source1;
 
     // 2. Fetch from >=2 RedStone gateways
-    const payload = await fetchRedstonePackages(
+    const { payload, valueCents } = await fetchRedstonePackages(
       this.gatewayConfig,
       ticker,
       closeTimestampMs,
     );
 
-    // 3. Extract RedStone value from payload for cross-check
-    // TODO: Parse payload to get the median value
-    // For now, we'll let the on-chain instruction validate it
-    // The cross-check will happen after we get the value from the gateway response
+    // 3. Cross-check RedStone value against official closes (M2-16 AC2: <=5 bp)
+    const crossCheck = crossCheckOfficialClose(
+      valueCents,
+      { source: "tiingo", symbol: ticker, tradingDate, closeCents: tiingoClose.closeCents },
+      { source: "twelve-data", symbol: ticker, tradingDate, closeCents: twelveDataClose.closeCents },
+      tradingDate,
+    );
 
-    // Note: The actual cross-check needs the RedStone value, which is embedded in the payload.
-    // For simplicity in this implementation, we'll do the cross-check on-chain or
-    // rely on the fact that RedStone values are market prices (should be close to official closes).
-    // A full implementation would parse the payload here to extract the value for cross-checking.
+    if (!crossCheck.passed) {
+      throw new Error(
+        `RedStone cross-check failed: value ${valueCents}¢ deviates >5 bp from official closes ` +
+        `(Tiingo: ${crossCheck.tiingoBps} bp, Twelve Data: ${crossCheck.twelveDataBps} bp)`,
+      );
+    }
 
     // 4. Build post_redstone_price instruction
     if (!params.marketAddress) {

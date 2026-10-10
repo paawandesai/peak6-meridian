@@ -12,6 +12,7 @@ const RedstoneHistoricalSchema = z.object({
   id: z.string(),
   timestampMilliseconds: z.number(),
   payload: z.string().regex(/^0x[0-9a-fA-F]+$/, "payload must be hex-encoded"),
+  value: z.number().positive(),
 });
 
 /**
@@ -59,13 +60,13 @@ async function fetchFromGateway(
 
 /**
  * Fetch from >=2 gateways and verify byte-identical payloads (M2-16 AC1).
- * Returns the validated payload bytes.
+ * Returns the validated payload bytes and median value.
  */
 export async function fetchRedstonePackages(
   config: RedstoneGatewayConfig,
   symbol: string,
   closeTimestampMs: number,
-): Promise<Uint8Array> {
+): Promise<{ payload: Uint8Array; valueCents: number }> {
   if (config.gateways.length < 2) {
     throw new Error("RedStone requires at least 2 gateways");
   }
@@ -134,5 +135,9 @@ export async function fetchRedstonePackages(
     payloadBytes[i] = parseInt(hexPayload.slice(i * 2, i * 2 + 2), 16);
   }
 
-  return payloadBytes;
+  // RedStone value has 8 decimals; convert to cents (2 decimals)
+  // value / 10^6 = cents
+  const valueCents = Math.round(first.value / 1_000_000);
+
+  return { payload: payloadBytes, valueCents };
 }
