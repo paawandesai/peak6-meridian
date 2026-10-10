@@ -11,6 +11,7 @@ export * from "./book";
 export * from "./calendar";
 export * from "./cluster";
 export * from "./config";
+export * from "./demo-sessions";
 export * from "./intents";
 export type { Meridian } from "./idl/meridian";
 export * from "./pda";

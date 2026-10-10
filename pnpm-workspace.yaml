@@ -4,6 +4,7 @@ packages:
   - packages/client
   - packages/bigint-buffer-js
   - scripts/deploy
+  - scripts/demo
   - scripts/switchboard
   - tests/security/ts
   - tests/e2e

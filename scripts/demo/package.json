@@ -1,0 +1,25 @@
+{
+  "name": "demo-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo-session markets on non-trading days and their admin demo-settle (make demo-markets, make demo-settle)",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.31.1",
+    "@meridian/client": "workspace:*",
+    "@solana/web3.js": "1.99.0",
+    "automation": "workspace:*",
+    "luxon": "3.7.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/luxon": "3.7.6",
+    "fast-check": "4.10.2",
+    "tsx": "4.23.15"
+  }
+}
