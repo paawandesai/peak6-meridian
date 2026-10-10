@@ -109,7 +109,7 @@ describe("deployRailway", () => {
     expect(CONFIG_FILE).toBe("/services/automation/railway.json");
     const update = bodies.find((b) => b.includes("serviceInstanceUpdate"));
     expect(update).not.toContain("railwayConfigFile");
-    expect(update).toContain("corepack pnpm --filter automation start");
+    expect(update).toContain("cd services/automation && ./node_modules/.bin/tsx src/main.ts");
     const output = logs.join("\n");
     for (const secret of [TOKEN, KEYPAIR, SERVICE_TOKEN, "tiingo-key-xyz"]) {
       expect(output).not.toContain(secret);
