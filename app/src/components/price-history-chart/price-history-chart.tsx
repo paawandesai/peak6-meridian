@@ -157,17 +157,13 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
 
   if (status === "empty") {
     return (
-      <p className="text-mer-sm text-mer-ink-muted">
-        No price history available for {ticker}.
-      </p>
+      <p className="text-mer-sm text-mer-ink-muted">No price history available for {ticker}.</p>
     );
   }
 
   if (status === "error") {
     return (
-      <p className="text-mer-sm text-mer-ink-muted">
-        Could not load price history for {ticker}.
-      </p>
+      <p className="text-mer-sm text-mer-ink-muted">Could not load price history for {ticker}.</p>
     );
   }
 
