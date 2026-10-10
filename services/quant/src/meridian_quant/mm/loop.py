@@ -197,12 +197,14 @@ class MarketMakerLoop:
         """
         now = self._clock()
 
-        # Check for stale spot data (> 10s old)
+        # Check for stale spot data (> 10s old) or a value the quant service flags stale (its last
+        # refresh failed, or it is too old: fair_value_cache.py). The devnet demo flag waives only
+        # the spot-age rule (quote from the last close; see meridian_quant.demo), never `stale`.
+        allow_old_spot = demo_allow_stale_spot()
         for fv in fair_values:
-            if demo_allow_stale_spot():
-                break  # devnet demo only: quote from the last close (see meridian_quant.demo)
             age_secs = (now - fv.as_of).total_seconds()
-            if age_secs > self.config.max_spot_age_secs or fv.stale:
+            spot_too_old = age_secs > self.config.max_spot_age_secs and not allow_old_spot
+            if spot_too_old or fv.stale:
                 self._pull_log.warning(
                     "pull:stale",
                     f"Pulling all quotes: stale fair value for {fv.ticker} {fv.market} "
