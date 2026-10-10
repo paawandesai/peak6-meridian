@@ -10,6 +10,8 @@ import {
   yesView,
 } from "@/lib/market-view";
 import { formatStrike, isSessionMarket, marketStatus, type MarketRow } from "@/lib/markets";
+import { isDemoMarket } from "@/lib/demo-session";
+import { DemoBadge } from "../demo-banner";
 import type { FairValue } from "@/lib/fair-values";
 import type { OpenTime } from "@/lib/open-times-core";
 
@@ -98,11 +100,12 @@ export function StrikeRow({
   const view = yesView(data.quotes);
   const transition = nextTransition(market, status, ctx.nowSecs, ctx.overrideDelaySecs);
   const strike = formatStrike(market.strikeCents);
-  const isTest = !isSessionMarket(market);
+  const isDemo = isDemoMarket(market);
+  const isTest = !isSessionMarket(market) && !isDemo;
   return (
     <tr className="relative border-t border-mer-rule align-top">
       <td className="py-mer-2 pr-mer-3">
-        <div className="flex items-center gap-mer-1">
+        <div className="flex flex-wrap items-center gap-mer-1">
           {tradeHref === undefined ? (
             <span className="mer-num font-medium">{strike}</span>
           ) : (
@@ -114,6 +117,7 @@ export function StrikeRow({
             </a>
           )}
           {isTest ? <TestMarketBadge /> : null}
+          <DemoBadge market={market} />
         </div>
         <span className="block text-mer-xs text-mer-ink-muted sm:hidden">
           {openCloseText(data.openedAt, market.closeTs, !isTest)}

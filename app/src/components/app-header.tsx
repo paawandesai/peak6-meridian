@@ -2,6 +2,7 @@
 
 import { useWallet } from "@solana/wallet-adapter-react";
 
+import { SessionBanners } from "./demo-banner";
 import { Countdown, DemoWalletCTA } from "./ui";
 import { DEMO_WALLET_NAME } from "@/lib/demo-wallet";
 import { UsdcBalance } from "./usdc-balance";
@@ -67,24 +68,31 @@ export function NextCloseStatus({
   }
 }
 
-/**
- * The page header: title, navigation, the ET clock, the next close, the global pause banner slot,
- * the connected wallet's balance and the wallet button. `nowSecs` is `null` until mount.
- */
-export function AppHeader({
-  nowSecs,
-  markets,
-  config,
-  currentPath = "/",
-  children,
-}: {
+type AppHeaderProps = {
   readonly nowSecs: number | null;
   readonly markets: readonly MarketRow[] | null;
   readonly config: AppConfig | null;
   readonly currentPath?: string;
   /** Extra header controls (for example the faucet button). */
   readonly children?: React.ReactNode;
-}) {
+};
+
+/**
+ * The page header: title, navigation, the ET clock, the next close, the global pause banner slot,
+ * the connected wallet's balance and the wallet button. `nowSecs` is `null` until mount. Above it
+ * sit the sticky demo-session and replay banners (`SessionBanners`), outside the `<header>` so
+ * they stay on screen while the page scrolls.
+ */
+export function AppHeader(props: AppHeaderProps) {
+  return (
+    <>
+      <SessionBanners markets={props.markets} nowSecs={props.nowSecs} />
+      <HeaderBar {...props} />
+    </>
+  );
+}
+
+function HeaderBar({ nowSecs, markets, config, currentPath = "/", children }: AppHeaderProps) {
   const { publicKey, select } = useWallet();
 
   const handleDemoConnect = () => {

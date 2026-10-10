@@ -9,6 +9,7 @@ import { createPortfolioSource, type PortfolioSource } from "./data";
 import { marketLabel } from "./label";
 import { MmBlock } from "./mm-block";
 import { buildPortfolio, type PortfolioModel, type PositionRow, type RowState } from "./model";
+import { DemoBadge } from "@/components/demo-banner";
 import { useReader } from "@/components/reader-context";
 import { useTestMarkets } from "@/components/test-market-context";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/components/ui";
 import { useAsync } from "@/components/use-async";
 import { loadPublicConfig } from "@/lib/config";
+import { isDemoMarket } from "@/lib/demo-session";
 import {
   formatPriceTenths,
   formatUsdCents,
@@ -185,9 +187,12 @@ function PositionsTable({
           {rows.map((row) => (
             <tr key={row.key} className="border-t border-mer-rule align-top">
               <th scope="row" className="py-mer-2 pr-mer-2 text-left font-medium">
-                <div className="flex items-center gap-mer-1">
+                <div className="flex flex-wrap items-center gap-mer-1">
                   {marketLabel(row.market)}
-                  {!isSessionMarket(row.market) ? <TestMarketBadge /> : null}
+                  {!isSessionMarket(row.market) && !isDemoMarket(row.market) ? (
+                    <TestMarketBadge />
+                  ) : null}
+                  <DemoBadge market={row.market} />
                 </div>
               </th>
               <td className="py-mer-2 pr-mer-2">
