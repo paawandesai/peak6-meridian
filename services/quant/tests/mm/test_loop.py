@@ -728,17 +728,35 @@ async def test_missing_ata_vs_rpc_timeout(mm_config: MMConfig) -> None:
                 return 0
             return await super().get_no_token_balance(market, owner)
 
+        async def get_multiple_token_balances(
+            self, markets: list[str], owner: str
+        ) -> dict[str, tuple[int, int]]:
+            """Batch-fetch balances, but inject errors for tests (P1-7)."""
+            if self.simulate_rpc_timeout:
+                raise Exception("RPC timeout")
+            # Simulate missing ATA only on first read (before mint)
+            if self.simulate_missing_ata_initial and self._first_balance_read:
+                self._first_balance_read = False
+                return {market: (0, 0) for market in markets}
+            return await super().get_multiple_token_balances(markets, owner)
+
         async def mint_pair(self, market: str, qty: int, owner: str) -> None:
             self.mint_called = True
             if self.simulate_rpc_timeout:
                 raise Exception("RPC timeout")
             await super().mint_pair(market, qty, owner)
 
-        async def place_order(
-            self, market: str, side: str, price: int, qty: int, owner: str
+        async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+            self,
+            market: str,
+            side: str,
+            price: int,
+            qty: int,
+            owner: str,
+            resting_orders: list[RestingOrder] | None = None,
         ) -> int:
             self.place_called = True
-            return await super().place_order(market, side, price, qty, owner)
+            return await super().place_order(market, side, price, qty, owner, resting_orders)
 
     # Test 2a: Missing ATA (balance=0) should still mint and place
     # Use today's trading date (ET timezone)
@@ -885,11 +903,17 @@ async def test_fetch_resting_orders_failure_skips_quoting(
                 raise Exception("Simulated RPC error on market A")
             return await super().fetch_resting_orders(market)
 
-        async def place_order(
-            self, market: str, side: str, price: int, qty: int, owner: str
+        async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+            self,
+            market: str,
+            side: str,
+            price: int,
+            qty: int,
+            owner: str,
+            resting_orders: list[RestingOrder] | None = None,
         ) -> int:
             self.place_calls.append(market)
-            return await super().place_order(market, side, price, qty, owner)
+            return await super().place_order(market, side, price, qty, owner, resting_orders)
 
     order_client = PartialFailWithLeftoversClient()
     mm = MarketMakerLoop(mm_config, market_source, fv_source, order_client, clock=fake_clock)
@@ -1017,11 +1041,17 @@ async def test_cancel_fetch_failure_per_market_isolation(
             self.cancel_calls.append(market)
             await super().cancel_order(market, order_id, owner)
 
-        async def place_order(
-            self, market: str, side: str, price: int, qty: int, owner: str
+        async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+            self,
+            market: str,
+            side: str,
+            price: int,
+            qty: int,
+            owner: str,
+            resting_orders: list[RestingOrder] | None = None,
         ) -> int:
             self.place_calls.append(market)
-            return await super().place_order(market, side, price, qty, owner)
+            return await super().place_order(market, side, price, qty, owner, resting_orders)
 
     order_client = PartialFailWithLeftoversClient()
     mm = MarketMakerLoop(mm_config, market_source, fv_source, order_client, clock=fake_clock)
