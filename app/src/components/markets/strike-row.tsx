@@ -13,11 +13,13 @@ import { formatStrike, isSessionMarket, marketStatus, type MarketRow } from "@/l
 import { isDemoMarket } from "@/lib/demo-session";
 import { DemoBadge } from "../demo-banner";
 import type { FairValue } from "@/lib/fair-values";
+import type { OpenTime } from "@/lib/open-times-core";
 
 /** What the page knows about one strike's book and fair value. */
 export type StrikeData = {
   readonly quotes?: BookQuotes | null;
-  readonly openedAt: number | null;
+  /** Creation time (unix seconds), `null` when unknown, `"unavailable"` when unreadable (P1-4). */
+  readonly openedAt: OpenTime;
   readonly fair?: FairValue;
   readonly fairStatus: "loading" | "ready" | "unavailable";
   readonly fairRefreshFailed: boolean;
