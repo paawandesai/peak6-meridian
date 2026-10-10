@@ -129,7 +129,7 @@ else
   PROGRAM_ID="$(solana-keygen pubkey "$PROGRAM_KEYPAIR")"
 fi
 
-export ANCHOR_PROVIDER_URL="$RPC_URL" ANCHOR_WALLET="$PAYER" E2E_PROGRAM_ID="$PROGRAM_ID"
+export ANCHOR_PROVIDER_URL="$RPC_URL" ANCHOR_WALLET="$PAYER" E2E_PROGRAM_ID="$PROGRAM_ID" SOLANA_CLUSTER=localnet
 
 if [ "$MODE" = "dev" ]; then
   # Seed: config with local feeds and a day's markets that stay open for 8 hours. The seed

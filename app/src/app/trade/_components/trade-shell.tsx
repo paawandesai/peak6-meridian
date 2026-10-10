@@ -16,6 +16,7 @@ import { useNow } from "@/components/use-now";
 import { explorerTxUrl } from "@/lib/admin-chain";
 import { loadPublicConfig } from "@/lib/config";
 import { useMarketData } from "@/lib/market-data";
+import { partitionMarkets } from "@/lib/markets";
 
 export const NOT_FOUND_TEXT = "This market does not exist. Go back to Markets and pick a strike.";
 
@@ -25,8 +26,14 @@ function Page({ address }: { readonly address: string }) {
   const { connection } = useConnection();
   const { publicKey, signTransaction } = useWallet();
   const config = useMemo(() => loadPublicConfig(), []);
-  const markets = useAsync(() => reader.listMarkets(), [reader]);
+  const marketsAll = useAsync(() => reader.listMarkets(), [reader]);
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
+  // P0-1 AC4: Filter to session markets only
+  const markets = useMemo(() => {
+    if (marketsAll.status !== "ready") return marketsAll;
+    const { session } = partitionMarkets(marketsAll.value);
+    return { ...marketsAll, value: session };
+  }, [marketsAll]);
   const market =
     markets.status === "ready" ? markets.value.find((m) => m.address === address) : undefined;
   // Live prices, plus the books of the ticker's ladder for the distribution chart. The Trade
