@@ -1,35 +1,30 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 
 type Props = {
   /** Demo wallet CTA button (provided by DemoWalletCTA in !125). */
   readonly demoWalletButton?: ReactNode;
 };
 
-const STORAGE_KEY = "meridian-landing-header-dismissed";
+const CONNECT_COPY =
+  "Connecting costs nothing and moves no funds; each trade asks for one signature.";
 
 /**
  * Landing header (FR-21) for first-time visitors on Markets page.
  * - Short explanation of how Meridian works
  * - Connect CTA with design.md copy
  * - Demo wallet button (slot)
- * - Dismissable, stays dismissed via localStorage
+ * - Hidden once wallet is connected (UI-03 AC7)
  */
 export function LandingHeader({ demoWalletButton }: Props) {
-  const [isDismissed, setIsDismissed] = useState(false);
+  const { publicKey } = useWallet();
+  const { setVisible } = useWalletModal();
 
-  useEffect(() => {
-    const dismissed = localStorage.getItem(STORAGE_KEY) === "true";
-    setIsDismissed(dismissed);
-  }, []);
-
-  const handleDismiss = () => {
-    localStorage.setItem(STORAGE_KEY, "true");
-    setIsDismissed(true);
-  };
-
-  if (isDismissed) {
+  // Hide when wallet is connected (FR-21, UI-03 AC7)
+  if (publicKey !== null) {
     return null;
   }
 
