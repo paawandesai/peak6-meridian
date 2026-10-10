@@ -12,20 +12,9 @@ import { Decimal } from "decimal.js";
 
 import { MAG7, type Mag7Ticker } from "@/lib/market-data-shared";
 import { type PythQuotesResponse, type PythQuote } from "@/lib/pyth-quotes";
+import { cache, inFlight, CACHE_TTL_MS } from "./cache";
 
 export const dynamic = "force-dynamic";
-
-const CACHE_TTL_MS = 2_000;
-/** Cache keyed by sorted ticker list to prevent cross-contamination (Markets/Trade use different sets). */
-const cache = new Map<string, { data: PythQuotesResponse; at: number }>();
-/** In-flight requests keyed by sorted ticker list. */
-const inFlight = new Map<string, Promise<PythQuotesResponse>>();
-
-/** Clears cache and in-flight maps (for tests). */
-export function clearCache(): void {
-  cache.clear();
-  inFlight.clear();
-}
 
 const tickersParam = z
   .string()

@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { GET, clearCache } from "./route";
+import { GET } from "./route";
+import { clearCache } from "./cache";
 
 const pro = (id: number, price: string, exponent = -5, confidence?: string) => ({
   parsed: {
