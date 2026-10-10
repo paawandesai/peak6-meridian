@@ -33,6 +33,7 @@ describe("fetchMarkets", () => {
               status: { settled: {} },
               outcome: { yes: {} },
               settlePriceScaled: num(181_420_000_000_000_000_000n),
+              settledAt: num(1_767_000_300n),
             },
           },
           {
@@ -46,6 +47,7 @@ describe("fetchMarkets", () => {
               status: { open: {} },
               outcome: { none: {} },
               settlePriceScaled: num(0n),
+              settledAt: num(0n),
             },
           },
         ]),
@@ -60,6 +62,7 @@ describe("fetchMarkets", () => {
       outcome: "Yes",
       settlePriceScaled: 181_420_000_000_000_000_000n,
       pairsOutstanding: 12n,
+      settledAt: 1_767_000_300n,
     });
     expect(rows[1]?.settled).toBe(false);
     expect(rows[1]?.outcome).toBe("None");

@@ -13,7 +13,7 @@ export NEXT_TELEMETRY_DISABLED := 1
 PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
-	client lint lint-rust lint-js-py typecheck test test-rust-unit test-js-py-unit test-security \
+	client lint lint-rust lint-js-py check-links typecheck test test-rust-unit test-js-py-unit test-security \
 	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet test-deploy-devnet e2e dev
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
@@ -58,7 +58,7 @@ client: build-local
 	cp target/types/meridian.ts packages/client/src/idl/meridian.ts
 	pnpm exec prettier --write packages/client/src/idl
 
-lint: lint-rust lint-js-py
+lint: lint-rust lint-js-py check-links
 
 lint-rust:
 	cargo fmt --all -- --check
@@ -69,6 +69,9 @@ lint-js-py:
 	pnpm exec prettier --check .
 	uv run --locked ruff check .
 	uv run --locked ruff format --check .
+
+check-links:
+	scripts/check-links.sh
 
 typecheck:
 	pnpm -r run typecheck
@@ -138,3 +141,11 @@ e2e:
 
 dev:
 	scripts/dev.sh
+
+## M2-11: deploy the app to Vercel / the automation service to Railway. Run by the `deploy:*` CI
+## jobs on main with the protected tokens; locally add DEPLOY_ARGS=--dry-run to list the variables.
+deploy-vercel:
+	pnpm --filter deploy run deploy-platform vercel $(DEPLOY_ARGS)
+
+deploy-railway:
+	pnpm --filter deploy run deploy-platform railway $(DEPLOY_ARGS)
