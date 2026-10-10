@@ -1,0 +1,8 @@
+{
+  "url": "http://127.0.0.1:3108/trade/DAk6mzK4wE6kHJQH9KSZLUi5fEUe3jX34npy1Cb2nVjP",
+  "lighthouse": "lighthouse@12.8.2",
+  "accessibility": {
+    "mobile": 100,
+    "desktop": 100
+  }
+}

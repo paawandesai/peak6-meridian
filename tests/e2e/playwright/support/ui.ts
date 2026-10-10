@@ -18,7 +18,7 @@ export const qtyInput = (page: Page): Locator => page.getByLabel(/qty|quantity/i
 
 /** Select order kind (market or limit) by clicking the corresponding radio button label. */
 export const orderKindRadio = (page: Page, kind: "market" | "limit"): Locator =>
-  page.getByRole("radio", { name: kind === "market" ? "Market" : "Limit" });
+  page.getByRole("radio", { name: kind === "market" ? "Market" : "Limit", exact: true });
 
 /** The single sign button, e.g. "Sign and buy NO". */
 export const signButton = (page: Page): Locator =>

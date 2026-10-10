@@ -9,14 +9,18 @@ import { AnchorProvider, type Program, Wallet } from "@coral-xyz/anchor";
 import {
   BN,
   buildTrade,
+  closeTimeET,
   createMeridianProgram,
   findConfigPda,
   type Intent,
+  isTradingDay,
   marketAddresses,
   type MarketAddresses,
   type Meridian,
+  nextTradingDay,
   type OrderKindName,
   symbolBytes,
+  tradingDateET,
 } from "@meridian/client";
 import {
   createAssociatedTokenAccountIdempotent,
@@ -128,6 +132,23 @@ export async function fundMaker(
   return { keypair, accounts };
 }
 
+/** Mints `usdc` whole test-USDC to `account` (the admin is the throwaway seed's mint authority). */
+export async function fundUsdc(
+  chain: Chain,
+  state: StackState,
+  account: PublicKey,
+  usdc: bigint,
+): Promise<void> {
+  await mintTo(
+    chain.connection,
+    chain.admin,
+    new PublicKey(state.usdcMint),
+    account,
+    chain.admin,
+    usdc * UNITS_PER_USDC,
+  );
+}
+
 export async function mintPairs(
   chain: Chain,
   market: MarketAddresses,
@@ -227,6 +248,75 @@ export async function createShortMarket(
   const market = seededMarket(chain, state, "META", strikeCents);
   const account = await chain.program.account.market.fetch(market.market);
   return { market, strikeCents, closeTs: Number(account.closeTs.toString()) };
+}
+
+/**
+ * The next session whose 16:00 ET (or early) close is at least `marginSecs` away, as an ISO date,
+ * from the shared NYSE calendar (America/New_York, never a hardcoded offset).
+ */
+export function nextOpenSession(nowMs: number, marginSecs: number): string {
+  let date = tradingDateET(new Date(nowMs));
+  for (let i = 0; i < 14; i += 1) {
+    if (isTradingDay(date) && closeTimeET(date).closeTs > Math.floor(nowMs / 1000) + marginSecs) {
+      return date;
+    }
+    date = nextTradingDay(date);
+  }
+  throw new Error(`no open session within two weeks of ${new Date(nowMs).toISOString()}`);
+}
+
+/**
+ * A real session market (close_ts = the session's ET close, so the Trade page lists it; the
+ * `--close-in-secs` seed markets are test markets it hides, P0-1): the create-markets CLI for
+ * `symbol` at `prevCloseCents` on the next open session. Idempotent; returns the strike that
+ * equals the previous close (the ladder always contains it).
+ */
+export function createSessionMarket(
+  chain: Chain,
+  state: StackState,
+  symbol: string,
+  prevCloseCents: number,
+): { market: MarketAddresses; tradingDate: number; strikeCents: bigint } {
+  const isoDate = nextOpenSession(Date.now(), 1_800);
+  const dir = mkdtempSync(join(tmpdir(), "meridian-pw-session-"));
+  const file = join(dir, "prev_closes.json");
+  writeFileSync(
+    file,
+    JSON.stringify({ tradingDate: isoDate, closes: { [symbol]: prevCloseCents } }),
+  );
+  execFileSync(
+    "pnpm",
+    [
+      "--filter",
+      "automation",
+      "exec",
+      "tsx",
+      CREATE_MARKETS_CLI,
+      "--prev-closes",
+      file,
+      "--date",
+      isoDate,
+      "--program-id",
+      state.programId,
+    ],
+    {
+      cwd: ROOT,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        ANCHOR_PROVIDER_URL: state.rpcUrl,
+        ANCHOR_WALLET: state.adminKeypairPath,
+        SOLANA_CLUSTER: "localnet",
+      },
+    },
+  );
+  const tradingDate = Number(isoDate.replaceAll("-", ""));
+  const strikeCents = BigInt(prevCloseCents);
+  return {
+    market: marketAddresses({ symbol, tradingDate, strikeCents }, chain.programId),
+    tradingDate,
+    strikeCents,
+  };
 }
 
 /** Waits for the cluster clock to pass `closeTs`; fails only if it stalls for a minute. */
