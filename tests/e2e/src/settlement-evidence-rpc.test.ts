@@ -1,5 +1,5 @@
-import { BN, BorshCoder } from "@coral-xyz/anchor";
-import { MERIDIAN_IDL, MERIDIAN_PROGRAM_ID } from "@meridian/client";
+import { BorshCoder } from "@coral-xyz/anchor";
+import { BN, MERIDIAN_IDL, MERIDIAN_PROGRAM_ID } from "@meridian/client";
 import { Keypair, type PublicKey } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 

@@ -11,7 +11,8 @@ import {
   type Meridian,
 } from "@meridian/client";
 import { type Program } from "@coral-xyz/anchor";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { type Connection, PublicKey } from "@solana/web3.js";
+import { sharedConnection } from "@/lib/rpc";
 import { z } from "zod";
 
 import type { PublicConfig } from "@/lib/config";
@@ -253,7 +254,7 @@ const readOnlyWallet = {
 };
 
 export function createPortfolioSource(config: PublicConfig): PortfolioSource {
-  const connection = new Connection(config.rpcUrl, "confirmed");
+  const connection = sharedConnection(config.rpcUrl);
   const provider = new AnchorProvider(connection, readOnlyWallet, { commitment: "confirmed" });
   const program: Program<Meridian> = createMeridianProgram(provider, config.programId);
   return {
