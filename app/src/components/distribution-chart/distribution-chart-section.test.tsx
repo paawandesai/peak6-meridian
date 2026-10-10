@@ -12,8 +12,8 @@ vi.mock("./distribution-chart", () => ({
 
 describe("DistributionChartSection", () => {
   const points: DistributionPoint[] = [
-    { strikeCents: 680_00n, yesCents: 60, fairCents: 58 },
-    { strikeCents: 700_00n, yesCents: 40, fairCents: 42 },
+    { strikeCents: 680_00n, yesCents: 60, fairCents: 58, market: "market-1" },
+    { strikeCents: 700_00n, yesCents: 40, fairCents: 42, market: "market-2" },
   ];
 
   let originalInnerWidth: number;
