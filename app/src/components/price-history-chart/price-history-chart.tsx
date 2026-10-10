@@ -115,14 +115,28 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
 
     let cancelled = false;
 
-    setStatus("loading");
+    // Only show loading if we don't have cached data yet
+    if (!lastGoodData) {
+      setStatus("loading");
+    }
 
     void fetchHistory(ticker, nowSecs)
       .then((data) => {
         if (cancelled) return;
         if (data.s !== "ok" || !data.t || !data.o || !data.h || !data.l || !data.c) {
           // Keep last good data if we have it
-          if (lastGoodData) {
+          if (lastGoodData && lastGoodData.t && lastGoodData.o && lastGoodData.h && lastGoodData.l && lastGoodData.c && seriesRef.current) {
+            // Re-apply cached data to the series
+            const { t, o, h, l, c } = lastGoodData;
+            const candles = t.map((time, i) => ({
+              time: time as UTCTimestamp,
+              open: o[i] ?? 0,
+              high: h[i] ?? 0,
+              low: l[i] ?? 0,
+              close: c[i] ?? 0,
+            }));
+            seriesRef.current.setData(candles);
+            chartRef.current?.timeScale().fitContent();
             setStatus("ready");
           } else {
             setStatus("empty");
@@ -151,7 +165,18 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
         if (cancelled) return;
         console.error("Failed to fetch price history:", error);
         // Keep last good data if we have it
-        if (lastGoodData) {
+        if (lastGoodData && lastGoodData.t && lastGoodData.o && lastGoodData.h && lastGoodData.l && lastGoodData.c && seriesRef.current) {
+          // Re-apply cached data to the series
+          const { t, o, h, l, c } = lastGoodData;
+          const candles = t.map((time, i) => ({
+            time: time as UTCTimestamp,
+            open: o[i] ?? 0,
+            high: h[i] ?? 0,
+            low: l[i] ?? 0,
+            close: c[i] ?? 0,
+          }));
+          seriesRef.current.setData(candles);
+          chartRef.current?.timeScale().fitContent();
           setStatus("ready");
         } else {
           setStatus("error");
