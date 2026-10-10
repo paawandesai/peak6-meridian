@@ -33,7 +33,6 @@ import { loadPublicConfig } from "@/lib/config";
 import {
   formatPriceTenths,
   formatUsdCents,
-  formatUsdcBalance,
   formatUsdSigned,
   scaledToCentsFloor,
 } from "@/lib/display";
@@ -54,11 +53,6 @@ export const MARK_FOOTNOTE = "Mark is the book midpoint, not a guaranteed sale p
 export const CONNECT_COPY = "Connect your wallet to see your positions, P&L and winnings.";
 
 type Filter = "open" | "resting" | "closed";
-const FILTERS: readonly { readonly id: Filter; readonly label: string }[] = [
-  { id: "open", label: "Open" },
-  { id: "resting", label: "Resting orders" },
-  { id: "closed", label: "Closed" },
-];
 
 /** `NVDA ≥ $180 10/08` */
 export function marketLabel(market: MarketRow): string {

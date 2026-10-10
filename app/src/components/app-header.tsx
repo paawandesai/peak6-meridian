@@ -88,7 +88,7 @@ export function AppHeader({
 
   const handleDemoConnect = () => {
     // Connect to burner wallet (demo wallet adapter)
-    select("burner" as any);
+    select("burner");
   };
 
   return (
