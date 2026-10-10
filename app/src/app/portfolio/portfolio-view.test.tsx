@@ -383,4 +383,23 @@ describe("Portfolio page", () => {
     expect(totals).toHaveTextContent("Redeemable now $0.00");
     expect(totals).toHaveTextContent("Realized $0.00");
   });
+
+  it("shows non-zero redeemable amount correctly formatted", async () => {
+    setup({
+      snap: snapshot({
+        holdings: { [AAPL.address]: held(40n, 0n) },
+        events: as([
+          fill("a", AAPL.address, {
+            taker: KEY.toBase58(),
+            maker: OTHER,
+            takerSide: "Bid",
+            price: 55,
+            qty: 40n,
+          }),
+        ]),
+      }),
+    });
+    const totals = await screen.findByLabelText("Totals");
+    expect(totals).toHaveTextContent("Redeemable now $40.00");
+  });
 });
