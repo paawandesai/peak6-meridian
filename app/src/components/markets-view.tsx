@@ -64,7 +64,7 @@ export function MarketsView({
   // M3-03: Fair values for edge calculation and distribution chart
   const fairValues = useFairValues();
   // P0-3 MR A: Ticker selection with ?t= deep link
-  const [selectedTicker, setSelectedTicker] = useTickerSelection();
+  const [selectedTicker] = useTickerSelection();
 
   if (state.status === "loading" || clock === null) {
     return (
