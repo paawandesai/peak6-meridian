@@ -9,7 +9,8 @@ import {
   findOpenOrdersPda,
   marketAddresses,
 } from "@meridian/client";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { type Connection, PublicKey } from "@solana/web3.js";
+import { sharedConnection } from "@/lib/rpc";
 
 import type { BookOrder, FullBook } from "./book-view";
 import type { PublicConfig } from "@/lib/config";
@@ -93,7 +94,7 @@ const readOnlyWallet = {
 };
 
 export function createTradeReader(config: PublicConfig, row: MarketRow): TradeReader {
-  const connection = new Connection(config.rpcUrl, "confirmed");
+  const connection = sharedConnection(config.rpcUrl);
   const provider = new AnchorProvider(connection, readOnlyWallet, { commitment: "confirmed" });
   const program = createMeridianProgram(provider, config.programId);
   const addresses = marketAddresses(
