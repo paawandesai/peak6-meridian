@@ -95,11 +95,10 @@ describe("MarketsView", () => {
 
     const nvda = screen.getByRole("region", { name: "NVDA" });
     expect(within(nvda).getByText("1,200")).toBeInTheDocument();
-    // Each ticker group now has two h2s: the ticker name and "Fair value" from TickerInsight.
+    // Ticker headings (TickerInsight is on Trade page only, not Markets page).
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings).toContain("AAPL");
     expect(headings).toContain("NVDA");
-    expect(headings.filter((h) => h === "Fair value")).toHaveLength(2);
   });
 
   it("links each strike to its Trade page (UI-04 AC8)", async () => {
