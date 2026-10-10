@@ -137,7 +137,7 @@ async function run(options: MigrateOptions): Promise<void> {
     rentExemptLamports: rentExempt,
   });
   const decoded = program.coder.accounts.decode<Decoded>("config", migrated.data);
-  if (JSON.stringify(decodeConfigPrefix(after)) !== JSON.stringify(decodeConfigPrefix(before))) {
+  if (describePrefix(after) !== describePrefix(before)) {
     problems.push("the decoded v1 fields differ after migration");
   }
   if (problems.length > 0) {
