@@ -95,8 +95,12 @@ export async function pollBooks(
   const toFetch: { row: MarketRow; key: PublicKey }[] = [];
 
   for (const row of markets) {
-    // Skip closed/settled markets if already cached (P0-4: fetch once)
-    if (row.settled && cached[row.address] !== undefined) {
+    // Skip closed/settled markets if we have a ready cached value (P0-4: fetch once).
+    // Retry failures (unavailable cached values). A market is closed when closeTs is in the past;
+    // settled is a stronger signal that covers Closed/Settling/SettlementDelayed/Settled.
+    const cachedValue = cached[row.address];
+    const isClosed = row.settled || BigInt(Math.floor(Date.now() / 1000)) >= row.closeTs;
+    if (isClosed && cachedValue?.state === "ready") {
       continue;
     }
     try {
