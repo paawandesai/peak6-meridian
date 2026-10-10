@@ -7,11 +7,13 @@ mint_pair, place_order, cancel_order, settle_funds.
 SECURITY: MARKET_MAKER_KEYPAIR must never be logged (AC5).
 """
 
+import base64
 import logging
 import struct
 
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Confirmed, Finalized
+from solana.rpc.types import MemcmpOpts
 from solders.instruction import AccountMeta, Instruction
 from solders.keypair import Keypair
 from solders.message import Message
@@ -139,13 +141,19 @@ class ChainMarketSource:
         - pairs_outstanding: u64 (8 bytes, offset ~233)
         """
         try:
-            # Fetch all program accounts (filter by Market discriminator in Python)
+            # Fetch all program accounts filtered by Market discriminator at RPC level (P1-7)
             # Market discriminator from IDL: [219, 190, 213, 55, 0, 227, 198, 154]
             market_discriminator = bytes([219, 190, 213, 55, 0, 227, 198, 154])
+            # memcmp filter: check bytes 0-7 (discriminator) match Market discriminator
+            # MemcmpOpts expects base64-encoded bytes per solana RPC spec
+            disc_b64 = base64.b64encode(market_discriminator).decode("ascii")
             response = await self.rpc.get_program_accounts(
                 self.program_id,
                 encoding="base64",
                 commitment=Confirmed,
+                filters=[
+                    MemcmpOpts(offset=0, bytes=disc_b64),
+                ],
             )
 
             markets = []
@@ -626,3 +634,82 @@ class ChainOrderClient:
         # Account exists, get balance
         balance_resp = await self.rpc.get_token_account_balance(user_no)
         return int(balance_resp.value.amount)
+
+    async def get_multiple_token_balances(
+        self, markets: list[str], owner: str
+    ) -> dict[str, tuple[int, int]]:
+        """Batch-fetch YES and NO token balances for multiple markets (P1-7).
+
+        Uses get_multiple_accounts with chunking at ≤99 keys per RPC call.
+        Returns dict mapping market address to (yes_balance, no_balance) tuple.
+        Missing ATAs (account doesn't exist) are treated as balance 0.
+
+        Args:
+            markets: List of market addresses (base58 pubkey strings)
+            owner: Owner pubkey (base58 string)
+
+        Returns:
+            Dict mapping market address to (yes_balance, no_balance).
+            Markets with RPC errors are omitted from the result.
+        """
+        owner_pubkey = Pubkey.from_string(owner)
+        # Build list of (market, yes_ata, no_ata) tuples
+        ata_requests: list[tuple[str, Pubkey, Pubkey]] = []
+        for market in markets:
+            market_pda = Pubkey.from_string(market)
+            yes_mint = derive_yes_mint_pda(self.program_id, market_pda)
+            no_mint = derive_no_mint_pda(self.program_id, market_pda)
+            yes_ata = get_associated_token_address(yes_mint, owner_pubkey)
+            no_ata = get_associated_token_address(no_mint, owner_pubkey)
+            ata_requests.append((market, yes_ata, no_ata))
+
+        # Flatten to list of pubkeys for batching
+        all_pubkeys = []
+        for _, yes_ata, no_ata in ata_requests:
+            all_pubkeys.append(yes_ata)
+            all_pubkeys.append(no_ata)
+
+        # Chunk at ≤99 keys per RPC call
+        chunk_size = 99
+        all_accounts = []
+        for i in range(0, len(all_pubkeys), chunk_size):
+            chunk = all_pubkeys[i : i + chunk_size]
+            try:
+                resp = await self.rpc.get_multiple_accounts(chunk, commitment=Confirmed)
+                all_accounts.extend(resp.value)
+            except Exception:
+                logger.exception(f"Failed to fetch batch of {len(chunk)} token accounts")
+                # Fill with None for this chunk to maintain index alignment
+                all_accounts.extend([None] * len(chunk))
+
+        # Parse balances from account data
+        # SPL Token account layout: amount is u64 at offset 0
+        # (no Anchor discriminator for SPL Token accounts)
+        u64_size = 8
+        result: dict[str, tuple[int, int]] = {}
+        for idx, (market, _, _) in enumerate(ata_requests):
+            yes_account = all_accounts[idx * 2]
+            no_account = all_accounts[idx * 2 + 1]
+
+            try:
+                # Parse YES balance
+                yes_balance = 0
+                if yes_account and yes_account.data:
+                    data = bytes(yes_account.data)
+                    if len(data) >= u64_size:
+                        yes_balance = struct.unpack("<Q", data[0:u64_size])[0]
+
+                # Parse NO balance
+                no_balance = 0
+                if no_account and no_account.data:
+                    data = bytes(no_account.data)
+                    if len(data) >= u64_size:
+                        no_balance = struct.unpack("<Q", data[0:u64_size])[0]
+
+                result[market] = (yes_balance, no_balance)
+            except Exception:
+                logger.exception(f"Failed to parse token balances for {market}")
+                # Skip this market (don't add to result)
+                continue
+
+        return result

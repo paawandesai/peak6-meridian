@@ -51,3 +51,9 @@ class OrderClient(Protocol):
     async def get_no_token_balance(self, market: str, owner: str) -> int:
         """Get NO token balance for owner in market."""
         ...
+
+    async def get_multiple_token_balances(
+        self, markets: list[str], owner: str
+    ) -> dict[str, tuple[int, int]]:
+        """Batch-fetch YES and NO token balances for multiple markets (P1-7)."""
+        ...

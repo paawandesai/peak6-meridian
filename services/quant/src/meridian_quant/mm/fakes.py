@@ -84,6 +84,18 @@ class FakeOrderClient:
         """Get NO token balance for owner in market."""
         return self._no_balances[(market, owner)]
 
+    async def get_multiple_token_balances(
+        self, markets: list[str], owner: str
+    ) -> dict[str, tuple[int, int]]:
+        """Batch-fetch YES and NO token balances for multiple markets (P1-7)."""
+        return {
+            market: (
+                self._yes_balances[(market, owner)],
+                self._no_balances[(market, owner)],
+            )
+            for market in markets
+        }
+
     def set_yes_balance(self, market: str, owner: str, balance: int) -> None:
         """Set YES balance (test helper)."""
         self._yes_balances[(market, owner)] = balance

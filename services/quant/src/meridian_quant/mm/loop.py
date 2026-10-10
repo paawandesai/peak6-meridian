@@ -238,34 +238,39 @@ class MarketMakerLoop:
         InventoryTracker, then mints pairs if inventory is low. This ensures
         skew reflects actual fills and the 200-lot cap binds correctly.
 
+        P1-7: Uses batched get_multiple_accounts (chunked at ≤99) instead of
+        individual get_token_account_balance calls.
+
         Returns markets that were successfully synced. Markets with balance read
         failures are excluded (RPC errors propagate from get_*_token_balance).
         """
-        synced_markets = []
-        for market in markets:
-            if not market.is_open:
-                continue
+        open_markets = [m for m in markets if m.is_open]
+        if not open_markets:
+            return []
 
+        # Batch-fetch all token balances (P1-7: ≤99 keys per RPC call)
+        market_addresses = [m.market for m in open_markets]
+        balances = await self._order_client.get_multiple_token_balances(
+            market_addresses, self._mm_owner
+        )
+
+        synced_markets = []
+        for market in open_markets:
             market_key = MarketKey(
                 ticker=market.ticker,
                 trading_date=market.trading_date,
                 strike_cents=market.strike_cents,
             )
 
-            # Read YES and NO balances to compute signed position
-            try:
-                yes_balance = await self._order_client.get_yes_token_balance(
-                    market=market.market, owner=self._mm_owner
-                )
-                no_balance = await self._order_client.get_no_token_balance(
-                    market=market.market, owner=self._mm_owner
-                )
-                # Signed position = YES - NO (can be negative)
-                signed_position = yes_balance - no_balance
-                self.inventory.set(market_key, signed_position)
-            except Exception:
-                logger.exception(f"Failed to read token balances for {market.market}")
-                continue  # Skip this market (don't add to synced_markets, don't quote it)
+            # Get balances from batched result
+            if market.market not in balances:
+                logger.warning(f"Missing token balances for {market.market}, skipping")
+                continue
+
+            yes_balance, no_balance = balances[market.market]
+            # Signed position = YES - NO (can be negative)
+            signed_position = yes_balance - no_balance
+            self.inventory.set(market_key, signed_position)
 
             # Mint only if we need YES for asks AND position isn't at cap
             # Don't replenish sold inventory - let position move with fills

@@ -728,6 +728,18 @@ async def test_missing_ata_vs_rpc_timeout(mm_config: MMConfig) -> None:
                 return 0
             return await super().get_no_token_balance(market, owner)
 
+        async def get_multiple_token_balances(
+            self, markets: list[str], owner: str
+        ) -> dict[str, tuple[int, int]]:
+            """Batch-fetch balances, but inject errors for tests (P1-7)."""
+            if self.simulate_rpc_timeout:
+                raise Exception("RPC timeout")
+            # Simulate missing ATA only on first read (before mint)
+            if self.simulate_missing_ata_initial and self._first_balance_read:
+                self._first_balance_read = False
+                return {market: (0, 0) for market in markets}
+            return await super().get_multiple_token_balances(markets, owner)
+
         async def mint_pair(self, market: str, qty: int, owner: str) -> None:
             self.mint_called = True
             if self.simulate_rpc_timeout:
