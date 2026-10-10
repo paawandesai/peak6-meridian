@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { loadStatusData } from "./status-chain";
 import { StatusView } from "./status-view";
 import { AppHeader } from "@/components/app-header";
+import { BottomTabBar } from "@/components/app-shell/bottom-tab-bar";
 import { FaucetButton } from "@/components/faucet-button";
 import { Providers } from "@/components/providers";
 import { useReader } from "@/components/reader-context";
@@ -50,7 +51,7 @@ function Page() {
       >
         <FaucetButton />
       </AppHeader>
-      <main className="mx-auto max-w-5xl px-mer-4 py-mer-6">
+      <main className="mx-auto max-w-5xl px-mer-4 py-mer-6 pb-20 md:pb-mer-6">
         <h2 className="mb-mer-4 text-mer-xl font-semibold">Status</h2>
         {testMarketCount > 0 ? (
           <div className="mb-mer-4">
@@ -65,6 +66,7 @@ function Page() {
         {data.status === "error" ? <p role="alert">Could not load status: {data.message}</p> : null}
         {data.status === "ready" ? <StatusView data={data.value} /> : null}
       </main>
+      <BottomTabBar />
     </>
   );
 }

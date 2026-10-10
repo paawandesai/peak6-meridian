@@ -7,6 +7,7 @@ import { TradeView } from "./trade-view";
 import { createTradeReader } from "../_lib/reader";
 import { createTradeActions } from "../_lib/tx";
 import { AppHeader } from "@/components/app-header";
+import { BottomTabBar } from "@/components/app-shell/bottom-tab-bar";
 import { FaucetButton } from "@/components/faucet-button";
 import { TickerInsight } from "@/components/fair-value/ticker-insight";
 import { Providers } from "@/components/providers";
@@ -96,7 +97,8 @@ function Page({ address }: { readonly address: string }) {
       >
         <FaucetButton />
       </AppHeader>
-      <main className="mx-auto max-w-5xl px-mer-4 py-mer-6">{body}</main>
+      <main className="mx-auto max-w-5xl px-mer-4 py-mer-6 pb-20 md:pb-mer-6">{body}</main>
+      <BottomTabBar />
     </>
   );
 }

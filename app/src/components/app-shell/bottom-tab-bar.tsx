@@ -46,8 +46,8 @@ export function BottomTabBar() {
               className={`
                 flex flex-1 flex-col items-center justify-center gap-1
                 py-2 text-mer-xs transition-colors
-                focus:outline-none focus:ring-2 focus:ring-inset focus:ring-mer-primary
-                ${active ? "text-mer-primary" : "text-mer-ink-muted hover:text-mer-ink"}
+                focus:ring-2 focus:ring-inset focus:ring-mer-focus
+                ${active ? "text-mer-yes" : "text-mer-ink-muted hover:text-mer-ink"}
               `}
               style={{ minHeight: "44px" }}
               aria-current={active ? "page" : undefined}

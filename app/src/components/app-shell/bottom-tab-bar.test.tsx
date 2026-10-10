@@ -136,7 +136,7 @@ describe("BottomTabBar", () => {
     render(<BottomTabBar />);
 
     const marketsTab = screen.getByRole("link", { name: /Markets/ });
-    expect(marketsTab).toHaveClass("text-mer-primary");
+    expect(marketsTab).toHaveClass("text-mer-yes");
   });
 
   it("applies inactive styles to non-current tabs", () => {
