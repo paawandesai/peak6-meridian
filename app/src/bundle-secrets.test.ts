@@ -56,6 +56,7 @@ describe("server env names in client code", () => {
         "USDC_MINT",
         "SERVICE_TOKEN",
         "QUANT_URL",
+        "PYTH_API_TOKEN",
       ]),
     );
     expect(names.some((name) => name.startsWith("NEXT_PUBLIC_"))).toBe(false);
