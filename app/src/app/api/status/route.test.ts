@@ -96,12 +96,13 @@ describe("GET /api/status", () => {
     expect(mockReader.fetchMarketInvariants).toHaveBeenCalledTimes(1); // Still 1
   });
 
-  it("expires cache after 30 seconds", async () => {
+  it("expires cache after 5 minutes for active markets", async () => {
     vi.useFakeTimers();
     const now = Date.now();
     vi.setSystemTime(now);
 
     vi.mocked(mockReader.getActiveDate).mockResolvedValue(20261010);
+    // Unsettled market (settledAt: 0) → 5min cache
     vi.mocked(mockReader.fetchMarketInvariants).mockResolvedValue([mockMarket]);
 
     const req1 = createRequest("/api/status");
@@ -109,10 +110,10 @@ describe("GET /api/status", () => {
 
     expect(mockReader.fetchMarketInvariants).toHaveBeenCalledTimes(1);
 
-    // Advance time by 31 seconds
-    vi.setSystemTime(now + 31_000);
+    // Advance time by 5min + 1s
+    vi.setSystemTime(now + 5 * 60 * 1000 + 1000);
 
-    // Second request after 30s should re-fetch
+    // Second request after 5min should re-fetch
     const req2 = createRequest("/api/status");
     await GET(req2);
 
