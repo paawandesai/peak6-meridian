@@ -47,6 +47,11 @@ describe("demo-wallet registration guard (AC6)", () => {
     vi.stubGlobal("window", {
       addEventListener: vi.fn(),
       dispatchEvent,
+      localStorage: {
+        getItem: vi.fn(() => null),
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
+      },
     });
 
     registerDemoWallet();
