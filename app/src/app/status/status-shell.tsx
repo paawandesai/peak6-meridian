@@ -144,7 +144,7 @@ function Page() {
                   {
                     createdAt: m.createdAt > 0 ? m.createdAt : null,
                     settledAt: m.settledAt > 0 ? m.settledAt : null,
-                    settleSlot: m.settleSlot > 0 ? BigInt(m.settleSlot) : null,
+                    settleSlot: m.settleSlot > 0 ? m.settleSlot : null,
                     oracleSlot: m.oracleAsOf > 0 ? BigInt(m.oracleAsOf) : null,
                   },
                 ])
