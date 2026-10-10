@@ -2,24 +2,26 @@
  * RedStone oracle integration types (M2-16)
  */
 
-/** RedStone gateway response for a data package */
-export interface RedstoneDataPackage {
-  timestampMilliseconds: number;
-  signature: string;
-  dataPoints: Array<{
-    dataFeedId: string;
-    value: number;
-  }>;
-  signerAddress: string;
+/**
+ * RedStone gateway historical response format.
+ * Gateways return pre-built payloads with all signatures included.
+ */
+export interface RedstoneHistoricalResponse {
+  /** Feed ID (32-byte hex string) */
+  readonly id: string;
+  /** Close timestamp in milliseconds */
+  readonly timestampMilliseconds: number;
+  /** Complete RedStone payload bytes (hex-encoded) */
+  readonly payload: string;
 }
 
 /** RedStone gateway client config */
 export interface RedstoneGatewayConfig {
-  gateways: string[]; // At least 2
-  dataServiceId: string; // "redstone-primary-prod"
-  maxPackageDelaySecs: number;
-  requiredSigners: number; // At least 3
-  timeoutMs: number;
+  readonly gateways: string[]; // At least 2
+  readonly dataServiceId: string; // "redstone-primary-prod"
+  readonly maxPackageDelaySecs: number;
+  readonly requiredSigners: number; // At least 3 (validated on-chain)
+  readonly timeoutMs: number;
 }
 
 /** Official close from external source (Tiingo/Twelve Data) */
