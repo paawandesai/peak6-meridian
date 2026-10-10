@@ -15,6 +15,10 @@ import { useAsync } from "@/components/use-async";
 import { useNow } from "@/components/use-now";
 import { loadPublicConfig } from "@/lib/config";
 import { partitionMarkets } from "@/lib/markets";
+import { dedupe } from "@/lib/rpc";
+
+/** Status data cached for 30 s to limit RPC load on refresh (P0-4). */
+const STATUS_CACHE_MS = 30_000;
 
 function Page() {
   const reader = useReader();
@@ -31,15 +35,18 @@ function Page() {
     return { testMarketCount: test.length, markets: { ...marketsAll, value: filtered } };
   }, [marketsAll, showTestMarkets]);
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
-  const data = useAsync(
-    async () => {
-      const all = await reader.listMarkets();
-      const { session, test } = partitionMarkets(all);
-      const filtered = showTestMarkets ? [...session, ...test] : session;
-      return loadStatusData(connection, filtered, config.programId);
-    },
+  // P0-4: Cache loadStatusData for 30s to limit RPC load. Key by filtered set to invalidate on toggle.
+  const loadStatusCached = useMemo(
+    () =>
+      dedupe(async () => {
+        const all = await reader.listMarkets();
+        const { session, test } = partitionMarkets(all);
+        const filtered = showTestMarkets ? [...session, ...test] : session;
+        return loadStatusData(connection, filtered, config.programId);
+      }, STATUS_CACHE_MS),
     [reader, connection, config, showTestMarkets],
   );
+  const data = useAsync(() => loadStatusCached(), [loadStatusCached]);
   return (
     <>
       <AppHeader
