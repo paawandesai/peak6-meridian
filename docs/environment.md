@@ -40,6 +40,7 @@
 | `OPS_AGENT_BUDGET_USD` | ops-agent | Hard spend cap; agent refuses calls once reached | no (default 20) | `20` |
 | `SERVICE_TOKEN` | app, automation, quant, ops-agent | Bearer token for internal HTTP calls | yes (services) | `local-dev-token` |
 | `QUANT_URL` / `OPS_AGENT_URL` | app, automation | Internal service URLs | M3 | `http://127.0.0.1:4100` |
+| `AUTOMATION_URL` | app (server) | Automation service base URL; `/api/market-open-times` proxies its `GET /markets` open-time index (P1-4). Unset: the UI shows "Open time unavailable" | no | `http://127.0.0.1:4000` |
 | `ALERT_WEBHOOK_URL` | automation, ops-agent, app (server) | POST JSON alerts (Discord/Slack-compatible) | no | `https://example.invalid/webhook` |
 | `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | CI deploy job only | Deploy the app with the Vercel CLI (IDs come from `vercel link`) | M2 | `test-vercel-token` |
 | `RAILWAY_TOKEN` | CI deploy job only | Railway project token for deploying services | M2 | `test-railway-token` |

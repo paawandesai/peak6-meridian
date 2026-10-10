@@ -16,6 +16,7 @@ import {
   useFairValues,
 } from "./fair-values";
 import { fair, NOW } from "@/components/fair-value/test-support";
+import { setVisibility } from "@/lib/account-test-support";
 
 describe("edge (M3-03 AC1)", () => {
   it("is market − fair in integer cents, signed, with the word always written", () => {
@@ -108,7 +109,10 @@ describe("fetchFairValues", () => {
 
 describe("useFairValues (M3-03 AC2: fake timers)", () => {
   beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    setVisibility("visible");
+  });
 
   it("reads at once and then every 5 s", async () => {
     const fetcher = vi.fn().mockResolvedValue([fair()]);
@@ -128,6 +132,24 @@ describe("useFairValues (M3-03 AC2: fake timers)", () => {
       await vi.advanceTimersByTimeAsync(REFRESH_MS * 3);
     });
     expect(fetcher).toHaveBeenCalledTimes(5);
+  });
+
+  it("skips reads while the tab is hidden (P1-2)", async () => {
+    const fetcher = vi.fn().mockResolvedValue([fair()]);
+    renderHook(() => useFairValues({ fetcher }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    setVisibility("hidden");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REFRESH_MS * 4);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    setVisibility("visible");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REFRESH_MS);
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the last good values and marks the refresh failed when a read fails", async () => {

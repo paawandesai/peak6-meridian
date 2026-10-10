@@ -28,3 +28,6 @@ __pycache__/
 # Playwright output (M2-13)
 playwright-report/
 test-results/
+
+# Local caches of public data (demo-session closes, make demo-markets)
+.cache/

@@ -12,3 +12,5 @@ test-ledger/
 .ci-cache/
 .anchor/
 next-env.d.ts
+# Recorded evidence (screenshots, timing and Lighthouse reports) is generated output, kept verbatim.
+tests/e2e/evidence/

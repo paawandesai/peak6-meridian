@@ -6,6 +6,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { usePythQuotes } from "./use-pyth-quotes";
 import { PYTH_FEED_IDS } from "./pyth-quotes";
+import { setVisibility } from "./account-test-support";
 
 describe("usePythQuotes", () => {
   afterEach(() => {
@@ -122,5 +123,29 @@ describe("usePythQuotes", () => {
     expect(result.current.error?.message).toContain("500");
 
     unmount();
+  });
+
+  it("skips polls while the tab is hidden and resumes when shown (P1-2)", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ quotes: [], unavailable: [], server_time: Date.now() }),
+      });
+      global.fetch = fetchMock;
+      const { unmount } = renderHook(() => usePythQuotes());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      setVisibility("hidden");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      setVisibility("visible");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+      unmount();
+    } finally {
+      setVisibility("visible");
+      vi.useRealTimers();
+    }
   });
 });

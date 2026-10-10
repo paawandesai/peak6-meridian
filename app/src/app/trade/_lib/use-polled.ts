@@ -2,31 +2,56 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type Polled<T> =
-  | { readonly status: "loading" }
-  | { readonly status: "error"; readonly message: string }
-  | { readonly status: "ready"; readonly value: T };
+import type { LiveRead, LiveSource } from "@/lib/account-feed";
+import { isDocumentVisible, onDocumentVisible } from "@/lib/visibility";
+
+export type Polled<T> = LiveRead<T>;
 
 /**
  * Runs `load` now and every `intervalMs`, keeping the last good value on a later failure. A tick
- * is skipped while the previous load is in flight, so replies cannot arrive out of order.
- * `refresh` reloads at once (after a confirmed transaction). `load` may change identity freely;
- * pass a changing `key` to restart (a different wallet).
+ * is skipped while the previous load is in flight, so replies cannot arrive out of order, and
+ * while the tab is hidden (it reloads once when shown). `refresh` reloads at once (after a
+ * confirmed transaction). `load` may change identity freely; pass a changing `key` to restart
+ * (a different wallet).
+ *
+ * P1-2: with a `source` (account subscriptions on the shared feed) nothing is polled here: the
+ * feed pushes changes and owns the fallback polling. `live` is true while pushes are flowing.
  */
 export function usePolled<T>(
   load: () => Promise<T>,
   intervalMs: number,
   key: string,
-): { state: Polled<T>; refresh: () => void } {
+  source: LiveSource<T> | null = null,
+): { state: Polled<T>; refresh: () => void; live: boolean } {
   const [state, setState] = useState<Polled<T>>({ status: "loading" });
+  const [live, setLive] = useState(false);
   const loadRef = useRef(load);
   loadRef.current = load;
   const runRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     let cancelled = false;
-    let inFlight = false;
     setState({ status: "loading" });
+    setLive(false);
+    if (source !== null) {
+      const update = (): void => {
+        if (cancelled) return;
+        const next = source.read();
+        // Keep showing the last good value if there is one.
+        setState((previous) =>
+          next.status !== "ready" && previous.status === "ready" ? previous : next,
+        );
+        setLive(source.isLive());
+      };
+      runRef.current = () => source.refresh();
+      const stop = source.subscribe(update);
+      update();
+      return () => {
+        cancelled = true;
+        stop();
+      };
+    }
+    let inFlight = false;
     const run = (): void => {
       if (inFlight) return;
       inFlight = true;
@@ -49,13 +74,17 @@ export function usePolled<T>(
     };
     runRef.current = run;
     run();
-    const timer = setInterval(run, intervalMs);
+    const timer = setInterval(() => {
+      if (isDocumentVisible()) run();
+    }, intervalMs);
+    const stopVisible = onDocumentVisible(run);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      stopVisible();
     };
-  }, [intervalMs, key]);
+  }, [intervalMs, key, source]);
 
   const refresh = useCallback(() => runRef.current(), []);
-  return { state, refresh };
+  return { state, refresh, live };
 }

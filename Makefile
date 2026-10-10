@@ -14,7 +14,8 @@ PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
 	client lint lint-rust lint-js-py check-links typecheck test test-rust-unit test-js-py-unit test-security \
-	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet migrate-config test-deploy-devnet e2e e2e-ui e2e-ui-browser dev demo-ops
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet migrate-config test-deploy-devnet e2e e2e-ui e2e-ui-browser dev demo-ops \
+	demo-markets demo-settle
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -173,3 +174,24 @@ demo-ops:
 		exit 1; \
 	fi
 	pnpm exec tsx scripts/demo-ops.ts
+
+## Demo sessions: markets on a NON-trading day (weekend/holiday) that simulate a real session,
+## so there is something tradable when every real market is past close. Devnet or a loopback
+## validator only; the automation authority creates, the admin settles by override.
+##   make demo-markets AS_OF=2026-10-09 CLOSE="2026-10-11 20:00" [TRADING_DATE=2026-10-11] \
+##     [TICKERS=AAPL,MSFT] [CLOSES_JSON=path] [DRY_RUN=1]
+##   make demo-settle TRADING_DATE=2026-10-11 [CLOSES_JSON=path] [DRY_RUN=1]
+## CLOSE is ET wall-clock time. The session is recorded in deployments/demo-sessions.json
+## (commit it: the app's DEMO banner reads it). See scripts/demo/src/markets.ts and settle.ts.
+DEMO_TSX := pnpm exec tsx --env-file-if-exists=.env
+
+demo-markets:
+	$(DEMO_TSX) scripts/demo/src/demo-markets.ts --as-of "$(AS_OF)" --close "$(CLOSE)" \
+		--trading-date "$(TRADING_DATE)" --tickers "$(TICKERS)" --dry-run "$(DRY_RUN)" \
+		--closes-json "$(CLOSES_JSON)"
+	pnpm exec prettier --write --log-level warn deployments/demo-sessions.json
+
+demo-settle:
+	$(DEMO_TSX) scripts/demo/src/demo-settle.ts --trading-date "$(TRADING_DATE)" --dry-run "$(DRY_RUN)" \
+		--closes-json "$(CLOSES_JSON)"
+	pnpm exec prettier --write --log-level warn deployments/demo-sessions.json

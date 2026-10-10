@@ -1,8 +1,142 @@
+// @vitest-environment node
 import { BN } from "@coral-xyz/anchor";
 import { Keypair, PublicKey } from "@solana/web3.js";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { decodeBook, decodeSnapshot, fetchOpenTime, splAmount } from "./reader";
+import {
+  createTradeReader,
+  decodeBook,
+  decodeSnapshot,
+  decodeWallet,
+  fetchOpenTime,
+  splAmount,
+} from "./reader";
+import { encodeTokenAccount, fakeChain, pdaMarket, WALLET_OWNER } from "./test-support";
+import { createAccountFeed, type AccountFeed } from "@/lib/account-feed";
+import { parsePublicConfig } from "@/lib/config";
+import { connectionFetcher } from "@/lib/rpc";
+
+describe("decodeWallet (P1-2: shared by getWallet and walletSource)", () => {
+  const oo = vi.fn(() => ({ freeUsdc: new BN(500), freeYes: new BN(3) }));
+  const token = (amount: bigint) => ({ data: encodeTokenAccount(amount) });
+
+  it("reads the three token balances and the open-orders free balances", () => {
+    expect(
+      decodeWallet([token(5n), token(6n), token(7n), { data: new Uint8Array(90) }], oo),
+    ).toEqual({ yes: 5n, no: 6n, usdc: 7n, freeUsdc: 500n, freeYes: 3n });
+    expect(oo).toHaveBeenCalledWith(expect.any(Buffer));
+  });
+
+  it("treats missing accounts as zero", () => {
+    expect(decodeWallet([null, undefined, null, null], oo)).toEqual({
+      yes: 0n,
+      no: 0n,
+      usdc: 0n,
+      freeUsdc: 0n,
+      freeYes: 0n,
+    });
+  });
+
+  it("fails closed on a short token account or an undecodable open-orders account", () => {
+    expect(() => decodeWallet([{ data: Buffer.alloc(10) }, null, null, null], oo)).toThrow(
+      "SPL token account data too short",
+    );
+    const bad = () => {
+      throw new Error("bad discriminator");
+    };
+    expect(() => decodeWallet([null, null, null, { data: Buffer.alloc(8) }], bad)).toThrow(
+      "bad discriminator",
+    );
+  });
+});
+
+describe("createTradeReader on a fake chain (P1-2)", () => {
+  const config = parsePublicConfig({
+    rpcUrl: "http://127.0.0.1:8899",
+    usdcMint: Keypair.fromSeed(new Uint8Array(32).fill(3)).publicKey.toBase58(),
+  });
+  const row = pdaMarket(config, "NVDA", 18_000n);
+  let feed: AccountFeed | null = null;
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    feed?.dispose();
+    feed = null;
+    vi.useRealTimers();
+  });
+
+  async function setup() {
+    const chain = await fakeChain(config, [row]);
+    feed = createAccountFeed({
+      fetchMany: connectionFetcher(chain.connection),
+      socket: null,
+      isVisible: () => true,
+      onVisible: () => () => undefined,
+    });
+    const reader = createTradeReader(config, row, { connection: chain.connection, feed });
+    return { chain, reader, feed };
+  }
+
+  it("getSnapshot reads book, market and vault in one request", async () => {
+    const { chain, reader } = await setup();
+    const snapshot = await reader.getSnapshot();
+    expect(chain.counts.total).toBe(1);
+    expect(snapshot.book.bids[0]).toMatchObject({ price: 58, qty: 30n });
+    expect(snapshot.vault).toMatchObject({ pairs: 1_240n, balance: 1_240_000_000n });
+  });
+
+  it("getWallet reads the 3 ATAs and open orders in one request", async () => {
+    const { chain, reader } = await setup();
+    expect(await reader.getWallet(WALLET_OWNER)).toEqual({
+      yes: 5n,
+      no: 0n,
+      usdc: 100_000_000n,
+      freeUsdc: 2_000_000n,
+      freeYes: 3n,
+    });
+    expect(chain.counts.total).toBe(1);
+  });
+
+  it("snapshotSource decodes the same snapshot from the feed, stamped with the read time", async () => {
+    const { reader } = await setup();
+    vi.setSystemTime(1_791_486_000_000);
+    const source = reader.snapshotSource?.(1_000);
+    if (source === undefined) throw new Error("no snapshotSource");
+    source.subscribe(() => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    const read = source.read();
+    expect(read.status).toBe("ready");
+    if (read.status !== "ready") return;
+    expect(read.value.book.asks[0]).toMatchObject({ price: 61, qty: 40n });
+    expect(read.value.vault).toEqual({
+      pairs: 1_240n,
+      balance: 1_240_000_000n,
+      asOfSecs: 1_791_486_000,
+    });
+  });
+
+  it("snapshotSource reports a missing book as an error", async () => {
+    const { chain, reader } = await setup();
+    chain.accounts.clear();
+    const source = reader.snapshotSource?.(1_000);
+    source?.subscribe(() => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(source?.read()).toEqual({ status: "error", message: "book account not found" });
+  });
+
+  it("walletSource resolves the wallet's accounts and decodes them from the feed", async () => {
+    const { chain, reader } = await setup();
+    const source = reader.walletSource?.(WALLET_OWNER, 2_000);
+    source?.subscribe(() => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(source?.read()).toEqual({
+      status: "ready",
+      value: { yes: 5n, no: 0n, usdc: 100_000_000n, freeUsdc: 2_000_000n, freeYes: 3n },
+    });
+    expect(chain.counts.total).toBe(1);
+  });
+});
 
 const slot = (price: number, qty: number, owner: PublicKey) => ({
   orderId: { toString: () => String(price) },
@@ -26,53 +160,28 @@ describe("decodeBook", () => {
   });
 });
 
-describe("fetchOpenTime (D-050)", () => {
-  const market = Keypair.generate().publicKey;
-  const entry = (signature: string, blockTime: number | null) => ({
-    signature,
-    slot: 1,
-    err: null,
-    memo: null,
-    blockTime,
+describe("fetchOpenTime (D-050, P1-4: from the automation index, no signature scan)", () => {
+  const market = Keypair.generate().publicKey.toBase58();
+
+  it("is the indexed creation time of the market", async () => {
+    const read = vi.fn().mockResolvedValue({ ready: true, byMarket: { [market]: 1_791_288_000 } });
+    expect(await fetchOpenTime(market, read)).toBe(1_791_288_000);
+    expect(read).toHaveBeenCalledTimes(1);
   });
 
-  it("is the block time of the oldest signature", async () => {
-    const connection = {
-      getSignaturesForAddress: vi.fn().mockResolvedValue([entry("new", 200), entry("old", 100)]),
-    };
-    expect(await fetchOpenTime(connection, market)).toBe(100);
+  it("is null (shown as —) when a ready index has no record of the market", async () => {
+    const read = vi.fn().mockResolvedValue({ ready: true, byMarket: {} });
+    expect(await fetchOpenTime(market, read)).toBeNull();
   });
 
-  it("pages back while pages are full", async () => {
-    const full = Array.from({ length: 1000 }, (_, i) => entry(`s${i}`, 500 - i / 10));
-    const connection = {
-      getSignaturesForAddress: vi
-        .fn()
-        .mockResolvedValueOnce(full)
-        .mockResolvedValueOnce([entry("first", 42)]),
-    };
-    expect(await fetchOpenTime(connection, market)).toBe(42);
-    expect(connection.getSignaturesForAddress).toHaveBeenLastCalledWith(
-      market,
-      { limit: 1000, before: "s999" },
-      "confirmed",
-    );
+  it("is unavailable while the index is still rebuilding", async () => {
+    const read = vi.fn().mockResolvedValue({ ready: false, byMarket: {} });
+    expect(await fetchOpenTime(market, read)).toBe("unavailable");
   });
 
-  it("is null when there is no history, no block time, or too much history", async () => {
-    expect(
-      await fetchOpenTime({ getSignaturesForAddress: vi.fn().mockResolvedValue([]) }, market),
-    ).toBeNull();
-    expect(
-      await fetchOpenTime(
-        { getSignaturesForAddress: vi.fn().mockResolvedValue([entry("a", null)]) },
-        market,
-      ),
-    ).toBeNull();
-    const full = Array.from({ length: 1000 }, (_, i) => entry(`s${i}`, 1));
-    const endless = { getSignaturesForAddress: vi.fn().mockResolvedValue(full) };
-    expect(await fetchOpenTime(endless, market)).toBeNull();
-    expect(endless.getSignaturesForAddress).toHaveBeenCalledTimes(5);
+  it("rejects when the index cannot be read, so the page shows unavailable", async () => {
+    const read = vi.fn().mockRejectedValue(new Error("open times could not be read (502)"));
+    await expect(fetchOpenTime(market, read)).rejects.toThrow("502");
   });
 });
 

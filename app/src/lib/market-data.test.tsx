@@ -12,6 +12,8 @@ import {
   useMarketData,
 } from "./market-data";
 import { type LivePrice, MAG7 } from "./market-data-shared";
+import type { LiveRead, LiveSource } from "./account-feed";
+import type { PublicKey } from "@solana/web3.js";
 import { market } from "@/test-utils";
 
 const price = (ticker: LivePrice["ticker"], cents: number, stale = false): LivePrice => ({
@@ -264,6 +266,142 @@ describe("useMarketData", () => {
   });
 });
 
+describe("useMarketData with pushed books (P1-2)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_900_000_000_000); // before MARKET_A/B close (2_000_000_000), after CLOSED's
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const CLOSED = market({ address: "11111111111111111111111111111114", closeTs: 1_800_000_000n });
+
+  function liveBooksFake() {
+    let current: LiveRead<Record<string, BookQuotes | null>> = { status: "loading" };
+    const listeners = new Set<() => void>();
+    const calls: { markets: string[]; fastMs: number }[] = [];
+    const liveBooks = (markets: readonly PublicKey[], fastMs: number) => {
+      calls.push({ markets: markets.map((m) => m.toBase58()), fastMs });
+      const source: LiveSource<Record<string, BookQuotes | null>> = {
+        subscribe: (onChange) => {
+          listeners.add(onChange);
+          return () => listeners.delete(onChange);
+        },
+        read: () => current,
+        isLive: () => true,
+        refresh: () => undefined,
+      };
+      return source;
+    };
+    const push = (next: LiveRead<Record<string, BookQuotes | null>>) => {
+      current = next;
+      for (const listener of [...listeners]) listener();
+    };
+    return { liveBooks, push, calls, listeners };
+  }
+
+  const prices = () => Promise.resolve({ prices: [price("AAPL", 23_245)], unavailable: [] });
+
+  it("pushes open markets' books and reads closed ones once by polling", async () => {
+    const live = liveBooksFake();
+    const fetchBooks = vi.fn().mockResolvedValue({ [CLOSED.address]: quotes(10, 12) });
+    const { result } = renderHook(() =>
+      useMarketData([MARKET_A, MARKET_B, CLOSED], {
+        fetchPrices: prices,
+        fetchBooks,
+        liveBooks: live.liveBooks,
+      }),
+    );
+    expect(live.calls).toEqual([{ markets: [MARKET_A.address, MARKET_B.address], fastMs: 2_000 }]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.status).toBe("loading"); // pushed books not read yet
+    act(() =>
+      live.push({
+        status: "ready",
+        value: { [MARKET_A.address]: quotes(40, 44), [MARKET_B.address]: null },
+      }),
+    );
+    expect(result.current.status).toBe("ready");
+    expect(result.current.books[MARKET_A.address]).toEqual({
+      state: "ready",
+      quotes: quotes(40, 44),
+    });
+    expect(result.current.books[MARKET_B.address]).toEqual({ state: "unavailable" });
+    expect(result.current.books[CLOSED.address]).toEqual({
+      state: "ready",
+      quotes: quotes(10, 12),
+    });
+    // A pushed change shows at once; the closed book is never polled again.
+    act(() =>
+      live.push({
+        status: "ready",
+        value: { [MARKET_A.address]: quotes(41, 43), [MARKET_B.address]: quotes(50, 54) },
+      }),
+    );
+    expect(result.current.books[MARKET_A.address]).toEqual({
+      state: "ready",
+      quotes: quotes(41, 43),
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchBooks).toHaveBeenCalledTimes(1);
+    expect(fetchBooks.mock.calls[0]?.[0].map((k: PublicKey) => k.toBase58())).toEqual([
+      CLOSED.address,
+    ]);
+  });
+
+  it("marks pushed markets unavailable on a read error, keeping earlier quotes", async () => {
+    const live = liveBooksFake();
+    const { result } = renderHook(() =>
+      useMarketData([MARKET_A], {
+        fetchPrices: prices,
+        fetchBooks: vi.fn(),
+        liveBooks: live.liveBooks,
+      }),
+    );
+    act(() => live.push({ status: "error", message: "rpc down" }));
+    expect(result.current.books[MARKET_A.address]).toEqual({ state: "unavailable" });
+    act(() => live.push({ status: "ready", value: { [MARKET_A.address]: quotes(40, 44) } }));
+    act(() => live.push({ status: "error", message: "429" }));
+    expect(result.current.books[MARKET_A.address]).toEqual({
+      state: "ready",
+      quotes: quotes(40, 44),
+    });
+  });
+
+  it("stops listening on unmount and does not poll books it pushes", async () => {
+    const live = liveBooksFake();
+    const fetchBooks = vi.fn();
+    const { unmount } = renderHook(() =>
+      useMarketData([MARKET_A], { fetchPrices: prices, fetchBooks, liveBooks: live.liveBooks }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(fetchBooks).not.toHaveBeenCalled();
+    expect(live.listeners.size).toBe(1);
+    unmount();
+    expect(live.listeners.size).toBe(0);
+  });
+
+  it("polls an unparsable address instead of subscribing it", async () => {
+    const live = liveBooksFake();
+    const bad = market({ address: "not-a-key" });
+    const { result } = renderHook(() =>
+      useMarketData([bad], { fetchPrices: prices, fetchBooks: vi.fn(), liveBooks: live.liveBooks }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(live.calls).toEqual([]);
+    expect(result.current.books["not-a-key"]).toEqual({ state: "unavailable" });
+  });
+});
+
 describe("createMarketDataSources (browser sources)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -278,6 +416,12 @@ describe("createMarketDataSources (browser sources)", () => {
     vi.stubGlobal("fetch", fetchMock);
     expect(await createMarketDataSources().fetchPrices()).toEqual(body);
     expect(fetchMock).toHaveBeenCalledWith("/api/market-data", { cache: "no-store" });
+  });
+
+  it("offers pushed books (P1-2) next to the polled ones", () => {
+    const sources = createMarketDataSources();
+    expect(sources.liveBooks).toBeTypeOf("function");
+    expect(sources.fetchBooks).toBeTypeOf("function");
   });
 
   it("rejects a non-ok status and a malformed body", async () => {

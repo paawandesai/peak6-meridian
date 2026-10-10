@@ -1,7 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PublicKey } from "@solana/web3.js";
 
-import { backoffMs, dedupe, getMultipleChunked, sharedConnection, withRateLimitRetry } from "./rpc";
+import {
+  backoffMs,
+  browserAccountSocket,
+  connectionFetcher,
+  dedupe,
+  getMultipleChunked,
+  sharedAccountFeed,
+  sharedConnection,
+  withRateLimitRetry,
+  wsUrlFor,
+} from "./rpc";
 
 const res = (status: number, headers: Record<string, string> = {}) =>
   new Response("{}", { status, headers });
@@ -117,5 +127,80 @@ describe("getMultipleChunked", () => {
     };
     await getMultipleChunked(connection, keys);
     expect(connection.getMultipleParsedAccounts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("wsUrlFor (P1-2)", () => {
+  it("maps http(s) to ws(s), keeping host, path and query", () => {
+    expect(wsUrlFor("https://devnet.example-rpc.com/?api-key=abc")).toBe(
+      "wss://devnet.example-rpc.com/?api-key=abc",
+    );
+    expect(wsUrlFor("https://api.devnet.solana.com")).toBe("wss://api.devnet.solana.com/");
+  });
+
+  it("moves an explicit port up by one, like web3.js (local validator 8899 -> 8900)", () => {
+    expect(wsUrlFor("http://127.0.0.1:8899")).toBe("ws://127.0.0.1:8900/");
+  });
+
+  it("is null for anything that cannot carry a socket", () => {
+    expect(wsUrlFor("/api/rpc")).toBeNull();
+    expect(wsUrlFor("ftp://x.example")).toBeNull();
+    expect(wsUrlFor("not a url")).toBeNull();
+  });
+});
+
+describe("connectionFetcher (P1-2)", () => {
+  const keys = Array.from({ length: 150 }, (_, i) => new PublicKey(i + 1).toBase58());
+
+  it("reads in chunks of <= 99 keys, in order, reporting the oldest slot", async () => {
+    const getMultipleAccountsInfoAndContext = vi.fn((chunk: PublicKey[]) =>
+      Promise.resolve({
+        context: { slot: chunk.length === 99 ? 500 : 400 },
+        value: chunk.map((key, i) =>
+          i % 2 === 0 ? null : { data: Buffer.from([key.toBytes()[31] ?? 0]) },
+        ),
+      }),
+    );
+    const fetchMany = connectionFetcher({
+      getMultipleAccountsInfoAndContext,
+    } as unknown as Parameters<typeof connectionFetcher>[0]);
+    const { slot, values } = await fetchMany(keys);
+    expect(getMultipleAccountsInfoAndContext).toHaveBeenCalledTimes(2);
+    expect(getMultipleAccountsInfoAndContext.mock.calls[0]?.[0]).toHaveLength(99);
+    expect(slot).toBe(400);
+    expect(values).toHaveLength(150);
+    expect(values[0]).toBeNull();
+    expect(values[1]).toEqual(Buffer.from([2]));
+  });
+
+  it("answers an empty key list without a request", async () => {
+    const getMultipleAccountsInfoAndContext = vi.fn();
+    const fetchMany = connectionFetcher({
+      getMultipleAccountsInfoAndContext,
+    } as unknown as Parameters<typeof connectionFetcher>[0]);
+    expect(await fetchMany([])).toEqual({ slot: 0, values: [] });
+    expect(getMultipleAccountsInfoAndContext).not.toHaveBeenCalled();
+  });
+});
+
+describe("browserAccountSocket / sharedAccountFeed (P1-2)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("has no socket without a WebSocket or for a proxy path", () => {
+    vi.stubGlobal("WebSocket", undefined);
+    expect(browserAccountSocket("https://rpc.example")).toBeNull();
+    vi.unstubAllGlobals();
+    vi.stubGlobal("WebSocket", vi.fn());
+    expect(browserAccountSocket("/api/rpc")).toBeNull();
+    expect(browserAccountSocket("https://rpc.example")).not.toBeNull();
+  });
+
+  it("returns one feed per RPC URL", () => {
+    expect(sharedAccountFeed("http://127.0.0.1:1")).toBe(sharedAccountFeed("http://127.0.0.1:1"));
+    expect(sharedAccountFeed("http://127.0.0.1:1")).not.toBe(
+      sharedAccountFeed("http://127.0.0.1:2"),
+    );
   });
 });

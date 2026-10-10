@@ -1,11 +1,13 @@
 """Session trading date: today in ET, or the earliest date that still has live markets."""
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from hypothesis import given
 from hypothesis import strategies as st
 
+import meridian_quant.mm.main  # noqa: F401  (import applies the logger levels under test)
 from meridian_quant.mm.session import et_trading_date, session_trading_date
 
 # Saturday 2026-10-10 12:00 ET (16:00 UTC)
@@ -96,3 +98,9 @@ def test_session_is_today_or_a_live_date(markets: list[M]) -> None:
         assert session == min(live)
     else:
         assert 20261010 in live or not live
+
+
+def test_mm_main_keeps_httpx_quiet() -> None:
+    """httpx logs full request URLs (RPC API keys) at INFO; main pins it to WARNING."""
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+    assert logging.getLogger("httpcore").getEffectiveLevel() >= logging.WARNING

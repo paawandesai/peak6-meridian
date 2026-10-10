@@ -108,6 +108,7 @@ flowchart LR
 - `quant` `GET /fair-values` → `[{market, ticker, strike_cents, fair_cents, sigma, spot, as_of}]`
 - `ops-agent` `POST /incidents` `{trading_date, ticker, markets[], failure}` → `{incident_id}`; `GET /drafts` → `[{incident_id, market, proposed_price_cents, sources[{name, close, as_of}], spread_bps, note, status}]`
 - `automation` `GET /health` → last morning run, last settlement run, failures.
+- `automation` `GET /markets` → `{ready, as_of, markets[{market, opened_at, signature}]}`: the market open-time index (P1-4, D-050). `opened_at` is the block time (unix seconds) of the transaction that emitted the market's `MarketCreated` event. Rebuilt from the chain at startup with one paged scan of `config.automation_authority`'s signatures plus batched `getTransactions` (every `create_strike_market` is signed by that key, AB-19), then kept current by incremental scans at most every 30 s; 7-day lookback. `ready` is false until the first rebuild finishes. The app reads it through `GET /api/market-open-times`.
 - `app` `POST /api/faucet` `{wallet}` → tx signature or 429.
 
 ## Data model (on-chain accounts)
@@ -122,7 +123,7 @@ flowchart LR
 | OpenOrders | `["oo", market, owner]` | owner, free_usdc, free_yes, resting_count |
 | LocalFeed | `["local_feed", symbol, [source_slot]]` | Test-only (feature `local-oracle`): holds oracle value and slot for one source (0=Tiingo, 1=Twelve Data) per ticker. **Never in devnet builds** (AB-22) |
 
-Off-chain state: none required. `ops-agent` keeps incidents/drafts in a JSON file on its volume; `automation` keeps run logs.
+Off-chain state: none required. `ops-agent` keeps incidents/drafts in a JSON file on its volume; `automation` keeps run logs and the in-memory open-time index, which it rebuilds from the chain after every restart.
 
 ## External services
 | Service | Access | On failure |

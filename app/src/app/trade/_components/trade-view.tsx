@@ -10,7 +10,7 @@ import { WalletActions } from "./wallet-actions";
 import { displayedYesOfLevels, levelsOf, ownOrders } from "../_lib/book-view";
 import type { Holdings } from "../_lib/constraint";
 import { MIDPOINT_NOTE, openClose, question, settlementRule, timeline } from "../_lib/copy";
-import type { TradeReader } from "../_lib/reader";
+import type { TradeReader, WalletView } from "../_lib/reader";
 import { badgeProps, nextTransition, panelState } from "../_lib/state";
 import type { TradeActions } from "../_lib/tx";
 import { usePolled } from "../_lib/use-polled";
@@ -22,6 +22,7 @@ import type { AppConfig } from "@/lib/chain";
 import type { FairValues } from "@/lib/fair-values";
 import type { MarketBook, MarketData } from "@/lib/market-data";
 import type { MarketRow } from "@/lib/markets";
+import { OPEN_TIMES_REFRESH_MS } from "@/lib/open-times-core";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
 
 /** The ticker's ladder, its polled book quotes and the fair values, all read by the shell. */
@@ -103,14 +104,22 @@ function ladderPoints(
 export function TradeView(props: Props) {
   const { market, config, nowSecs, reader, actions, wallet, explorerUrl } = props;
   const walletKey = wallet?.toBase58() ?? "";
-  // One read per tick carries the book AND the vault invariant inputs (P0-7: no extra request).
-  const snapshot = usePolled(() => reader.getSnapshot(), 1_000, market.address);
-  const walletView = usePolled(
+  // One read carries the book AND the vault invariant inputs (P0-7: no extra request). P1-2: on a
+  // reader with account subscriptions both are pushed; polling (1 s / 2 s) is the fallback.
+  const snapshotSource = useMemo(() => reader.snapshotSource?.(1_000) ?? null, [reader]);
+  const snapshot = usePolled(() => reader.getSnapshot(), 1_000, market.address, snapshotSource);
+  const walletSource = useMemo(
+    () => (wallet === null ? null : (reader.walletSource?.(wallet, 2_000) ?? null)),
+    [reader, wallet],
+  );
+  const walletView = usePolled<WalletView | null>(
     () => (wallet === null ? Promise.resolve(null) : reader.getWallet(wallet)),
     2_000,
     `${market.address}:${walletKey}`,
+    walletSource,
   );
-  const openTime = usePolled(() => reader.getOpenTime(), 3_600_000, market.address);
+  // P1-4: re-read every minute until known (a just-created market reaches the index within one).
+  const openTime = usePolled(() => reader.getOpenTime(), OPEN_TIMES_REFRESH_MS, market.address);
 
   const panel = panelState(market, config, nowSecs);
   const transition = nextTransition(market, config, nowSecs);
@@ -162,7 +171,14 @@ export function TradeView(props: Props) {
         <p className="text-mer-sm text-mer-ink-muted">{settlementRule(market)}</p>
         <p className="text-mer-sm text-mer-ink-muted">{timeline(market)}</p>
         <p className="text-mer-sm" data-testid="open-close">
-          {openClose(market, openTime.state.status === "ready" ? openTime.state.value : null)}
+          {openClose(
+            market,
+            openTime.state.status === "ready"
+              ? openTime.state.value
+              : openTime.state.status === "error"
+                ? "unavailable"
+                : null,
+          )}
         </p>
         <div className="flex flex-wrap items-center gap-mer-3">
           <StateBadge {...badgeProps(market, config, nowSecs)} />
@@ -181,7 +197,8 @@ export function TradeView(props: Props) {
           <VaultInvariantChip
             pairs={vault?.pairs ?? null}
             balance={vault?.balance ?? null}
-            asOfSecs={vault?.asOfSecs ?? null}
+            // While the subscriptions are live any change is pushed, so the reading is current now.
+            asOfSecs={vault === null ? null : snapshot.live ? nowSecs : vault.asOfSecs}
           />
         </div>
         <p className="text-mer-xs text-mer-ink-muted">{MIDPOINT_NOTE}</p>

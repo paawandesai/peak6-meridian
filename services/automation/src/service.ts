@@ -24,6 +24,7 @@ import {
   type MorningResult,
 } from "./jobs/morning";
 import { describeError, type Logger } from "./log";
+import { marketsResponse, type OpenTimeIndex } from "./openTimes";
 import { scheduleJobs, type CronLike, type JobSpec, type ScheduledJob } from "./scheduler";
 import { createHealthServer } from "./server";
 import { RunState } from "./state";
@@ -59,7 +60,15 @@ export interface ServiceDeps {
   readonly now?: () => Date;
   /** Delay between the startup config reads; defaults to a real timer. */
   readonly sleep?: (ms: number) => Promise<void>;
+  /**
+   * The market open-time index behind `GET /markets` (P1-4). Built without the signer, so it is
+   * served in every degraded mode; the route is 404 when absent.
+   */
+  readonly openTimes?: OpenTimeIndex;
 }
+
+/** `/markets` answers within this, with what the index holds, even while a refresh runs. */
+export const MARKETS_WAIT_MS = 2_500;
 
 /** Startup reads of the config are tried this many times, waiting 2 s, 4 s, … between them. */
 export const STARTUP_ATTEMPTS = 3;
@@ -133,6 +142,13 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
   const now = deps.now ?? (() => new Date());
   const state = deps.state ?? new RunState();
   const startedAt = now().toISOString();
+  const openTimes = deps.openTimes;
+  // Each creation signature goes to the open-time index as it lands.
+  type BaseMorning = Omit<MorningDeps, "alerter" | "state" | "log">;
+  const morningWith = (base: BaseMorning): BaseMorning =>
+    openTimes === undefined
+      ? base
+      : { ...base, onCreated: (signature: string) => openTimes.noteCreated(signature) };
 
   // Degraded when there is no key (AC5b: both jobs disabled, nothing can sign) or the key is not
   // the config's automation authority (AC5: only the morning job, which needs that key, is
@@ -164,7 +180,12 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
         cron: MORNING_CRON,
         signer: deps.signer.publicKey.toBase58(),
         run: async () => {
-          await runMorning({ ...signerDeps.morning, alerter: deps.alerter, state, log: deps.log });
+          await runMorning({
+            ...morningWith(signerDeps.morning),
+            alerter: deps.alerter,
+            state,
+            log: deps.log,
+          });
         },
       });
     } else {
@@ -214,27 +235,39 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
     failures: state.failures,
   });
 
-  const server = createHealthServer({ token: deps.serviceToken, health });
+  const server = createHealthServer({
+    token: deps.serviceToken,
+    health,
+    ...(openTimes === undefined
+      ? {}
+      : { markets: () => marketsResponse(openTimes, MARKETS_WAIT_MS) }),
+  });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(deps.port, deps.host ?? "0.0.0.0", resolve);
   });
   const port = (server.address() as AddressInfo).port;
   deps.log("info", "service_started", { port, degraded, jobs: jobs.map((j) => j.name) });
+  // Backfill the open-time index from the chain now, so the first `/markets` finds it ready.
+  // Not awaited; failed attempts are logged by the index and retried with backoff.
+  void openTimes?.backfill();
 
   // Startup catch-up: a restart or redeploy after 08:00 ET must not leave the day without markets.
   let catchUp: Promise<MorningResult | null> = Promise.resolve(null);
   if (morningDeps !== null && catchUpDue(morningDeps.now())) {
     const base = morningDeps;
     deps.log("info", "morning_catch_up", {});
-    catchUp = runMorning({ ...base, alerter: deps.alerter, state, log: deps.log }).catch(
-      async (error: unknown) => {
-        const message = describeError(error);
-        deps.log("error", "job_crashed", { job: "morning", error: message });
-        await onCrash("morning", message);
-        return null;
-      },
-    );
+    catchUp = runMorning({
+      ...morningWith(base),
+      alerter: deps.alerter,
+      state,
+      log: deps.log,
+    }).catch(async (error: unknown) => {
+      const message = describeError(error);
+      deps.log("error", "job_crashed", { job: "morning", error: message });
+      await onCrash("morning", message);
+      return null;
+    });
   }
 
   return {
@@ -245,6 +278,7 @@ export async function startService(deps: ServiceDeps): Promise<RunningService> {
     catchUp,
     health,
     stop: async () => {
+      openTimes?.stop();
       for (const job of jobs) {
         job.handle.stop();
       }
