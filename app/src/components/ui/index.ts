@@ -11,3 +11,4 @@ export {
   type StateBadgeProps,
 } from "./state-badge";
 export { TxStatus, txStatusText, type TxStatusProps } from "./tx-status";
+export { VaultInvariantChip, type VaultInvariantProps } from "./vault-invariant-chip";
