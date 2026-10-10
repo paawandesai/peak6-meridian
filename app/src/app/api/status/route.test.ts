@@ -39,6 +39,10 @@ vi.mock("@/app/status/status-chain", () => ({
   loadStatusData: mockLoadStatusData,
 }));
 
+vi.mock("@/lib/markets", () => ({
+  partitionMarkets: vi.fn((markets) => ({ session: markets, test: [] })),
+}));
+
 function createRequest(url: string): NextRequest {
   return new NextRequest(new URL(url, "http://localhost:3000"));
 }
