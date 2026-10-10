@@ -26,7 +26,7 @@ import json
 import logging
 import os
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -35,7 +35,13 @@ from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 
-from meridian_quant.prices import PriceError, Spot, fetch_daily_closes, fetch_spot
+from meridian_quant.prices import (
+    PriceError,
+    Spot,
+    fetch_daily_closes,
+    fetch_daily_closes_pyth,
+    fetch_spot,
+)
 from meridian_quant.server import MarketInfo, Service, make_server
 
 from .chain import ChainMarketSource, ChainOrderClient
@@ -86,6 +92,7 @@ class OnChainSources:
         self._http_client = http_client
         self._finnhub_key = finnhub_key
         self._tiingo_key = tiingo_key
+        self._closes_cache: dict[str, tuple[date, list[Decimal]]] = {}
 
     def markets(self) -> list[MarketInfo]:
         """Get open markets from cache (populated by MM loop).
@@ -118,12 +125,25 @@ class OnChainSources:
             raise PriceError(f"Failed to fetch spot for {ticker}: {e}") from e
 
     def closes(self, ticker: str) -> list[Decimal]:
-        """Fetch daily closes from Tiingo."""
+        """Daily closes, cached per ticker per day (they don't change intraday, and /fair-values
+        is polled every few seconds). Tiingo first; Pyth Pro history when PYTH_API_TOKEN is set
+        and Tiingo fails (e.g. rate-limited)."""
+        today = datetime.now(UTC).date()
+        cached = self._closes_cache.get(ticker)
+        if cached is not None and cached[0] == today:
+            return cached[1]
         try:
-            today = datetime.now(UTC).date()
-            return fetch_daily_closes(self._http_client, ticker, self._tiingo_key, today)
+            closes = fetch_daily_closes(self._http_client, ticker, self._tiingo_key, today)
         except Exception as e:
-            raise PriceError(f"Failed to fetch closes for {ticker}: {e}") from e
+            pyth_token = os.getenv("PYTH_API_TOKEN", "")
+            if not pyth_token:
+                raise PriceError(f"Failed to fetch closes for {ticker}: {e}") from e
+            try:
+                closes = fetch_daily_closes_pyth(self._http_client, ticker, pyth_token, today)
+            except Exception as e2:
+                raise PriceError(f"Failed to fetch closes for {ticker}: {e}; pyth: {e2}") from e2
+        self._closes_cache[ticker] = (today, closes)
+        return closes
 
 
 async def update_market_cache(
