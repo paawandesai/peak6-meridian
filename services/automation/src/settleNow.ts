@@ -5,6 +5,12 @@
  * update, `settle_market`, settled markets skipped) once, without the 5-minute delay, and it
  * refuses any cluster that `assertCluster` does not accept (localnet or devnet only). The
  * keypair path is never logged or echoed and the file's contents are never read into output.
+ *
+ * The job's pacing applies (#53): groups whose session has not completed (weekends, holidays,
+ * sessions still running) are skipped without any data-API request (settle those by admin
+ * override), and one invocation makes at most `maxApiCallsPerRun` data-API requests; groups that
+ * do not fit, or that a rate limit deferred, are listed so the operator runs it again a minute
+ * later.
  */
 import { type Keypair } from "@solana/web3.js";
 import { z } from "zod";
@@ -53,11 +59,15 @@ export interface SettleNowParams {
   readonly runtime: (ctx: { cluster: ClusterName; payer: Keypair }) => Promise<CommonRuntime>;
   readonly now: () => Date;
   readonly out: (line: string) => void;
+  /** Data-API request cap for this invocation; defaults to the job's. */
+  readonly maxApiCallsPerRun?: number;
 }
 
 export interface SettleNowResult {
   readonly settled: number;
   readonly failed: number;
+  /** Groups left for another invocation (data-API cap or rate-limit backoff). */
+  readonly deferred: number;
 }
 
 export async function settleNow(params: SettleNowParams): Promise<SettleNowResult> {
@@ -78,7 +88,6 @@ export async function settleNow(params: SettleNowParams): Promise<SettleNowResul
   const runtime = await params.runtime({ cluster, payer });
   const result = await runSettlement({
     now: params.now,
-    sleep: () => Promise.resolve(),
     chain: runtime.chain,
     verifyClose: runtime.verifyClose,
     adapter: runtime.adapter,
@@ -93,10 +102,13 @@ export async function settleNow(params: SettleNowParams): Promise<SettleNowResul
       ...JOB_OPTIONS,
       delaySecs: 0,
       windowMs: 0,
+      ...(params.maxApiCallsPerRun === undefined
+        ? {}
+        : { maxApiCallsPerRun: params.maxApiCallsPerRun }),
       ...(args.date === undefined ? {} : { onlyDate: args.date }),
     },
   });
-  if (result.status === "idle") {
+  if (result.status === "idle" && result.skipped.length === 0 && result.deferred.length === 0) {
     params.out("nothing to settle: no open market is past its close time");
   } else {
     params.out(`settled ${String(result.settled)} market(s) on ${cluster}`);
@@ -104,5 +116,19 @@ export async function settleNow(params: SettleNowParams): Promise<SettleNowResul
   for (const failure of result.failures) {
     params.out(`FAILED ${failure.group}: ${failure.reason}`);
   }
-  return { settled: result.settled, failed: result.failures.length };
+  for (const skip of result.skipped) {
+    params.out(
+      `SKIPPED ${skip.group}: ${skip.reason} (no completed session; use the admin override)`,
+    );
+  }
+  for (const group of result.deferred) {
+    params.out(
+      `DEFERRED ${group}: data-API budget or rate-limit backoff; run settle-now again in a minute`,
+    );
+  }
+  return {
+    settled: result.settled,
+    failed: result.failures.length,
+    deferred: result.deferred.length,
+  };
 }
