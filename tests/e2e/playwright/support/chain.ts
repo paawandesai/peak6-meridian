@@ -276,7 +276,7 @@ export async function settleLocally(
       .rpc({ commitment: "confirmed" });
   }
   await chain.program.methods
-    .settleMarket(null)
+    .settleMarket()
     .accountsStrict({
       config: findConfigPda(chain.programId).address,
       market: market.market,
@@ -284,7 +284,6 @@ export async function settleLocally(
       feedTwelveData: feed(1),
       redstonePrice: null,
       oracleConfig: null,
-      instructionsSysvar: null,
       payer: chain.admin.publicKey,
     })
     .rpc({ commitment: "confirmed" });
