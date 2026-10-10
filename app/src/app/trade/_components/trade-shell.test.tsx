@@ -41,10 +41,23 @@ vi.mock("../_lib/tx", () => ({
 
 import { NOT_FOUND_TEXT, TradeShell } from "./trade-shell";
 import { market, reader, withReader } from "@/test-utils";
+import { beforeAll } from "vitest";
 
 // The shared dev box can be heavily loaded; generous waits keep these from flaking.
 configure({ asyncUtilTimeout: 10_000 });
 vi.setConfig({ testTimeout: 60_000 });
+
+beforeAll(() => {
+  // DistributionChart renders with Recharts; jsdom needs ResizeObserver.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  );
+});
 
 /** Unix seconds for a UTC ISO string. */
 const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
