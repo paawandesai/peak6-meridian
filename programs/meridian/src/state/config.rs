@@ -80,15 +80,6 @@ pub struct Config {
     pub override_delay_secs: u64,
     /// The MAG7 tickers with their feeds; unset slots have an all-zero symbol.
     pub tickers: [Ticker; TICKER_COUNT],
-    /// Pyth Lazer Ed25519 signer pubkey (D-055, M3-10b). Operator-controlled, never
-    /// hard-trusted from payload. Used to verify Pyth signed price updates.
-    pub pyth_lazer_signer: Pubkey,
-    /// Pyth feed IDs for MAG7 tickers, in the same order as `tickers`. Each u32 is the
-    /// numeric Pyth Pro feed ID. Zero means no Pyth feed configured for that ticker slot.
-    pub pyth_feed_ids: [u32; TICKER_COUNT],
-    /// Maximum age of Pyth timestamp in seconds (D-055). Pyth timestamps are in microseconds
-    /// and checked against clock.unix_timestamp (not slot-based like Core feeds).
-    pub pyth_max_age_secs: i64,
     /// PDA bump.
     pub bump: u8,
 }
@@ -124,9 +115,6 @@ pub struct ConfigParams {
     pub max_conf_bps: u16,
     pub override_delay_secs: u64,
     pub tickers: Vec<TickerSlot>,
-    pub pyth_lazer_signer: Pubkey,
-    pub pyth_feed_ids: [u32; TICKER_COUNT],
-    pub pyth_max_age_secs: i64,
 }
 
 impl ConfigParams {
@@ -183,22 +171,13 @@ impl ConfigParams {
     /// Validates against the current config and writes every field; `admin`, `paused` and
     /// `bump` are untouched. Nothing is written when validation fails.
     pub fn apply(&self, config: &mut Config, usdc_mint: Pubkey) -> Result<()> {
-        use crate::errors::MeridianError;
-
         let tickers = self.merged_tickers(&config.tickers)?;
-        require!(
-            self.pyth_max_age_secs > 0,
-            MeridianError::InvalidMaxStaleness
-        );
         config.automation_authority = self.automation_authority;
         config.usdc_mint = usdc_mint;
         config.max_staleness_slots = self.max_staleness_slots;
         config.max_conf_bps = self.max_conf_bps;
         config.override_delay_secs = self.override_delay_secs;
         config.tickers = tickers;
-        config.pyth_lazer_signer = self.pyth_lazer_signer;
-        config.pyth_feed_ids = self.pyth_feed_ids;
-        config.pyth_max_age_secs = self.pyth_max_age_secs;
         Ok(())
     }
 }

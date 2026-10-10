@@ -88,14 +88,10 @@ impl Harness {
                 feed_twelve_data,
                 redstone_price: None,
                 oracle_config: None,
-                instructions_sysvar: None,
                 payer,
             }
             .to_account_metas(None),
-            data: meridian::instruction::SettleMarket {
-                ed25519_ix_index: None,
-            }
-            .data(),
+            data: meridian::instruction::SettleMarket {}.data(),
         }
     }
 
