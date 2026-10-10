@@ -25,6 +25,14 @@ export type MarketInvariant = {
   readonly settledAt: number;
   /** Oracle price timestamp at settlement (Unix seconds), 0 if not settled. */
   readonly oracleAsOf: number;
+  /** Market created timestamp (Unix seconds), 0 if unknown. */
+  readonly createdAt: number;
+  /** Settle slot, 0 if not settled. */
+  readonly settleSlot: number;
+  /** Market outcome from on-chain settled field. */
+  readonly outcome: "Yes" | "No" | "None";
+  /** On-chain settled flag. */
+  readonly settled: boolean;
 };
 
 export type StatusResponse = {
@@ -171,6 +179,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
             closeTs: Number(market.closeTs),
             settledAt: facts?.settledAt ?? 0,
             oracleAsOf: Number(facts?.oracleSlot ?? 0n),
+            createdAt: facts?.createdAt ?? 0,
+            settleSlot: Number(facts?.settleSlot ?? 0n),
+            outcome: market.outcome,
+            settled: market.settled,
           };
         });
 

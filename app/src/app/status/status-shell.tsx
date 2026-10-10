@@ -23,10 +23,10 @@ function formatDate(yyyymmdd: number): string {
 
 /** Get trading date for yesterday (previous day in ET) */
 function getYesterdayET(): number {
-  const now = new Date();
-  const et = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-  et.setDate(et.getDate() - 1);
-  return et.getFullYear() * 10000 + (et.getMonth() + 1) * 100 + et.getDate();
+  const { etTradingDate } = require("@/lib/time");
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return etTradingDate(yesterday);
 }
 
 function Page() {
@@ -78,8 +78,8 @@ function Page() {
               onClick={() => setSelectedDate(null)}
               className={`rounded px-mer-3 py-mer-1 text-mer-sm ${
                 selectedDate === null
-                  ? "bg-mer-accent text-white"
-                  : "bg-mer-surface-2 text-mer-muted hover:bg-mer-surface-3"
+                  ? "bg-mer-yes text-mer-ink"
+                  : "bg-mer-surface text-mer-ink-muted hover:bg-mer-surface"
               }`}
             >
               Today
@@ -88,8 +88,8 @@ function Page() {
               onClick={() => setSelectedDate(yesterdayDate)}
               className={`rounded px-mer-3 py-mer-1 text-mer-sm ${
                 selectedDate === yesterdayDate
-                  ? "bg-mer-accent text-white"
-                  : "bg-mer-surface-2 text-mer-muted hover:bg-mer-surface-3"
+                  ? "bg-mer-yes text-mer-ink"
+                  : "bg-mer-surface text-mer-ink-muted hover:bg-mer-surface"
               }`}
             >
               Yesterday
