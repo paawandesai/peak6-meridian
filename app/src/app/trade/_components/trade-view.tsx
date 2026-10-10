@@ -34,13 +34,7 @@ type Props = {
 };
 
 /** Live stock price from Pyth with freshness indicator (M3-10, D-055). */
-function LivePrice({
-  market,
-  nowSecs,
-}: {
-  readonly market: MarketRow;
-  readonly nowSecs: number;
-}) {
+function LivePrice({ market, nowSecs }: { readonly market: MarketRow; readonly nowSecs: number }) {
   const pythQuotes = usePythQuotes([market.ticker as never]);
   const quote = pythQuotes.quotes[market.ticker];
   const isUnavailable = !pythQuotes.loading && quote === undefined;
@@ -49,11 +43,7 @@ function LivePrice({
     return (
       <span className="inline-flex flex-wrap items-baseline gap-mer-2 text-mer-sm">
         <span className="mer-num font-semibold">{market.ticker}</span>
-        {isUnavailable ? (
-          <PythPriceUnavailable ticker={market.ticker} />
-        ) : (
-          <PythPricePlaceholder />
-        )}
+        {isUnavailable ? <PythPriceUnavailable ticker={market.ticker} /> : <PythPricePlaceholder />}
       </span>
     );
   }
