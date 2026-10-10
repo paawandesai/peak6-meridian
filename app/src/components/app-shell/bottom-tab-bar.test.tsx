@@ -146,4 +146,14 @@ describe("BottomTabBar", () => {
     const portfolioTab = screen.getByRole("link", { name: /Portfolio/ });
     expect(portfolioTab).toHaveClass("text-mer-ink-muted");
   });
+
+  it("handles null pathname gracefully (no active tab)", () => {
+    mockPathname.mockReturnValue(null);
+    render(<BottomTabBar />);
+
+    const tabs = screen.getAllByRole("link");
+    tabs.forEach((tab) => {
+      expect(tab).not.toHaveAttribute("aria-current");
+    });
+  });
 });
