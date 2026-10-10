@@ -18,6 +18,7 @@ import {
 import type { SimulationOutcome, TradeRequest } from "../_lib/tx";
 import type { AppConfig } from "@/lib/chain";
 import { market } from "@/test-utils";
+import { PYTH_FEED_IDS } from "@/lib/pyth-quotes";
 
 // The shared dev box can be heavily loaded; generous waits keep these from flaking.
 configure({ asyncUtilTimeout: 10_000 });
@@ -33,6 +34,34 @@ const NVDA = market({
 });
 const config: AppConfig = { paused: false, overrideDelaySecs: 3600n, admin: "A" };
 const OPEN_NOW = Number(CLOSE) - 3600;
+
+/**
+ * Mock Pyth quotes API for tests (M3-10).
+ */
+function mockPythQuotes(prices: { ticker: string; price_cents: number }[]) {
+  const publishTime = OPEN_NOW - 2;
+  const mockResponse = {
+    quotes: prices.map((p) => ({
+      ticker: p.ticker,
+      price_cents: p.price_cents,
+      conf_cents: Math.floor(p.price_cents * 0.001),
+      publish_time: publishTime,
+      feed_id: PYTH_FEED_IDS[p.ticker as keyof typeof PYTH_FEED_IDS] ?? "0x0",
+    })),
+    unavailable: [],
+    server_time: Date.now(),
+  };
+
+  global.fetch = vi.fn((url) => {
+    if (typeof url === "string" && url.includes("/api/pyth-quotes")) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+    }
+    return Promise.reject(new Error(`Unmocked fetch: ${url}`));
+  });
+}
 
 /** What each intent fills against BOOK (bids 58, 57 · asks 61, 62). */
 function simulate(request: TradeRequest): SimulationOutcome {
@@ -536,19 +565,13 @@ describe("the page header (UI-04 AC9, AC10, M2-06 AC6)", () => {
     await screen.findByTestId("simulated");
   });
 
-  it("shows the live price with its as-of time, or says it is unavailable", async () => {
-    const asOf = new Date((OPEN_NOW - 3) * 1000).toISOString();
-    const first = renderView({
-      prices: {
-        prices: { NVDA: { ticker: "NVDA", price_cents: 18_142, as_of: asOf, stale: false } },
-        pricesUnavailable: [],
-      },
-    });
-    expect(screen.getByText("NVDA $181.42")).toBeInTheDocument();
-    expect(screen.getByText(/^as of \d\d:\d\d:\d\d ET$/)).toBeInTheDocument();
-    first.unmount();
+  it("shows live Pyth price with freshness indicator (M3-10)", async () => {
+    mockPythQuotes([{ ticker: "NVDA", price_cents: 18_142 }]);
     renderView();
-    expect(screen.getByText("NVDA price unavailable")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("$181.42")).toBeInTheDocument());
+    expect(screen.getByText("Pyth")).toBeInTheDocument();
+    expect(screen.getByText(/\ds ago/)).toBeInTheDocument();
+    await screen.findByTestId("simulated");
   });
 
   it("explains the midpoint in always-visible text", async () => {

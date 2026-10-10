@@ -14,11 +14,13 @@ import { badgeProps, nextTransition, panelState } from "../_lib/state";
 import type { TradeActions } from "../_lib/tx";
 import { usePolled } from "../_lib/use-polled";
 import { AsOf, Countdown, StateBadge } from "@/components/ui";
+import { PythPrice, PythPricePlaceholder } from "@/components/pyth-price";
 import type { AppConfig } from "@/lib/chain";
 import { formatUsdCents } from "@/lib/display";
 import type { MarketData } from "@/lib/market-data";
 import type { MarketRow } from "@/lib/markets";
 import { formatEtHms } from "@/lib/time";
+import { usePythQuotes } from "@/lib/use-pyth-quotes";
 
 type Props = {
   readonly market: MarketRow;
@@ -33,31 +35,30 @@ type Props = {
   readonly debounceMs?: number;
 };
 
-/** Live stock price with its "as of" time (design.md §3 "Data staleness and time"). */
+/** Live stock price from Pyth with freshness indicator (M3-10, D-055). */
 function LivePrice({
   market,
-  marketData,
   nowSecs,
 }: {
   readonly market: MarketRow;
-  readonly marketData: Props["marketData"];
   readonly nowSecs: number;
 }) {
-  const price = (
-    marketData.prices as Record<string, MarketData["prices"][keyof MarketData["prices"]]>
-  )[market.ticker];
-  if (price === undefined) {
+  const pythQuotes = usePythQuotes([market.ticker as never]);
+  const quote = pythQuotes.quotes[market.ticker];
+
+  if (quote === undefined) {
     return (
-      <span className="text-mer-sm text-mer-ink-muted">{market.ticker} price unavailable</span>
+      <span className="inline-flex flex-wrap items-baseline gap-mer-2 text-mer-sm">
+        <span className="mer-num font-semibold">{market.ticker}</span>
+        <PythPricePlaceholder />
+      </span>
     );
   }
-  const asOfSecs = Math.floor(Date.parse(price.as_of) / 1000);
+
   return (
-    <span className="inline-flex flex-wrap items-baseline gap-mer-2 text-mer-sm">
-      <span className="mer-num font-semibold">
-        {market.ticker} {formatUsdCents(BigInt(price.price_cents))}
-      </span>
-      <AsOf time={formatEtHms(asOfSecs)} ageSecs={Math.max(0, nowSecs - asOfSecs)} />
+    <span className="inline-flex items-baseline gap-mer-2 text-mer-sm">
+      <span className="mer-num font-semibold">{market.ticker}</span>
+      <PythPrice quote={quote} nowMs={nowSecs * 1000} />
     </span>
   );
 }
@@ -124,7 +125,7 @@ export function TradeView(props: Props) {
           {transition === null ? null : (
             <Countdown secondsLeft={transition.secondsLeft} label={transition.label} />
           )}
-          <LivePrice market={market} marketData={props.marketData} nowSecs={nowSecs} />
+          <LivePrice market={market} nowSecs={nowSecs} />
         </div>
         <p className="text-mer-xs text-mer-ink-muted">{MIDPOINT_NOTE}</p>
       </header>
