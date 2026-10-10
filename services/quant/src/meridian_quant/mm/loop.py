@@ -70,14 +70,9 @@ class MarketMakerLoop:
 
     async def start(self) -> None:
         """Start the market maker loop."""
-        # Never log config (contains keypair and service_token)
-        logger.info(
-            "Starting market maker loop",
-            extra={
-                "rpc_url": self.config.rpc_url,
-                "program_id": str(self.program_id),
-            },
-        )
+        # Never log config (contains keypair and service_token) or the RPC URL (a dedicated
+        # provider URL such as MERIDIAN_DEVNET_RPC_URL embeds its API key).
+        logger.info("Starting market maker loop", extra={"program_id": str(self.program_id)})
         self.rpc_client = AsyncClient(self.config.rpc_url)
         self._running = True
 
@@ -102,6 +97,7 @@ class MarketMakerLoop:
 
     async def _run_once(self) -> None:
         """Run one iteration of the MM loop."""
+        self._order_client.begin_cycle()  # P1-7: per-cycle RPC state (blockhash reuse)
         try:
             # Fetch fair values from the quant service
             fair_values = await self._fetch_fair_values()
@@ -168,6 +164,7 @@ class MarketMakerLoop:
 
         except Exception:
             logger.exception("Error in MM loop iteration")
+            self._coverage = 0.0  # iteration aborted: coverage unknown, report none
 
     async def _fetch_fair_values(self) -> list[FairValue]:
         """Fetch fair values (AC1: uses injected source)."""
@@ -234,21 +231,22 @@ class MarketMakerLoop:
     async def _sync_inventory(self, markets: list[MarketState]) -> list[MarketState]:
         """Sync inventory from on-chain YES token balances (AC1/AC2).
 
-        Reads wallet YES token balance via getTokenAccountBalance, syncs to
-        InventoryTracker, then mints pairs if inventory is low. This ensures
-        skew reflects actual fills and the 200-lot cap binds correctly.
+        Reads wallet YES/NO token balances, syncs to InventoryTracker, then mints
+        pairs if inventory is low. This ensures skew reflects actual fills and the
+        200-lot cap binds correctly.
 
-        P1-7: Uses batched get_multiple_accounts (chunked at ≤99) instead of
-        individual get_token_account_balance calls.
+        P1-7: one batched read for all markets (getMultipleAccounts, <= 100 keys per
+        call) instead of per-market reads. An RPC error propagates and aborts the
+        iteration (fail closed: never quote on unknown inventory).
 
-        Returns markets that were successfully synced. Markets with balance read
-        failures are excluded (RPC errors propagate from get_*_token_balance).
+        Returns markets that were successfully synced. Markets whose balances could not
+        be read are excluded (not quoted).
         """
         open_markets = [m for m in markets if m.is_open]
         if not open_markets:
             return []
 
-        # Batch-fetch all token balances (P1-7: ≤99 keys per RPC call)
+        # Batch-fetch all token balances (P1-7: <= 100 keys per RPC call); raises on RPC error
         market_addresses = [m.market for m in open_markets]
         balances = await self._order_client.get_multiple_token_balances(
             market_addresses, self._mm_owner
@@ -264,7 +262,7 @@ class MarketMakerLoop:
 
             # Get balances from batched result
             if market.market not in balances:
-                logger.warning(f"Missing token balances for {market.market}, skipping")
+                logger.error(f"Token balances unreadable for {market.market}, not quoting it")
                 continue
 
             yes_balance, no_balance = balances[market.market]
@@ -354,17 +352,19 @@ class MarketMakerLoop:
         # settlement but don't get new quotes)
         today_markets = [m for m in markets if m.is_open and m.trading_date == today_trading_date]
 
-        # Count current resting orders PER MARKET (domain.md: 8 per owner per market)
+        # Count current resting orders PER MARKET (domain.md: 8 per owner per market).
+        # P1-7: one batched Book read for all of today's markets; an RPC error propagates and
+        # aborts the iteration (AB-10: never place on top of orders we cannot see).
+        books = await self._fetch_books([m.market for m in today_markets])
         orders_per_market: dict[str, int] = {}
         for market in today_markets:
-            try:
-                orders = await self._order_client.fetch_resting_orders(market.market)
-                mm_orders = [o for o in orders if o.owner == self._mm_owner]
-                orders_per_market[market.market] = len(mm_orders)
-            except Exception:
-                logger.exception(f"Failed to fetch orders for {market.ticker}")
+            if market.market not in books:
                 # Do NOT set to 0 (AB-10: would allow placing on top of invisible leftovers).
                 # Skip this market entirely - it won't be in orders_per_market.
+                logger.error(f"Book unreadable for {market.ticker} {market.market}, not quoting")
+                continue
+            mm_orders = [o for o in books[market.market] if o.owner == self._mm_owner]
+            orders_per_market[market.market] = len(mm_orders)
 
         for fv in fair_values:
             # Match FV to market by exact market ID (both use TICKER_YYYYMMDD_STRIKE).
@@ -440,7 +440,7 @@ class MarketMakerLoop:
 
             # Place orders (would check existing orders and update/replace as needed)
             try:
-                await self._place_quote(fv_market, quote)
+                await self._place_quote(fv_market, quote, books[fv_market.market])
                 # Update count only after both sides confirm (AC3 / AB-10 cap enforcement)
                 orders_per_market[fv_market.market] = orders_per_market.get(fv_market.market, 0) + 2
             except Exception:
@@ -448,11 +448,14 @@ class MarketMakerLoop:
                 logger.exception(f"Failed to place quote for {fv.ticker}, skipping count update")
                 continue
 
-    async def _place_quote(self, market: MarketState, quote: Quote) -> None:
+    async def _place_quote(
+        self, market: MarketState, quote: Quote, resting_orders: list[RestingOrder]
+    ) -> None:
         """Place a two-sided quote.
 
         Old quotes are already cancelled in _run_once before this is called,
-        so this just places the new bid and ask.
+        so this just places the new bid and ask. `resting_orders` is the Book snapshot
+        read just before quoting; both orders reuse it (P1-7: no per-order Book read).
 
         Atomicity: if Ask placement fails after Bid succeeds, cancel the Bid
         to avoid leaving a one-sided quote.
@@ -470,6 +473,7 @@ class MarketMakerLoop:
                 price=quote.bid_price,
                 qty=quote.size,
                 owner=self._mm_owner,
+                resting_orders=resting_orders,
             )
             bid_placed = True
 
@@ -480,6 +484,7 @@ class MarketMakerLoop:
                 price=quote.ask_price,
                 qty=quote.size,
                 owner=self._mm_owner,
+                resting_orders=resting_orders,
             )
         except Exception:
             logger.exception(f"Failed to place quote for {market.ticker}")
@@ -507,6 +512,8 @@ class MarketMakerLoop:
 
         Catches per-order and per-market to avoid one failure skipping remaining
         markets/orders (which would leave leftovers and hit the per-market order cap).
+        P1-7: Books for all markets are read in one batched call; if that read fails
+        the error propagates (fail loudly: nothing can be cancelled or safely quoted).
 
         Args:
             markets: Already-fetched open markets. If None, fetches them.
@@ -518,8 +525,9 @@ class MarketMakerLoop:
             should not be quoted (AB-10: fail closed on fetch errors).
 
         Raises:
-            Exception: If markets is None and fetching markets fails. Caller must
-                handle this explicitly rather than silently leaving stale orders.
+            Exception: If fetching markets (when markets is None) or the batched Book
+                read fails. Caller must handle this explicitly rather than silently
+                leaving stale orders.
         """
         failed_markets: set[str] = set()
         try:
@@ -530,24 +538,32 @@ class MarketMakerLoop:
             # Re-raise to fail loudly: returning empty set would leave stale orders
             raise
 
+        books = await self._fetch_books([m.market for m in markets])
         for market in markets:
-            try:
-                orders = await self._order_client.fetch_resting_orders(market.market)
-                mm_orders = [o for o in orders if o.owner == self._mm_owner]
-                for order in mm_orders:
-                    try:
-                        await self._order_client.cancel_order(
-                            market=market.market, order_id=order.order_id, owner=self._mm_owner
-                        )
-                    except Exception:
-                        logger.exception(
-                            f"Failed to cancel order {order.order_id} in {market.market}"
-                        )
-            except Exception:
-                logger.exception(f"Failed to fetch orders for cancel in {market.market}")
+            if market.market not in books:
+                logger.error(f"Book unreadable for cancel in {market.market}, not quoting it")
                 failed_markets.add(market.market)
+                continue
+            mm_orders = [o for o in books[market.market] if o.owner == self._mm_owner]
+            for order in mm_orders:
+                try:
+                    await self._order_client.cancel_order(
+                        market=market.market, order_id=order.order_id, owner=self._mm_owner
+                    )
+                except Exception:
+                    logger.exception(f"Failed to cancel order {order.order_id} in {market.market}")
 
         return failed_markets
+
+    async def _fetch_books(self, market_ids: list[str]) -> dict[str, list[RestingOrder]]:
+        """Batched Book read (P1-7). Logs and re-raises RPC errors (fail closed)."""
+        if not market_ids:
+            return {}
+        try:
+            return await self._order_client.fetch_resting_orders_batch(market_ids)
+        except Exception:
+            logger.exception(f"Batched Book read failed for {len(market_ids)} markets")
+            raise
 
     async def _update_coverage(self, markets: list[MarketState]) -> None:
         """Update the book coverage metric (AC4: actually fetches orders).
@@ -572,11 +588,11 @@ class MarketMakerLoop:
                 self._coverage = 0.0
                 return
 
-            # Fetch all resting orders across today's quotable markets
-            all_orders: list[RestingOrder] = []
-            for market in today_markets:
-                orders = await self._order_client.fetch_resting_orders(market.market)
-                all_orders.extend(orders)
+            # Fetch all resting orders across today's quotable markets (one batched read)
+            books = await self._fetch_books(today_market_ids)
+            if len(books) != len(today_market_ids):
+                raise RuntimeError("Book unreadable for some markets; coverage unknown")
+            all_orders = [o for orders in books.values() for o in orders]
 
             self._coverage = book_coverage(today_market_ids, all_orders, self._mm_owner)
         except Exception:

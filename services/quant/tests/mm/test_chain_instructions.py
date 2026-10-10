@@ -14,14 +14,23 @@ from solders.keypair import Keypair
 from solders.message import Message
 from solders.pubkey import Pubkey
 from solders.signature import Signature
+from solders.transaction_status import TransactionConfirmationStatus
 
 from meridian_quant.mm.chain import (
     TOKEN_PROGRAM_ID,
     ChainOrderClient,
+    Timing,
     derive_market_pda,
     derive_open_orders_pda,
 )
 from meridian_quant.mm.types import RestingOrder
+
+
+async def _no_sleep(_secs: float) -> None:
+    return None
+
+
+INSTANT = Timing(sleep=_no_sleep)
 
 # Test market: AAPL 2026-10-08 strike $230.00
 # Derived from program 5dJoSJfkx23ZkTGxMtnWxD7fabmM6WiezubXHWqKUffi
@@ -71,8 +80,14 @@ async def mock_rpc_client() -> AsyncMock:
     sig_resp.value = Signature.default()
     mock_client.send_transaction.return_value = sig_resp
 
-    # Mock confirm_transaction
-    mock_client.confirm_transaction.return_value = MagicMock()
+    # Mock getSignatureStatuses: every transaction is confirmed without error (P1-7:
+    # ChainOrderClient polls statuses itself instead of AsyncClient.confirm_transaction)
+    status = MagicMock()
+    status.err = None
+    status.confirmation_status = TransactionConfirmationStatus.Finalized
+    statuses_resp = MagicMock()
+    statuses_resp.value = [status]
+    mock_client.get_signature_statuses.return_value = statuses_resp
 
     return mock_client
 
@@ -95,7 +110,7 @@ async def test_place_order_builds_correct_instruction_accounts() -> None:
     async def mock_fetch_orders(market: str) -> list[object]:
         return []
 
-    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
+    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint, INSTANT)
     client.fetch_resting_orders = mock_fetch_orders  # type: ignore[assignment]
 
     # Capture instructions created during place_order
@@ -172,7 +187,7 @@ async def test_place_order_includes_same_side_owners_in_remaining_accounts() -> 
             ),
         ]
 
-    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
+    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint, INSTANT)
     client.fetch_resting_orders = mock_fetch_orders  # type: ignore[assignment]
 
     # Capture instruction
@@ -225,7 +240,7 @@ async def test_cancel_order_builds_correct_instruction_accounts() -> None:
     payer = Keypair()
 
     mock_client = await mock_rpc_client()
-    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
+    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint, INSTANT)
 
     # Capture instruction creation
     with InstructionCapture() as capture:
@@ -265,7 +280,7 @@ async def test_mint_pair_builds_correct_instruction_accounts() -> None:
     account_resp.value = None
     mock_client.get_account_info.return_value = account_resp
 
-    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
+    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint, INSTANT)
 
     # Capture all instructions (might include ATA creation + mint_pair)
     with InstructionCapture() as capture:
@@ -306,7 +321,7 @@ async def test_settle_funds_builds_correct_instruction_accounts() -> None:
     payer = Keypair()
 
     mock_client = await mock_rpc_client()
-    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint)
+    client = ChainOrderClient(mock_client, program_id, payer, usdc_mint, INSTANT)
 
     # Capture instruction creation
     with InstructionCapture() as capture:

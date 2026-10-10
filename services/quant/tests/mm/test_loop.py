@@ -746,11 +746,17 @@ async def test_missing_ata_vs_rpc_timeout(mm_config: MMConfig) -> None:
                 raise Exception("RPC timeout")
             await super().mint_pair(market, qty, owner)
 
-        async def place_order(
-            self, market: str, side: str, price: int, qty: int, owner: str
+        async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+            self,
+            market: str,
+            side: str,
+            price: int,
+            qty: int,
+            owner: str,
+            resting_orders: list[RestingOrder] | None = None,
         ) -> int:
             self.place_called = True
-            return await super().place_order(market, side, price, qty, owner)
+            return await super().place_order(market, side, price, qty, owner, resting_orders)
 
     # Test 2a: Missing ATA (balance=0) should still mint and place
     # Use today's trading date (ET timezone)
@@ -897,11 +903,17 @@ async def test_fetch_resting_orders_failure_skips_quoting(
                 raise Exception("Simulated RPC error on market A")
             return await super().fetch_resting_orders(market)
 
-        async def place_order(
-            self, market: str, side: str, price: int, qty: int, owner: str
+        async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+            self,
+            market: str,
+            side: str,
+            price: int,
+            qty: int,
+            owner: str,
+            resting_orders: list[RestingOrder] | None = None,
         ) -> int:
             self.place_calls.append(market)
-            return await super().place_order(market, side, price, qty, owner)
+            return await super().place_order(market, side, price, qty, owner, resting_orders)
 
     order_client = PartialFailWithLeftoversClient()
     mm = MarketMakerLoop(mm_config, market_source, fv_source, order_client, clock=fake_clock)
@@ -1029,11 +1041,17 @@ async def test_cancel_fetch_failure_per_market_isolation(
             self.cancel_calls.append(market)
             await super().cancel_order(market, order_id, owner)
 
-        async def place_order(
-            self, market: str, side: str, price: int, qty: int, owner: str
+        async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+            self,
+            market: str,
+            side: str,
+            price: int,
+            qty: int,
+            owner: str,
+            resting_orders: list[RestingOrder] | None = None,
         ) -> int:
             self.place_calls.append(market)
-            return await super().place_order(market, side, price, qty, owner)
+            return await super().place_order(market, side, price, qty, owner, resting_orders)
 
     order_client = PartialFailWithLeftoversClient()
     mm = MarketMakerLoop(mm_config, market_source, fv_source, order_client, clock=fake_clock)

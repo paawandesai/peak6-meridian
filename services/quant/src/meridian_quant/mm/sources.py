@@ -24,8 +24,20 @@ class FairValueSource(Protocol):
 class OrderClient(Protocol):
     """Client for placing/canceling orders (injectable for tests)."""
 
-    async def place_order(self, market: str, side: str, price: int, qty: int, owner: str) -> int:
-        """Place an order. Returns order_id."""
+    async def place_order(  # noqa: PLR0913, PLR0917
+        self,
+        market: str,
+        side: str,
+        price: int,
+        qty: int,
+        owner: str,
+        resting_orders: list[RestingOrder] | None = None,
+    ) -> int:
+        """Place an order. Returns order_id.
+
+        resting_orders: the market's resting orders if the caller just read them (P1-7);
+        the client fetches them itself when None.
+        """
         ...
 
     async def cancel_order(self, market: str, order_id: int, owner: str) -> None:
@@ -34,6 +46,14 @@ class OrderClient(Protocol):
 
     async def fetch_resting_orders(self, market: str) -> list[RestingOrder]:
         """Fetch all resting orders for a market."""
+        ...
+
+    async def fetch_resting_orders_batch(self, markets: list[str]) -> dict[str, list[RestingOrder]]:
+        """Fetch resting orders for many markets in batched reads (P1-7).
+
+        Raises if the read fails. A market missing from the result could not be read and
+        must be treated as unknown (fail closed, AB-10).
+        """
         ...
 
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
@@ -55,5 +75,12 @@ class OrderClient(Protocol):
     async def get_multiple_token_balances(
         self, markets: list[str], owner: str
     ) -> dict[str, tuple[int, int]]:
-        """Batch-fetch YES and NO token balances for multiple markets (P1-7)."""
+        """Batch-fetch (YES, NO) token balances for many markets (P1-7).
+
+        Raises if the read fails. A market missing from the result must not be quoted.
+        """
+        ...
+
+    def begin_cycle(self) -> None:
+        """Mark the start of a loop cycle (lets the client reuse per-cycle RPC state)."""
         ...
