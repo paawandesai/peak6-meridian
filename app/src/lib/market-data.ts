@@ -84,25 +84,38 @@ export async function pollPrices(
 
 /**
  * One book poll for `markets`; a market that cannot be read is `unavailable`, not guessed.
- * P0-4: fetchBooks chunks the RPC calls internally (≤99 keys each) to stay under the 100-key limit.
+ * P0-4: accepts `cached` books for closed/settled markets to skip re-fetching them. fetchBooks
+ * chunks the RPC calls internally (≤99 keys each) to stay under the 100-key limit.
  */
 export async function pollBooks(
   sources: Pick<MarketDataSources, "fetchBooks">,
   markets: readonly MarketRow[],
+  cached: Readonly<Record<string, MarketBook>> = {},
 ): Promise<Record<string, MarketBook>> {
-  const books: Record<string, MarketBook> = {};
-  const readable: { row: MarketRow; key: PublicKey }[] = [];
+  const books: Record<string, MarketBook> = { ...cached };
+  const toFetch: { row: MarketRow; key: PublicKey }[] = [];
+
   for (const row of markets) {
+    // Skip closed/settled markets if we have a ready cached value (P0-4: fetch once).
+    // Retry failures (unavailable cached values). A market is closed when closeTs is in the past;
+    // settled is a stronger signal that covers Closed/Settling/SettlementDelayed/Settled.
+    const cachedValue = cached[row.address];
+    const isClosed = row.settled || BigInt(Math.floor(Date.now() / 1000)) >= row.closeTs;
+    if (isClosed && cachedValue?.state === "ready") {
+      continue;
+    }
     try {
-      readable.push({ row, key: new PublicKey(row.address) });
+      toFetch.push({ row, key: new PublicKey(row.address) });
     } catch {
       books[row.address] = { state: "unavailable" };
     }
   }
-  if (readable.length === 0) return books;
+
+  if (toFetch.length === 0) return books;
+
   try {
-    const quotes = await sources.fetchBooks(readable.map(({ key }) => key));
-    for (const { row } of readable) {
+    const quotes = await sources.fetchBooks(toFetch.map(({ key }) => key));
+    for (const { row } of toFetch) {
       const found = quotes[row.address];
       books[row.address] =
         found === undefined || found === null
@@ -110,7 +123,11 @@ export async function pollBooks(
           : { state: "ready", quotes: found };
     }
   } catch {
-    for (const { row } of readable) books[row.address] = { state: "unavailable" };
+    for (const { row } of toFetch) {
+      if (books[row.address] === undefined) {
+        books[row.address] = { state: "unavailable" };
+      }
+    }
   }
   return books;
 }
@@ -118,7 +135,7 @@ export async function pollBooks(
 export type MarketDataOptions = {
   /** Price poll interval; the server caches for at most 5 s, so faster is pointless. */
   readonly priceIntervalMs?: number;
-  /** Book poll interval; 1 s keeps a confirmed order visible well within NFR-01's 3 s. */
+  /** Book poll interval; 2 s meets NFR-01's 3 s and reduces RPC load (P0-4). */
   readonly bookIntervalMs?: number;
   /** Whether to pause polling (for tests); defaults to checking document.visibilityState. */
   readonly shouldPoll?: () => boolean;
@@ -132,7 +149,7 @@ export function useMarketData(
 ): MarketData {
   const [data, setData] = useState<MarketData>(INITIAL_MARKET_DATA);
   const priceIntervalMs = options.priceIntervalMs ?? 5_000;
-  const bookIntervalMs = options.bookIntervalMs ?? 1_000;
+  const bookIntervalMs = options.bookIntervalMs ?? 2_000; // P0-4: 2s reduces RPC, still meets NFR-01's 3s
   const shouldPoll =
     options.shouldPoll ??
     (() => typeof document === "undefined" || document.visibilityState === "visible");
@@ -192,7 +209,8 @@ export function useMarketData(
       if (!shouldPoll() || booksInFlight) return;
       booksInFlight = true;
       try {
-        const books = await pollBooks(active, marketsRef.current);
+        // Pass cached books so closed/settled markets are fetched once (P0-4)
+        const books = await pollBooks(active, marketsRef.current, latest.books);
         state.booksDone = true;
         publish({ ...latest, books });
       } finally {
