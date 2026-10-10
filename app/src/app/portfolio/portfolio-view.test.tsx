@@ -198,7 +198,7 @@ describe("Portfolio page", () => {
         ]),
       }),
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Closed" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Closed" }));
     const won = (await screen.findByRole("rowheader", { name: /AAPL/ })).closest("tr");
     const lost = screen.getByRole("rowheader", { name: /MSFT/ }).closest("tr");
     expect(won).not.toBeNull();
@@ -333,15 +333,15 @@ describe("Portfolio page", () => {
     const positions = await screen.findByRole("table", { name: "Positions" });
     expect(within(positions).getByRole("rowheader", { name: /NVDA/ })).toBeInTheDocument();
     expect(within(positions).queryByRole("rowheader", { name: /AAPL/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Open" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("tab", { name: "Open" })).toHaveAttribute("aria-selected", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: "Resting orders" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Resting orders" }));
     const resting = screen.getByRole("table", { name: "Resting orders" });
     expect(resting).toHaveTextContent("Buy YES (bid)");
     expect(resting).toHaveTextContent("44¢");
     expect(screen.queryByRole("table", { name: "Positions" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Closed" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Closed" }));
     const closed = screen.getByRole("table", { name: "Positions" });
     expect(within(closed).getByRole("rowheader", { name: /AAPL/ })).toBeInTheDocument();
     expect(within(closed).queryByRole("rowheader", { name: /NVDA/ })).toBeNull();
@@ -350,9 +350,9 @@ describe("Portfolio page", () => {
   it("empty filters say so in words", async () => {
     setup({ snap: snapshot() });
     expect(await screen.findByText("No open positions.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Resting orders" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Resting orders" }));
     expect(screen.getByText("No resting orders.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Closed" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Closed" }));
     expect(screen.getByText("No closed positions.")).toBeInTheDocument();
   });
 
@@ -382,5 +382,24 @@ describe("Portfolio page", () => {
     expect(totals).toHaveTextContent("1,250.00 test-USDC");
     expect(totals).toHaveTextContent("Redeemable now $0.00");
     expect(totals).toHaveTextContent("Realized $0.00");
+  });
+
+  it("shows non-zero redeemable amount correctly formatted", async () => {
+    setup({
+      snap: snapshot({
+        holdings: { [AAPL.address]: held(40n, 0n) },
+        events: as([
+          fill("a", AAPL.address, {
+            taker: KEY.toBase58(),
+            maker: OTHER,
+            takerSide: "Bid",
+            price: 55,
+            qty: 40n,
+          }),
+        ]),
+      }),
+    });
+    const totals = await screen.findByLabelText("Totals");
+    expect(totals).toHaveTextContent("Redeemable now $40.00");
   });
 });
