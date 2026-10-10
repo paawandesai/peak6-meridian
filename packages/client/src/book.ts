@@ -71,8 +71,9 @@ export type BookAccountApi = {
 };
 
 /**
- * Quotes for several markets in one RPC call, keyed by market address (base58). A market whose
- * book account is missing maps to `null`.
+ * Quotes for several markets in chunked RPC calls (≤99 keys per call), keyed by market address
+ * (base58). A market whose book account is missing maps to `null`. P0-4: chunk to stay under
+ * Solana's 100-key getMultipleAccounts limit.
  */
 export async function fetchBookQuotes(
   books: BookAccountApi,
@@ -80,10 +81,19 @@ export async function fetchBookQuotes(
   programId: PublicKey = MERIDIAN_PROGRAM_ID,
 ): Promise<Record<string, BookQuotes | null>> {
   const addresses = markets.map((market) => findBookPda(market, programId).address);
-  const accounts = await books.fetchMultiple(addresses);
+
+  // P0-4: chunk addresses into batches of ≤99 to stay under 100-key RPC limit
+  const CHUNK_SIZE = 99;
+  const allAccounts: (BookLike | null)[] = [];
+  for (let i = 0; i < addresses.length; i += CHUNK_SIZE) {
+    const chunk = addresses.slice(i, i + CHUNK_SIZE);
+    const chunkAccounts = await books.fetchMultiple(chunk);
+    allAccounts.push(...chunkAccounts);
+  }
+
   const out: Record<string, BookQuotes | null> = {};
   markets.forEach((market, index) => {
-    const account = accounts[index];
+    const account = allAccounts[index];
     out[market.toBase58()] = account === undefined || account === null ? null : bookQuotes(account);
   });
   return out;

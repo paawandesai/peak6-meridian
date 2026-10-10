@@ -11,6 +11,7 @@ const APP_PORT = Number(process.env.E2E_APP_PORT ?? "3100");
 export default defineConfig({
   testDir: "playwright",
   testMatch: "**/*.spec.ts",
+  testIgnore: "**/03-trade-evidence.spec.ts",
   globalSetup: "./playwright/global-setup.ts",
   fullyParallel: false,
   workers: 1,

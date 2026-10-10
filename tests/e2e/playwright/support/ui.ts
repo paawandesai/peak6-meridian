@@ -16,6 +16,10 @@ export const intentButton = (page: Page, intent: IntentLabel): Locator =>
 export const priceInput = (page: Page): Locator => page.getByLabel(/price/i);
 export const qtyInput = (page: Page): Locator => page.getByLabel(/qty|quantity/i);
 
+/** Select order kind (market or limit) by clicking the corresponding radio button label. */
+export const orderKindRadio = (page: Page, kind: "market" | "limit"): Locator =>
+  page.getByRole("radio", { name: kind === "market" ? "Market" : "Limit" });
+
 /** The single sign button, e.g. "Sign and buy NO". */
 export const signButton = (page: Page): Locator =>
   page.getByRole("button", { name: /^Sign and (buy|sell)/i });

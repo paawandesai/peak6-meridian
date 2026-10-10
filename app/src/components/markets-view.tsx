@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { Landing, PageNotes } from "./markets/notes";
 import { useMarketSources } from "./markets/data-context";
 import { TickerLadder } from "./markets/ticker-ladder";
@@ -21,22 +19,8 @@ const NO_SOURCES: MarketDataSources = {
   fetchBooks: () => Promise.resolve({}),
 };
 
-function useOpenTimes(markets: readonly MarketRow[]): Record<string, number | null> {
-  const { openTimes } = useMarketSources();
-  const [times, setTimes] = useState<Record<string, number | null>>({});
-  const key = markets.map((m) => m.address).join(",");
-  useEffect(() => {
-    if (openTimes === null || key === "") return;
-    let cancelled = false;
-    void openTimes(key.split(",")).then((found) => {
-      if (!cancelled) setTimes((previous) => ({ ...previous, ...found }));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [openTimes, key]);
-  return times;
-}
+// P0-4: removed useOpenTimes hook. Markets page shows "Opened —" (null openedAt).
+// Only Trade page fetches the real creation time via reader.getOpenTime().
 
 /**
  * Read-only list of on-chain markets as one strike ladder per ticker (FR-16, UI-03): all open
@@ -66,7 +50,6 @@ export function MarketsView({
   // Show ALL markets, not just active date — partition by open/closed status instead
   // Show ALL markets, partitioned by status within each ticker group
   const data = useMarketData(all, sources.data ?? NO_SOURCES);
-  const openTimes = useOpenTimes(all);
   // M3-10: Fetch Pyth live quotes (D-055: Pyth Pro is primary demo price source)
   const pythQuotes = usePythQuotes();
   // M3-03: Fair values for edge calculation and distribution chart
@@ -88,7 +71,7 @@ export function MarketsView({
     const book = data.books[market.address];
     const fairValue = fairValues.byMarket[market.address];
     return {
-      openedAt: openTimes[market.address] ?? null,
+      openedAt: null, // P0-4: Markets shows "Opened —"; Trade fetches real time
       ...(book?.state === "ready" ? { quotes: book.quotes } : {}),
       fair: fairValue,
       fairStatus: fairValues.status,
