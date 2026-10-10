@@ -18,7 +18,6 @@ import { PythPrice, PythPricePlaceholder, PythPriceUnavailable } from "@/compone
 import type { AppConfig } from "@/lib/chain";
 import type { MarketData } from "@/lib/market-data";
 import type { MarketRow } from "@/lib/markets";
-import { formatEtHm } from "@/lib/time";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
 
 type Props = {
