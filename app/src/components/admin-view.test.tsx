@@ -69,19 +69,15 @@ describe("AdminView access", () => {
   });
 });
 
-describe("pause control (UI-08 AC2)", () => {
-  it("states what stops and what keeps working, then pauses with one signature", async () => {
+describe("pause control (UI-08 AC2, P1-8)", () => {
+  it("states the pause consequence clearly, then pauses with one signature", async () => {
     wallet.publicKey = ADMIN;
     const a = actions();
     view(a);
-    expect(await screen.findByText("Trading is running.")).toBeInTheDocument();
+    expect(await screen.findByText(/Running:/)).toBeInTheDocument();
+    expect(screen.getByText(/all actions available/)).toBeInTheDocument();
     expect(
-      screen.getByText("Mint pair, new orders, Buy NO and Sell NO are stopped for every market."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Cancel, withdraw (settle funds), redeem and automatic settlement keep working.",
-      ),
+      screen.getByText(/When paused: trading and minting stopped; cancel, withdraw and redeem still work/),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Pause trading" }));
     expect(await screen.findByText("Confirmed in slot 42".replace("42", "43"))).toBeInTheDocument();
@@ -92,12 +88,14 @@ describe("pause control (UI-08 AC2)", () => {
     );
   });
 
-  it("offers unpause while paused and says what resumes", async () => {
+  it("shows the pause consequence when paused and offers unpause", async () => {
     wallet.publicKey = ADMIN;
     const a = actions();
     view(a, true);
-    expect(await screen.findByText("Trading is paused.")).toBeInTheDocument();
-    expect(screen.getByText(/lets traders mint, place orders/)).toBeInTheDocument();
+    expect(await screen.findByText(/Paused:/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/trading and minting stopped; cancel, withdraw and redeem still work/),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Unpause trading" }));
     await waitFor(() => expect(a.setPaused).toHaveBeenCalledWith(false));
   });
