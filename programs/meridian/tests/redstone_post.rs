@@ -931,10 +931,10 @@ fn post_redstone_price_multi_datapoint_ticker_not_first() {
     let close_ts_ms = 1700000000i64 * 1000;
 
     // Build multi-datapoint payload with 3 feeds (tests ≥2 datapoints per AC6)
-    // Parser must find and extract NVDA's value from the multi-feed package
+    // NVDA is SECOND to verify parser searches beyond first datapoint
     let data_points = &[
-        ("NVDA", 2050_0000_0000u128), // Target ticker
         ("BTC", 50000_0000_0000u128),
+        ("NVDA", 2050_0000_0000u128), // Target ticker (not first)
         ("ETH", 3000_0000_0000u128),
     ];
     let signing_signers = &signers[0..3];
