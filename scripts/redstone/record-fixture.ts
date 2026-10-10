@@ -18,6 +18,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DateTime } from "luxon";
+import { SignedDataPackage } from "@redstone-finance/protocol";
 
 const MAG7_TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA"] as const;
 
@@ -27,7 +28,7 @@ const REDSTONE_GATEWAYS = [
 ] as const;
 
 const FETCH_TIMEOUT_MS = 30_000;
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 3;
 
 interface CliArgs {
   date: string;
@@ -129,7 +130,8 @@ async function fetchRedStonePackage(
   ticker: string,
   closeTimeMs: number,
 ): Promise<RedStonePackage> {
-  const url = `${gateway}/data-packages/historical/redstone-primary-prod/${closeTimeMs}?symbols=${ticker}`;
+  // Use the latest endpoint with data-packages API for signed packages
+  const url = `${gateway}/data-packages/latest/redstone-primary-prod?symbols=${ticker}`;
 
   console.log(`Fetching ${ticker} from ${gateway}...`);
   const body = await fetchWithRetry(url);
@@ -143,22 +145,25 @@ async function fetchRedStonePackage(
     throw new Error(`No data for ${ticker} in RedStone response`);
   }
 
-  const signedPackage = data[ticker][0];
+  const signedPackageObj = data[ticker][0];
   if (
-    !signedPackage ||
-    typeof signedPackage !== "object" ||
-    !signedPackage.signature ||
-    !signedPackage.dataPoints
+    !signedPackageObj ||
+    typeof signedPackageObj !== "object" ||
+    !signedPackageObj.signature ||
+    !signedPackageObj.dataPoints
   ) {
     throw new Error(`Invalid package structure for ${ticker}`);
   }
 
-  const payloadHex = JSON.stringify(signedPackage);
+  // Use the SDK to serialize the signed package into raw bytes
+  const signedPackage = SignedDataPackage.fromObj(signedPackageObj);
+  const payloadBytes = signedPackage.toBytes();
+  const payloadHex = Buffer.from(payloadBytes).toString("hex");
 
   return {
     gateway,
     ticker,
-    timestampMs: closeTimeMs,
+    timestampMs: signedPackageObj.timestampMilliseconds || closeTimeMs,
     payloadHex,
   };
 }
@@ -295,7 +300,7 @@ async function recordFixtures(args: CliArgs): Promise<void> {
   for (const pkg of packages) {
     const filename = `${pkg.ticker}.json`;
     await writeFile(join(fixtureDir, filename), pkg.payloadHex, "utf-8");
-    console.log(`  Wrote ${filename}`);
+    console.log(`  Wrote ${filename} (${pkg.payloadHex.length / 2} bytes)`);
   }
 
   if (officialCloses.length > 0) {
@@ -308,34 +313,26 @@ async function recordFixtures(args: CliArgs): Promise<void> {
     console.log(`  Wrote ${closesFilename}`);
   }
 
-  const signerAddresses: string[] = [];
-  const firstPackage = packages[0];
-  if (firstPackage) {
-    const data = JSON.parse(firstPackage.payloadHex);
-    if (data.signature && typeof data.signature === "string") {
-      signerAddresses.push(`0x${data.signature.slice(0, 40)}`);
-    }
-  }
-
   const readme = `# RedStone Fixtures: ${args.date}
 
 **Recorded:** ${new Date().toISOString()}
 **Close time:** ${new Date(closeTimeMs).toISOString()} (4:00 PM ET)
 **Tickers:** ${MAG7_TICKERS.join(", ")}
 **Gateways:** ${REDSTONE_GATEWAYS.length} (byte-identical verified)
+**Format:** Raw signed payload bytes (hex-encoded), serialized using @redstone-finance/protocol SDK
 
 ## Files
 
-${packages.map((pkg) => `- \`${pkg.ticker}.json\`: RedStone signed package for ${pkg.ticker}`).join("\n")}
+${packages.map((pkg) => `- \`${pkg.ticker}.json\`: Raw signed payload bytes for ${pkg.ticker} (${pkg.payloadHex.length / 2} bytes)`).join("\n")}
 ${officialCloses.length > 0 ? `- \`official-closes.json\`: Tiingo/Twelve Data official closes (public values only)` : ""}
 
 ## Provenance
 
-- **Source:** RedStone Primary Prod (\`redstone-primary-prod\`)
+- **Source:** RedStone data-packages API (\`/data-packages/latest/redstone-primary-prod\`)
 - **Gateways:**
 ${REDSTONE_GATEWAYS.map((g, i) => `  ${i + 1}. ${g}`).join("\n")}
 - **Timestamp:** ${closeTimeMs} (${new Date(closeTimeMs).toISOString()})
-${signerAddresses.length > 0 ? `- **Signer addresses (sample):** ${signerAddresses.join(", ")}` : ""}
+- **Serialization:** @redstone-finance/protocol SignedDataPackage.toBytes()
 
 ## Verification
 
