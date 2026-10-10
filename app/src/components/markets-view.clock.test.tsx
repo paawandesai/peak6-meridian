@@ -9,27 +9,13 @@ vi.mock("@solana/wallet-adapter-react", async (importOriginal) => ({
 }));
 
 import { MarketsView } from "./markets-view";
-import { TestMarketProvider } from "./test-market-context";
 import { market, reader, withReader } from "@/test-utils";
 
-const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
-// P0-1: Use session close for Oct 8, 2026 (16:00 ET = 20:00 UTC in EDT)
-const oct8SessionClose = BigInt(utc("2026-10-08T20:00:00Z"));
 const markets = [
-  market({
-    address: "1111111111111111111111111111111A",
-    tradingDate: 20261008,
-    ticker: "NVDA",
-    closeTs: oct8SessionClose,
-  }),
+  market({ address: "1111111111111111111111111111111A", tradingDate: 20261008, ticker: "NVDA" }),
 ];
 const view = () =>
-  withReader(
-    reader({ listMarkets: () => Promise.resolve(markets) }),
-    <TestMarketProvider>
-      <MarketsView />
-    </TestMarketProvider>,
-  );
+  withReader(reader({ listMarkets: () => Promise.resolve(markets) }), <MarketsView />);
 
 describe("MarketsView before the clock has mounted", () => {
   it("shows loading, never a 'Showing markets from … (closed)' line from a 1970 clock", async () => {

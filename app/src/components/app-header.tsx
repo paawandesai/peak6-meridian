@@ -5,7 +5,7 @@ import { UsdcBalance } from "./usdc-balance";
 import { WalletButton } from "./wallet-button";
 import type { AppConfig } from "@/lib/chain";
 import type { MarketRow } from "@/lib/markets";
-import { CLOCK_PLACEHOLDER, formatEtHm12, formatEtHms, nextClose } from "@/lib/time";
+import { CLOCK_PLACEHOLDER, formatEtHms, nextClose } from "@/lib/time";
 
 export const NAV_ITEMS = [
   { href: "/", label: "Markets" },
@@ -17,11 +17,7 @@ export const NAV_ITEMS = [
 export const PAUSE_BANNER_TEXT =
   "Paused: trading and minting stopped; cancel, withdraw and redeem still work";
 
-/**
- * The next-close slot of the header (P0-1): session close with countdown, or empty states.
- * "NYSE close 4:00 PM ET · in 1:57:03" when session markets are open; after close or on weekends,
- * one of the design.md §3 empty states.
- */
+/** The next-close slot of the header: a countdown, or one of the design.md §3 empty states. */
 export function NextCloseStatus({
   markets,
   nowSecs,
@@ -34,31 +30,14 @@ export function NextCloseStatus({
   if (nowSecs === null || markets === null) return <span className="mer-num">--:--</span>;
   const next = nextClose(markets, nowSecs);
   switch (next.kind) {
-    case "countdown": {
-      // "NYSE close 4:00 PM ET · in 1:57:03"
-      const closeTime = next.hourET === 13 ? "1:00 PM ET" : "4:00 PM ET";
-      return (
-        <span>
-          NYSE close {closeTime} · in <Countdown secondsLeft={next.secondsLeft} label="" />
-        </span>
-      );
-    }
+    case "countdown":
+      return <Countdown secondsLeft={next.secondsLeft} />;
     case "none":
       return <span>No markets today</span>;
-    case "closed-settling": {
-      // "Closed · settling at 4:05 PM ET" (P0-1 AC2)
-      const settlingTime = next.settlingAt ? ` at ${formatEtHm12(next.settlingAt)} ET` : "";
-      return <span>Closed · settling{settlingTime}</span>;
-    }
+    case "closed-settling":
+      return <span>Closed · settling</span>;
     case "settlement-delayed":
       return <span>Settlement delayed</span>;
-    case "next-session":
-      // "Next session Mon 9:30 AM ET" (P0-1 weekend AC)
-      return (
-        <span>
-          Next session {next.dayName} {next.openTime} ET
-        </span>
-      );
     case "markets-closed":
       return <span>Markets closed</span>;
   }

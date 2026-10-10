@@ -22,7 +22,7 @@ const readOnlyWallet = {
   signAllTransactions: () => Promise.reject(new Error("read-only client cannot sign")),
 };
 
-/** One `getMultipleAccounts` call per poll, decoded by the generated client. */
+/** Chunked book reads (≤99 keys per RPC call) per poll, decoded by the generated client. */
 export function createBookSource(config: PublicConfig): BookSource {
   const connection = sharedConnection(config.rpcUrl);
   const provider = new AnchorProvider(connection, readOnlyWallet, { commitment: "confirmed" });
