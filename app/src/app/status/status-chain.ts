@@ -17,7 +17,7 @@ const SIGNATURE_PAGE = 1_000;
 /** Only the newest trading dates are inspected, which bounds the RPC cost (7 markets per day). */
 export const MAX_DAYS = 2;
 /** Concurrent market-facts fetches to limit RPC burst. */
-const CONCURRENCY_CAP = 3;
+const CONCURRENCY_CAP = 4;
 
 const tokenAccount = z.object({
   data: z.object({
@@ -94,14 +94,8 @@ export async function loadMarketFacts(
   rpc: StatusRpc,
   market: MarketRow,
   programId: PublicKey,
-  nowSecs: number,
 ): Promise<MarketFacts> {
   try {
-    // Skip signature scanning for open markets before close (P1-6 RPC optimization)
-    if (!market.settled && nowSecs < Number(market.closeTs)) {
-      return NO_FACTS;
-    }
-
     const address = new PublicKey(market.address);
     const all = (await rpc.getSignaturesForAddress(address, { limit: SIGNATURE_PAGE })).filter(
       (entry) => entry.err === null,
@@ -155,7 +149,6 @@ export async function loadStatusData(
   rpc: StatusRpc,
   all: readonly MarketRow[],
   programId: PublicKey,
-  nowSecs: number,
 ): Promise<StatusData> {
   const dates = [...new Set(all.map((row) => row.tradingDate))].sort((a, b) => b - a);
   const markets = all.filter((row) => dates.slice(0, MAX_DAYS).includes(row.tradingDate));
@@ -163,7 +156,7 @@ export async function loadStatusData(
   const [vaults, factsArray] = await Promise.all([
     loadVaultBalances(rpc, markets, programId),
     runWithConcurrency(markets, CONCURRENCY_CAP, async (row) => {
-      const result = await loadMarketFacts(rpc, row, programId, nowSecs);
+      const result = await loadMarketFacts(rpc, row, programId);
       return [row.address, result] as const;
     }),
   ]);
