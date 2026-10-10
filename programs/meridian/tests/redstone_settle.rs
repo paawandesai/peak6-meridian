@@ -140,7 +140,9 @@ fn settle_market_succeeds_after_redstone_post() {
         .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
 
-    let settle_ix = meridian::instruction::SettleMarket {};
+    let settle_ix = meridian::instruction::SettleMarket {
+        ed25519_ix_index: None,
+    };
     let settle_accounts = meridian::accounts::SettleMarket {
         config: config_pda(),
         market: market_pda,
@@ -148,6 +150,7 @@ fn settle_market_succeeds_after_redstone_post() {
         feed_twelve_data: Pubkey::default(),
         redstone_price: Some(price_pda),
         oracle_config: Some(oracle_config_pda),
+        instructions_sysvar: None,
         payer: settler.pubkey(),
     };
 
@@ -355,7 +358,9 @@ fn settle_market_fails_stale_oracle() {
         .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
 
-    let settle_ix = meridian::instruction::SettleMarket {};
+    let settle_ix = meridian::instruction::SettleMarket {
+        ed25519_ix_index: None,
+    };
     let settle_accounts = meridian::accounts::SettleMarket {
         config: config_pda(),
         market: market_pda,
@@ -363,6 +368,7 @@ fn settle_market_fails_stale_oracle() {
         feed_twelve_data: Pubkey::default(),
         redstone_price: Some(price_pda),
         oracle_config: Some(oracle_config_pda),
+        instructions_sysvar: None,
         payer: settler.pubkey(),
     };
 
@@ -458,7 +464,9 @@ fn settle_market_fails_wrong_price_pda() {
         .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
 
-    let settle_ix = meridian::instruction::SettleMarket {};
+    let settle_ix = meridian::instruction::SettleMarket {
+        ed25519_ix_index: None,
+    };
     let settle_accounts = meridian::accounts::SettleMarket {
         config: config_pda(),
         market: market_pda,
@@ -466,6 +474,7 @@ fn settle_market_fails_wrong_price_pda() {
         feed_twelve_data: Pubkey::default(),
         redstone_price: Some(wrong_price_pda), // TSLA price for NVDA market
         oracle_config: Some(oracle_config_pda),
+        instructions_sysvar: None,
         payer: settler.pubkey(),
     };
 
@@ -546,7 +555,9 @@ fn settle_market_fails_before_close() {
         .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
 
-    let settle_ix = meridian::instruction::SettleMarket {};
+    let settle_ix = meridian::instruction::SettleMarket {
+        ed25519_ix_index: None,
+    };
     let settle_accounts = meridian::accounts::SettleMarket {
         config: config_pda(),
         market: market_pda,
@@ -554,6 +565,7 @@ fn settle_market_fails_before_close() {
         feed_twelve_data: Pubkey::default(),
         redstone_price: Some(price_pda),
         oracle_config: Some(oracle_config_pda),
+        instructions_sysvar: None,
         payer: settler.pubkey(),
     };
 
@@ -629,7 +641,9 @@ fn settle_market_at_strike_boundary() {
         .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
 
-    let settle_ix = meridian::instruction::SettleMarket {};
+    let settle_ix = meridian::instruction::SettleMarket {
+        ed25519_ix_index: None,
+    };
     let settle_accounts = meridian::accounts::SettleMarket {
         config: config_pda(),
         market: market_pda,
@@ -637,6 +651,7 @@ fn settle_market_at_strike_boundary() {
         feed_twelve_data: Pubkey::default(),
         redstone_price: Some(price_pda),
         oracle_config: Some(oracle_config_pda),
+        instructions_sysvar: None,
         payer: settler.pubkey(),
     };
 
@@ -777,7 +792,9 @@ fn settle_market_fails_cross_market_timestamp_mismatch() {
         .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
 
-    let settle_ix = meridian::instruction::SettleMarket {};
+    let settle_ix = meridian::instruction::SettleMarket {
+        ed25519_ix_index: None,
+    };
     let settle_accounts = meridian::accounts::SettleMarket {
         config: config_pda(),
         market: market_b_addrs.market,
@@ -785,6 +802,7 @@ fn settle_market_fails_cross_market_timestamp_mismatch() {
         feed_twelve_data: Pubkey::default(),
         redstone_price: Some(price_pda),
         oracle_config: Some(oracle_config_pda),
+        instructions_sysvar: None,
         payer: settler.pubkey(),
     };
     let settle_instruction = Instruction {
@@ -1027,7 +1045,9 @@ fn settle_market_fails_package_too_late_at_settle() {
         .airdrop(&settler.pubkey(), FUNDING_LAMPORTS)
         .unwrap();
 
-    let settle_ix = meridian::instruction::SettleMarket {};
+    let settle_ix = meridian::instruction::SettleMarket {
+        ed25519_ix_index: None,
+    };
     let settle_accounts = meridian::accounts::SettleMarket {
         config: config_pda(),
         market: market_a_addrs.market,
@@ -1035,6 +1055,7 @@ fn settle_market_fails_package_too_late_at_settle() {
         feed_twelve_data: Pubkey::default(),
         redstone_price: Some(price_pda),
         oracle_config: Some(oracle_config_pda),
+        instructions_sysvar: None,
         payer: settler.pubkey(),
     };
     let settle_instruction = Instruction {

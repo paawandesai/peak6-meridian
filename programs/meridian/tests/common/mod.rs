@@ -95,6 +95,9 @@ pub fn default_params(automation_authority: Pubkey) -> ConfigParams {
         max_conf_bps: 5,
         override_delay_secs: 3_600,
         tickers: mag7_slots(0..6),
+        pyth_lazer_signer: Pubkey::default(),
+        pyth_feed_ids: [0; 7], // No Pyth feeds configured by default
+        pyth_max_age_secs: 30, // Same default as max_staleness_slots (~12s converted to seconds)
     }
 }
 
