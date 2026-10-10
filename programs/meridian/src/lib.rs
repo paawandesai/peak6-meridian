@@ -10,6 +10,7 @@ pub mod errors;
 pub mod events;
 pub mod instructions;
 pub mod oracle;
+pub mod pyth;
 pub mod state;
 
 pub use instructions::*;
