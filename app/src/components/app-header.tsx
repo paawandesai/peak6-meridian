@@ -89,8 +89,7 @@ export function AppHeader({
 
   const handleDemoConnect = () => {
     // Connect to demo wallet (demo wallet adapter)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    select(DEMO_WALLET_NAME as any);
+    select(DEMO_WALLET_NAME as Parameters<typeof select>[0]);
   };
 
   return (
