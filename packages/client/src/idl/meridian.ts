@@ -690,6 +690,54 @@ export type Meridian = {
       ];
     },
     {
+      name: "migrateConfig";
+      docs: [
+        "Admin grows the v1 Config account to the current layout in place (M3-10b); optionally",
+        "sets the Pyth fields. Fails with `ConfigAlreadyMigrated` on a migrated account.",
+      ];
+      discriminator: [92, 131, 58, 105, 210, 154, 224, 193];
+      accounts: [
+        {
+          name: "config";
+          docs: [
+            "The Config PDA, owned by this program. Discriminator, size, bump and admin are checked in",
+            "the handler by reading the v1 prefix (a v1 account cannot deserialize as `Config`).",
+          ];
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "admin";
+          docs: ["Must equal the admin stored in the Config; pays the rent top-up."];
+          writable: true;
+          signer: true;
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
+        },
+      ];
+      args: [
+        {
+          name: "pyth";
+          type: {
+            option: {
+              defined: {
+                name: "pythConfigParams";
+              };
+            };
+          };
+        },
+      ];
+    },
+    {
       name: "mintPair";
       docs: ["Deposits `qty` USDC and mints `qty` YES + `qty` NO (FR-04). Stub until M1-04."];
       discriminator: [19, 149, 94, 110, 181, 186, 33, 107];
@@ -1476,6 +1524,10 @@ export type Meridian = {
       discriminator: [181, 49, 200, 156, 19, 167, 178, 91];
     },
     {
+      name: "configMigrated";
+      discriminator: [115, 69, 99, 100, 192, 77, 40, 50];
+    },
+    {
       name: "configUpdated";
       discriminator: [40, 241, 230, 122, 11, 19, 198, 194];
     },
@@ -1764,6 +1816,21 @@ export type Meridian = {
       name: "mathOverflow";
       msg: "Arithmetic overflow";
     },
+    {
+      code: 6047;
+      name: "invalidPythMaxAge";
+      msg: "pyth_max_age_secs must be greater than zero";
+    },
+    {
+      code: 6048;
+      name: "configAlreadyMigrated";
+      msg: "Config account is already migrated to the current layout";
+    },
+    {
+      code: 6049;
+      name: "configLayoutMismatch";
+      msg: "Config account is not a v1 Config (discriminator, size or bump mismatch)";
+    },
   ];
   types: [
     {
@@ -1936,6 +2003,11 @@ export type Meridian = {
             };
           },
           {
+            name: "bump";
+            docs: ["PDA bump."];
+            type: "u8";
+          },
+          {
             name: "pythLazerSigner";
             docs: [
               "Pyth Lazer Ed25519 signer pubkey (D-055, M3-10b). Operator-controlled, never",
@@ -1961,11 +2033,6 @@ export type Meridian = {
             ];
             type: "i64";
           },
-          {
-            name: "bump";
-            docs: ["PDA bump."];
-            type: "u8";
-          },
         ];
       };
     },
@@ -1985,6 +2052,49 @@ export type Meridian = {
           {
             name: "usdcMint";
             type: "pubkey";
+          },
+        ];
+      };
+    },
+    {
+      name: "configMigrated";
+      docs: ["`migrate_config` grew the v1 Config account to the current layout (M3-10b)."];
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "admin";
+            type: "pubkey";
+          },
+          {
+            name: "oldLen";
+            type: "u32";
+          },
+          {
+            name: "newLen";
+            type: "u32";
+          },
+          {
+            name: "rentTopUp";
+            docs: [
+              "Lamports the admin paid to keep the grown account rent-exempt (0 if none were needed).",
+            ];
+            type: "u64";
+          },
+          {
+            name: "pythSet";
+            docs: [
+              "True when the Pyth fields were set from the instruction arguments; false leaves them zero.",
+            ];
+            type: "bool";
+          },
+          {
+            name: "pythLazerSigner";
+            type: "pubkey";
+          },
+          {
+            name: "pythMaxAgeSecs";
+            type: "i64";
           },
         ];
       };
@@ -2598,6 +2708,32 @@ export type Meridian = {
           {
             name: "admin";
             type: "pubkey";
+          },
+        ];
+      };
+    },
+    {
+      name: "pythConfigParams";
+      docs: [
+        "The Pyth fields `migrate_config` may set while it grows a v1 account (M3-10b). `None`",
+        "leaves them zeroed for a later `update_config`.",
+      ];
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "pythLazerSigner";
+            type: "pubkey";
+          },
+          {
+            name: "pythFeedIds";
+            type: {
+              array: ["u32", 7];
+            };
+          },
+          {
+            name: "pythMaxAgeSecs";
+            type: "i64";
           },
         ];
       };
