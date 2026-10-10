@@ -3,12 +3,13 @@
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useMemo } from "react";
 
-import { loadWalletEvents, openOrdersAddresses } from "./history-chain";
+import { loadWalletEvents } from "./history-chain";
 import { HistoryView } from "./history-view";
 import { AppHeader } from "@/components/app-header";
 import { FaucetButton } from "@/components/faucet-button";
 import { Providers } from "@/components/providers";
 import { useReader } from "@/components/reader-context";
+import { useTestMarkets } from "@/components/test-market-context";
 import { useAsync } from "@/components/use-async";
 import { useNow } from "@/components/use-now";
 import { explorerTxUrl } from "@/lib/admin-chain";
@@ -21,25 +22,22 @@ function Page() {
   const { connection } = useConnection();
   const { publicKey } = useWallet();
   const config = useMemo(() => loadPublicConfig(), []);
+  const { showTestMarkets } = useTestMarkets();
   const marketsAll = useAsync(() => reader.listMarkets(), [reader]);
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
-  // P0-1 AC4: Filter to session markets only
+  // P0-1 AC3-4: Filter to session markets; include test markets when toggle is on
   const markets = useMemo(() => {
     if (marketsAll.status !== "ready") return marketsAll;
-    const { session } = partitionMarkets(marketsAll.value);
-    return { ...marketsAll, value: session };
-  }, [marketsAll]);
+    const { session, test } = partitionMarkets(marketsAll.value);
+    const filtered = showTestMarkets ? [...session, ...test] : session;
+    return { ...marketsAll, value: filtered };
+  }, [marketsAll, showTestMarkets]);
+  // P0-4: Use gPA to find existing OO accounts, don't call getSignaturesForAddress on every PDA
   const events = useAsync(async () => {
     if (publicKey === null) return [];
-    const all = await reader.listMarkets();
-    const { session } = partitionMarkets(all);
-    return loadWalletEvents(
-      connection,
-      publicKey,
-      config.programId,
-      openOrdersAddresses(session, publicKey, config.programId),
-    );
-  }, [reader, connection, publicKey, config]);
+    // loadWalletEvents uses gPA when no addresses are passed
+    return loadWalletEvents(connection, publicKey, config.programId);
+  }, [connection, publicKey, config]);
   return (
     <>
       <AppHeader
