@@ -52,6 +52,11 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
     # Operator Tier 1 decision: implement now using existing e2e bootstrap
     validator_process = None
 
+    # Check .so exists before starting validator (fresh worktree check)
+    program_so_path = Path("target/deploy/meridian.so")
+    if not program_so_path.exists():
+        pytest.skip("target/deploy/meridian.so not found (run 'make build-local' first)")
+
     try:
         # Read program ID from Anchor.toml (same as scripts/e2e.sh)
         # BPF program must be loaded at declare_id! address or it will be rejected

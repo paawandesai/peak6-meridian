@@ -1052,3 +1052,41 @@ async def test_cancel_fetch_failure_per_market_isolation(
     assert not a_quoted, "Should NOT quote market A (cancel listing failed)"
     assert b_quote_count == 2, f"Should quote 2 orders on B after cancel, got {b_quote_count}"
     assert c_quote_count == 2, f"Should quote 2 orders on C, got {c_quote_count}"
+
+
+def test_invalid_keypair_not_json() -> None:
+    """MarketMakerLoop raises ValueError for invalid keypair JSON."""
+    bad_config = MMConfig.model_validate(
+        {
+            "market_maker_keypair": "not-valid-json",
+            "program_id": "11111111111111111111111111111112",
+            "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+            "service_token": "test_token",
+        }
+    )
+    with pytest.raises(ValueError, match="must be a JSON array of 64 bytes"):
+        MarketMakerLoop(
+            bad_config,
+            market_source=FakeMarketSource(),
+            fair_value_source=FakeFairValueSource(),
+            order_client=FakeOrderClient(),
+        )
+
+
+def test_invalid_keypair_wrong_length() -> None:
+    """MarketMakerLoop raises ValueError for keypair with wrong length."""
+    bad_config = MMConfig.model_validate(
+        {
+            "market_maker_keypair": json.dumps([0] * 32),  # Only 32 bytes, need 64
+            "program_id": "11111111111111111111111111111112",
+            "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+            "service_token": "test_token",
+        }
+    )
+    with pytest.raises(ValueError, match="must be JSON array of 64 bytes"):
+        MarketMakerLoop(
+            bad_config,
+            market_source=FakeMarketSource(),
+            fair_value_source=FakeFairValueSource(),
+            order_client=FakeOrderClient(),
+        )
