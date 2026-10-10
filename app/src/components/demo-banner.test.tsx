@@ -22,17 +22,19 @@ const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 const DEMO_CLOSE = utc("2026-10-12T00:00:00Z"); // Sun Oct 11, 8:00 PM ET
 const NOW = utc("2026-10-11T15:00:00Z");
 const REGISTRY = parseDemoRegistry(
-  JSON.stringify([
-    {
-      tradingDate: 20261011,
-      asOf: 20261009,
-      closeTs: DEMO_CLOSE,
-      createdAt: "2026-10-10T15:00:00Z",
-      tickers: ["AAPL"],
-      strikesByTicker: { AAPL: [22_000] },
-      asOfCloseCentsByTicker: { AAPL: 22_512 },
-    },
-  ]),
+  JSON.stringify({
+    sessions: [
+      {
+        tradingDate: "2026-10-11",
+        asOf: "2026-10-09",
+        closeTs: DEMO_CLOSE,
+        createdAt: "2026-10-10T15:00:00Z",
+        tickers: ["AAPL"],
+        strikesByTicker: { AAPL: [22_000] },
+        asOfCloseCentsByTicker: { AAPL: 22_512 },
+      },
+    ],
+  }),
 );
 const DEMO = market({ address: "demo", tradingDate: 20261011, closeTs: BigInt(DEMO_CLOSE) });
 const REAL = market({

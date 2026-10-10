@@ -24,15 +24,15 @@ const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 const DEMO_CLOSE = utc("2026-10-12T00:00:00Z");
 
 const SESSION = {
-  tradingDate: 20261011,
-  asOf: 20261009,
+  tradingDate: "2026-10-11",
+  asOf: "2026-10-09",
   closeTs: DEMO_CLOSE,
   createdAt: "2026-10-10T15:00:00Z",
   tickers: ["AAPL", "NVDA"],
   strikesByTicker: { AAPL: [22_000, 23_000], NVDA: [18_000] },
   asOfCloseCentsByTicker: { AAPL: 22_512, NVDA: 18_034 },
 };
-const REGISTRY: DemoRegistry = parseDemoRegistry(JSON.stringify([SESSION]));
+const REGISTRY: DemoRegistry = parseDemoRegistry(JSON.stringify({ sessions: [SESSION] }));
 
 /** Every calendar date of 2026 as `YYYYMMDD`. */
 const date2026 = fc.integer({ min: 0, max: 364 }).map((offset) => {
@@ -100,24 +100,11 @@ describe("isValidYyyymmdd", () => {
   });
 });
 
-describe("parseDemoRegistry", () => {
-  it("accepts a bare list and normalises dates and close times", () => {
-    const registry = parseDemoRegistry(
-      JSON.stringify([
-        { ...SESSION, tradingDate: "2026-10-11", asOf: "20261009", closeTs: "1792" },
-      ]),
-    );
-    expect(registry.error).toBeNull();
-    expect(registry.sessions[0]).toMatchObject({
-      tradingDate: 20261011,
-      asOf: 20261009,
-      closeTs: 1792,
-    });
-  });
-
-  it("accepts { sessions: [...] }", () => {
+describe("parseDemoRegistry (schema from @meridian/client)", () => {
+  it("accepts the committed registry shape { sessions: [...] }", () => {
     const registry = parseDemoRegistry(JSON.stringify({ sessions: [SESSION] }));
-    expect(registry.sessions).toHaveLength(1);
+    expect(registry.error).toBeNull();
+    expect(registry.sessions[0]).toMatchObject({ tradingDate: "2026-10-11", asOf: "2026-10-09" });
   });
 
   it("treats missing or empty text as an empty registry", () => {
@@ -132,10 +119,12 @@ describe("parseDemoRegistry", () => {
   });
 
   it("reports a wrong shape", () => {
-    const registry = parseDemoRegistry(JSON.stringify([{ ...SESSION, asOf: 20260230 }]));
-    expect(registry.sessions).toEqual([]);
-    expect(registry.error).toMatch(/invalid/);
-    expect(parseDemoRegistry(JSON.stringify({ nope: 1 })).error).toMatch(/invalid/);
+    const bad = (value: unknown) => parseDemoRegistry(JSON.stringify(value));
+    expect(bad({ sessions: [{ ...SESSION, asOf: "2026-02-30" }] }).error).toMatch(/invalid/);
+    expect(bad([SESSION]).error).toMatch(/invalid/);
+    expect(bad({ nope: 1 }).error).toMatch(/invalid/);
+    expect(bad({ sessions: [SESSION, SESSION] }).error).toMatch(/duplicate tradingDate/);
+    expect(bad({ sessions: [SESSION] }).sessions).toHaveLength(1);
   });
 
   it("never throws on arbitrary input", () => {
@@ -149,15 +138,9 @@ describe("parseDemoRegistry", () => {
 });
 
 describe("findDemoSession", () => {
-  it("picks the newest entry for the date", () => {
-    const registry = parseDemoRegistry(
-      JSON.stringify([
-        { ...SESSION, asOf: 20261008, createdAt: "2026-10-10T10:00:00Z" },
-        { ...SESSION, asOf: 20261009, createdAt: "2026-10-10T15:00:00Z" },
-      ]),
-    );
-    expect(findDemoSession(registry, 20261011)?.asOf).toBe(20261009);
-    expect(findDemoSession(registry, 20261010)).toBeUndefined();
+  it("finds the entry for an on-chain YYYYMMDD trading date", () => {
+    expect(findDemoSession(REGISTRY, 20261011)?.asOf).toBe("2026-10-09");
+    expect(findDemoSession(REGISTRY, 20261010)).toBeUndefined();
   });
 });
 
@@ -165,6 +148,7 @@ describe("ET formatting", () => {
   it("formats a calendar date with its weekday", () => {
     expect(formatCalendarDate(20261009)).toBe("Fri Oct 9, 2026");
     expect(formatCalendarDate(20261231)).toBe("Thu Dec 31, 2026");
+    expect(formatCalendarDate("2026-10-09")).toBe("Fri Oct 9, 2026");
   });
 
   it("formats in ET during daylight time (EDT, UTC−4)", () => {
@@ -208,7 +192,7 @@ describe("demoBannerLines", () => {
   });
 
   it("uses the on-chain close_ts, not the registry's copy", () => {
-    const registry = parseDemoRegistry(JSON.stringify([{ ...SESSION, closeTs: 1 }]));
+    const registry = parseDemoRegistry(JSON.stringify({ sessions: [{ ...SESSION, closeTs: 1 }] }));
     const [line] = demoBannerLines(
       [demo({ closeTs: BigInt(utc("2026-10-11T22:30:00Z")) })],
       registry,

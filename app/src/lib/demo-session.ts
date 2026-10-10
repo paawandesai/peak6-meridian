@@ -3,48 +3,25 @@
  * is closed (a weekend or holiday). They simulate a chosen real session (`asOf`) and close at
  * whatever `close_ts` the creating script wrote on-chain.
  *
- * The registry schema below mirrors `packages/client/src/demo-sessions.ts` (`demoSessionsSchema`,
- * `DemoSession`) field for field. It lives here until that module is on `main`; the registry
- * itself (`deployments/demo-sessions.json`) is inlined at build time by `next.config.mjs` as
- * `NEXT_PUBLIC_DEMO_SESSIONS`, because it is committed data, not a secret.
+ * The registry schema and date rules come from `@meridian/client` (`demo-sessions.ts`). The
+ * registry itself (`deployments/demo-sessions.json`) is inlined at build time by
+ * `next.config.mjs` as `NEXT_PUBLIC_DEMO_SESSIONS`, because it is committed data, not a secret.
  *
  * ET formatting goes through `Intl.DateTimeFormat` with `America/New_York`; no UTC offsets.
  */
-import { isTradingDay } from "@meridian/client";
-import { z } from "zod";
+import {
+  demoSessionsSchema,
+  findDemoSession as findInRegistry,
+  isDemoTradingDate,
+  toIsoTradingDate,
+  type DemoSession,
+} from "@meridian/client";
 
 import type { MarketRow } from "./markets";
 
+export { isDemoTradingDate, type DemoSession };
+
 const ZONE = "America/New_York";
-
-/** `YYYYMMDD` as a number or digits, or `YYYY-MM-DD`; normalised to the on-chain number form. */
-const yyyymmdd = z
-  .union([z.number().int(), z.string().regex(/^\d{8}$|^\d{4}-\d{2}-\d{2}$/)])
-  .transform((value) => Number(String(value).replaceAll("-", "")))
-  .refine((value) => isValidYyyymmdd(value), { message: "not a calendar date (YYYYMMDD)" });
-
-/** Unix seconds as a number or a decimal string (bigint-safe JSON). */
-const unixSecs = z
-  .union([z.number().int().nonnegative(), z.string().regex(/^\d+$/)])
-  .transform((value) => Number(value));
-
-export const demoSessionSchema = z.object({
-  tradingDate: yyyymmdd,
-  asOf: yyyymmdd,
-  closeTs: unixSecs,
-  createdAt: z.string(),
-  tickers: z.array(z.string()),
-  strikesByTicker: z.record(z.string(), z.array(z.union([z.number(), z.string()]))),
-  asOfCloseCentsByTicker: z.record(z.string(), z.union([z.number(), z.string()])),
-});
-
-/** The committed registry: a bare list, or `{ sessions: [...] }`. */
-export const demoSessionsSchema = z.union([
-  z.array(demoSessionSchema),
-  z.object({ sessions: z.array(demoSessionSchema) }).transform((value) => value.sessions),
-]);
-
-export type DemoSession = z.infer<typeof demoSessionSchema>;
 
 export type DemoRegistry = {
   readonly sessions: readonly DemoSession[];
@@ -54,36 +31,13 @@ export type DemoRegistry = {
 
 /** True when the number is a real calendar date in `YYYYMMDD` form. */
 export function isValidYyyymmdd(value: number): boolean {
-  if (!Number.isInteger(value) || value < 10_000_101 || value > 99_991_231) return false;
-  const year = Math.floor(value / 10_000);
-  const month = Math.floor(value / 100) % 100;
-  const day = value % 100;
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-  );
+  return Number.isInteger(value) && value > 0 && toIsoTradingDate(value) !== null;
 }
 
 /** `20261011` → `2026-10-11`. */
 export function isoFromYyyymmdd(value: number): string {
   const text = String(value).padStart(8, "0");
   return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
-}
-
-/**
- * True when NYSE holds no regular session on the date (weekend or holiday), so a market dated
- * that day can only be a demo-session market. Outside the calendar's holiday tables only the
- * weekend test applies (a weekday there is treated as a trading day, never as demo).
- */
-export function isDemoTradingDate(tradingDate: number): boolean {
-  if (!isValidYyyymmdd(tradingDate)) return false;
-  const iso = isoFromYyyymmdd(tradingDate);
-  try {
-    return !isTradingDay(iso);
-  } catch {
-    const weekday = new Date(`${iso}T12:00:00Z`).getUTCDay();
-    return weekday === 0 || weekday === 6;
-  }
 }
 
 export function isDemoMarket(market: Pick<MarketRow, "tradingDate">): boolean {
@@ -117,7 +71,7 @@ export function parseDemoRegistry(text: string | undefined): DemoRegistry {
   if (!parsed.success) {
     return { sessions: [], error: `demo-sessions.json is invalid: ${parsed.error.message}` };
   }
-  return { sessions: parsed.data, error: null };
+  return { sessions: parsed.data.sessions, error: null };
 }
 
 let cached: DemoRegistry | null = null;
@@ -131,18 +85,12 @@ export function demoRegistry(): DemoRegistry {
   return cached;
 }
 
-/** The newest registry entry for a trading date (a re-run of the script supersedes the old one). */
+/** The registry entry for an on-chain `trading_date` (the schema allows one per date). */
 export function findDemoSession(
   registry: DemoRegistry,
   tradingDate: number,
 ): DemoSession | undefined {
-  return registry.sessions
-    .filter((session) => session.tradingDate === tradingDate)
-    .reduce<DemoSession | undefined>(
-      (best, session) =>
-        best === undefined || session.createdAt > best.createdAt ? session : best,
-      undefined,
-    );
+  return findInRegistry({ sessions: [...registry.sessions] }, tradingDate);
 }
 
 const etParts = new Intl.DateTimeFormat("en-US", {
@@ -167,9 +115,10 @@ function pick(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTyp
   return parts.find((part) => part.type === type)?.value ?? "";
 }
 
-/** A calendar date (no time zone involved): `20261009` → `Fri Oct 9, 2026`. */
-export function formatCalendarDate(value: number): string {
-  const parts = dateParts.formatToParts(new Date(`${isoFromYyyymmdd(value)}T12:00:00Z`));
+/** A calendar date (no time zone involved): `20261009` or `2026-10-09` → `Fri Oct 9, 2026`. */
+export function formatCalendarDate(value: number | string): string {
+  const iso = toIsoTradingDate(value) ?? String(value);
+  const parts = dateParts.formatToParts(new Date(`${iso}T12:00:00Z`));
   return `${pick(parts, "weekday")} ${pick(parts, "month")} ${pick(parts, "day")}, ${pick(parts, "year")}`;
 }
 
