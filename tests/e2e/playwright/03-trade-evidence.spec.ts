@@ -71,7 +71,7 @@ const STEPS: readonly Step[] = [
   },
   {
     intent: "Sell NO",
-    kind: "limit",
+    kind: "market",
     qty: 1,
     priceCents: 30,
     maker: { intent: "SELL_YES", kind: "limit", priceCents: 70, qty: 1n },
