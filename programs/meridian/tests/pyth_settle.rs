@@ -3,6 +3,14 @@
 //! instructions sysvar. Success and failure paths, plus Pyth settlement on a Config that was
 //! migrated from v1 by `migrate_config`.
 
+// Test code: the program rules on unwrap/panic/arithmetic do not apply here.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::arithmetic_side_effects
+)]
+
 mod common;
 
 use common::migration::pyth_params;

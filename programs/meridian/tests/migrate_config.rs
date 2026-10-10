@@ -3,6 +3,14 @@
 //! including the recorded devnet v1 account and the behaviour of other instructions before and
 //! after the migration.
 
+// Test code: the program rules on unwrap/panic/arithmetic do not apply here.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::arithmetic_side_effects
+)]
+
 mod common;
 
 use anchor_lang::error::ErrorCode;
