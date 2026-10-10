@@ -23,16 +23,12 @@ export type StrikeData = {
 
 function YesCell({ view }: { readonly view: ReturnType<typeof yesView> }) {
   if (view.kind === "mid") {
-    return (
-      <span className="mer-num">
-        {view.yes}¢ YES · {view.probability}%
-      </span>
-    );
+    return <span className="mer-num">{view.yes}¢</span>;
   }
   if (view.kind === "range") {
     return (
       <span className="mer-num">
-        {rangeText(view.bid, view.ask)} YES <span className="text-mer-ink-muted">wide spread</span>
+        {rangeText(view.bid, view.ask)} <span className="text-mer-ink-muted">wide</span>
       </span>
     );
   }
@@ -40,11 +36,18 @@ function YesCell({ view }: { readonly view: ReturnType<typeof yesView> }) {
 }
 
 function NoCell({ view }: { readonly view: ReturnType<typeof yesView> }) {
-  if (view.kind === "mid") return <span className="mer-num">{view.no}¢ NO</span>;
+  if (view.kind === "mid") return <span className="mer-num">{view.no}¢</span>;
   if (view.kind === "range") {
-    return <span className="mer-num">{rangeText(view.noBid, view.noAsk)} NO</span>;
+    return <span className="mer-num">{rangeText(view.noBid, view.noAsk)}</span>;
   }
   return <span>—</span>;
+}
+
+function ProbabilityCell({ view }: { readonly view: ReturnType<typeof yesView> }) {
+  if (view.kind === "mid") {
+    return <span className="mer-num">{view.probability}%</span>;
+  }
+  return <span className="text-mer-ink-muted">—</span>;
 }
 
 /** The probability bar: filled to the YES price, or an outlined bid-to-ask segment for a range. */
@@ -126,12 +129,11 @@ export function StrikeRow({
       </td>
       <td className="py-mer-2 pr-mer-3">
         <YesCell view={view} />
+        <span className="block text-mer-xs text-mer-ink-muted">YES</span>
       </td>
       <td className="py-mer-2 pr-mer-3">
         <NoCell view={view} />
-        <span className="block text-mer-xs text-mer-ink-muted">
-          NO is 100 − YES; YES + NO = 100¢
-        </span>
+        <span className="block text-mer-xs text-mer-ink-muted">NO</span>
       </td>
       <td className="py-mer-2 pr-mer-3">
         <FairEdge
@@ -142,8 +144,11 @@ export function StrikeRow({
           nowSecs={ctx.nowSecs}
         />
       </td>
-      <td className="hidden w-32 py-mer-2 pr-mer-3 sm:table-cell">
-        <Bar view={view} />
+      <td className="hidden py-mer-2 pr-mer-3 sm:table-cell">
+        <ProbabilityCell view={view} />
+        <span className="block w-32">
+          <Bar view={view} />
+        </span>
       </td>
       <td className="py-mer-2 pr-mer-3">
         <StateBadge {...badgeProps(market, status, ctx)} />

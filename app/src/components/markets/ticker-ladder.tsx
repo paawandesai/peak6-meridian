@@ -1,4 +1,7 @@
+import React from "react";
+
 import { PythPrice, PythPricePlaceholder } from "../pyth-price";
+import { PriceHistoryChart } from "../price-history-chart/price-history-chart";
 import { StrikeRow, type StrikeData } from "./strike-row";
 import type { PythQuote } from "@/lib/pyth-quotes";
 import type { BadgeContext } from "@/lib/market-view";
@@ -19,19 +22,23 @@ export function soonestOpenClose(markets: readonly MarketRow[], nowSecs: number)
 /**
  * One ticker's strike ladder. The `h2` holds only the symbol; the live price, as-of time and the
  * strike count and close time are siblings in the header line, so the ticker list stays a clean
- * heading list and the table keeps exactly one header row and one row per strike.
+ * heading list and the table keeps exactly one header row and one row per strike. Closed markets
+ * appear in a collapsed section below the open markets.
  */
 export function TickerLadder({
   ticker,
-  markets,
+  openMarkets,
+  closedMarkets,
   pythQuote,
   data,
   ctx,
   tradeHref,
 }: {
   readonly ticker: string;
-  /** Ascending strike. */
-  readonly markets: readonly MarketRow[];
+  /** Ascending strike. Open markets (Open or ClosingSoon). */
+  readonly openMarkets: readonly MarketRow[];
+  /** Ascending strike. Closed/Settling/SettlementDelayed/Settled markets. */
+  readonly closedMarkets: readonly MarketRow[];
   /** Pyth live quote (M3-10, D-055: Pyth Pro is primary demo price source). */
   readonly pythQuote: PythQuote | undefined;
   readonly data: (market: MarketRow) => StrikeData;
@@ -40,11 +47,48 @@ export function TickerLadder({
 }) {
   // Use Pyth quote for the live price marker (D-055: Pyth Pro is primary demo price source)
   const live = pythQuote === undefined ? null : BigInt(pythQuote.price_cents);
-  const strikes = markets.map((market) => market.strikeCents);
-  // The live price falls between the strike at or below it and the next one up.
+  const openStrikes = openMarkets.map((market) => market.strikeCents);
+  // The live price falls between the strike at or below it and the next one up (only for open markets)
   const belowIndex =
-    live === null ? -1 : strikes.reduce((found, strike, i) => (strike <= live ? i : found), -1);
-  const earliestClose = soonestOpenClose(markets, ctx.nowSecs);
+    live === null ? -1 : openStrikes.reduce((found, strike, i) => (strike <= live ? i : found), -1);
+  const earliestClose = openMarkets.length > 0 ? soonestOpenClose(openMarkets, ctx.nowSecs) : 0n;
+  const totalMarkets = openMarkets.length + closedMarkets.length;
+
+  const renderMarketRow = (market: MarketRow, i: number, showPriceMarker: boolean) => {
+    // Insert Pyth price row between strikes when live price falls between them (only for open markets)
+    const showPriceRowBefore = showPriceMarker && i === 0 && live !== null && belowIndex === -1;
+    const showPriceRowAfter = showPriceMarker && i === belowIndex && live !== null;
+    return (
+      <React.Fragment key={market.address}>
+        {showPriceRowBefore && pythQuote !== undefined ? (
+          <tr key={`pyth-above-${market.address}`} className="border-t-2 border-dashed border-mer-warn">
+            <td colSpan={8} className="py-mer-1 text-mer-xs text-mer-ink-muted">
+              <PythPrice quote={pythQuote} nowMs={ctx.nowSecs * 1000} showLabel />
+            </td>
+          </tr>
+        ) : null}
+        <StrikeRow
+          market={market}
+          data={data(market)}
+          ctx={ctx}
+          tradeHref={tradeHref}
+          markerBelow={false}
+          markerAbove={false}
+        />
+        {showPriceRowAfter && pythQuote !== undefined ? (
+          <tr key={`pyth-below-${market.address}`} className="border-t-2 border-dashed border-mer-warn">
+            <td colSpan={8} className="py-mer-1 text-mer-xs text-mer-ink-muted">
+              <PythPrice quote={pythQuote} nowMs={ctx.nowSecs * 1000} showLabel />
+            </td>
+          </tr>
+        ) : null}
+      </React.Fragment>
+    );
+  };
+
+  const allMarkets = [...openMarkets, ...closedMarkets];
+  const strikes = allMarkets.map((m) => m.strikeCents);
+
   return (
     <section aria-label={ticker}>
       <div className="mb-mer-2 flex flex-wrap items-baseline gap-x-mer-4 gap-y-mer-1">
@@ -54,9 +98,16 @@ export function TickerLadder({
         ) : (
           <PythPrice quote={pythQuote} nowMs={ctx.nowSecs * 1000} />
         )}
-        <span className="text-mer-sm text-mer-ink-muted">
-          {markets.length} strikes · closes {formatEtHm(earliestClose)} ET
-        </span>
+        {openMarkets.length > 0 ? (
+          <span className="text-mer-sm text-mer-ink-muted">
+            {totalMarkets} strikes · closes {formatEtHm(earliestClose)} ET
+          </span>
+        ) : (
+          <span className="text-mer-sm text-mer-ink-muted">{totalMarkets} strikes</span>
+        )}
+      </div>
+      <div className="mb-mer-4">
+        <PriceHistoryChart ticker={ticker} nowSecs={ctx.nowSecs} strikes={strikes} />
       </div>
       <table className="w-full text-mer-sm">
         <thead>
@@ -72,17 +123,8 @@ export function TickerLadder({
           </tr>
         </thead>
         <tbody>
-          {markets.map((market, i) => (
-            <StrikeRow
-              key={market.address}
-              market={market}
-              data={data(market)}
-              ctx={ctx}
-              tradeHref={tradeHref}
-              markerBelow={i === belowIndex}
-              markerAbove={i === 0 && live !== null && belowIndex === -1}
-            />
-          ))}
+          {openMarkets.map((m, i) => renderMarketRow(m, i, true))}
+          {closedMarkets.map((m, i) => renderMarketRow(m, i, false))}
         </tbody>
       </table>
     </section>

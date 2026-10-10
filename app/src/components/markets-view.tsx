@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Landing, PageNotes } from "./markets/notes";
 import { useMarketSources } from "./markets/data-context";
@@ -10,8 +10,7 @@ import { useReader } from "./reader-context";
 import { useAsync } from "./use-async";
 import { useNow } from "./use-now";
 import { useMarketData, type MarketDataSources } from "@/lib/market-data";
-import { formatTradingDate, groupByTicker, marketStatus, type MarketRow } from "@/lib/markets";
-import { activeDateMarkets, etTradingDate } from "@/lib/time";
+import { groupByTicker, marketStatus, type MarketRow } from "@/lib/markets";
 import { tradeHref } from "@/app/trade/_lib/href";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
 import { useFairValues } from "@/lib/fair-values";
@@ -40,9 +39,10 @@ function useOpenTimes(markets: readonly MarketRow[]): Record<string, number | nu
 }
 
 /**
- * Read-only list of on-chain markets as one strike ladder per ticker (FR-16, UI-03): the active
- * trading date's markets, YES / NO prices from the book, a state badge, the open and close time
- * in ET and a countdown to the next state change (D-050).
+ * Read-only list of on-chain markets as one strike ladder per ticker (FR-16, UI-03): all open
+ * markets across all trading dates, YES / NO prices from the book, a state badge, the open and
+ * close time in ET and a countdown to the next state change (D-050). Closed markets appear in a
+ * collapsed section.
  */
 export function MarketsView({
   nowSecs,
@@ -63,9 +63,10 @@ export function MarketsView({
   const config = useAsync(() => reader.getConfig(), [reader]);
   const sources = useMarketSources();
   const all = state.status === "ready" ? state.value : [];
-  const active = useMemo(() => (clock === null ? [] : activeDateMarkets(all, clock)), [all, clock]);
-  const data = useMarketData(active, sources.data ?? NO_SOURCES);
-  const openTimes = useOpenTimes(active);
+  // Show ALL markets, not just active date — partition by open/closed status instead
+  // Show ALL markets, partitioned by status within each ticker group
+  const data = useMarketData(all, sources.data ?? NO_SOURCES);
+  const openTimes = useOpenTimes(all);
   // M3-10: Fetch Pyth live quotes (D-055: Pyth Pro is primary demo price source)
   const pythQuotes = usePythQuotes();
   // M3-03: Fair values for edge calculation and distribution chart
@@ -83,13 +84,6 @@ export function MarketsView({
   const cfg =
     config.status === "ready" ? config.value : { paused: false, overrideDelaySecs: 3_600n };
   const ctx = { nowSecs: now, paused: cfg.paused, overrideDelaySecs: cfg.overrideDelaySecs };
-  const activeDate = active[0]?.tradingDate;
-  const showingOld = activeDate !== undefined && activeDate !== etTradingDate(now);
-  // Only when trading has stopped everywhere: an open market alongside a closed one keeps it hidden.
-  const statuses = active.map((m) => marketStatus(m, now));
-  const needsSettleNote =
-    !statuses.some((s) => s === "Open" || s === "ClosingSoon") &&
-    statuses.some((s) => s === "Closed" || s === "Settling" || s === "SettlementDelayed");
   const strikeData = (market: MarketRow): StrikeData => {
     const book = data.books[market.address];
     const fairValue = fairValues.byMarket[market.address];
@@ -101,28 +95,44 @@ export function MarketsView({
       fairRefreshFailed: fairValues.refreshFailed,
     };
   };
+  const allGroups = groupByTicker(all);
+  // Only when trading has stopped everywhere: an open market alongside a closed one keeps it hidden.
+  const statuses = all.map((m) => marketStatus(m, now));
+  const needsSettleNote =
+    !statuses.some((s) => s === "Open" || s === "ClosingSoon") &&
+    statuses.some((s) => s === "Closed" || s === "Settling" || s === "SettlementDelayed");
   return (
     <div className="space-y-mer-6">
       <Landing />
-      {showingOld && activeDate !== undefined ? (
-        <p className="text-mer-sm text-mer-ink-muted">
-          Showing markets from {formatTradingDate(activeDate)} (closed)
-        </p>
-      ) : null}
       <PageNotes showSettleNote={needsSettleNote} />
-      {groupByTicker(active).map((group) => (
-        <TickerLadder
-          key={group.ticker}
-          ticker={group.ticker}
-          markets={[...group.markets].sort((a, b) =>
-            a.strikeCents < b.strikeCents ? -1 : a.strikeCents > b.strikeCents ? 1 : 0,
-          )}
-          pythQuote={pythQuotes.quotes[group.ticker]}
-          data={strikeData}
-          ctx={ctx}
-          {...(tradeHrefFn === undefined ? {} : { tradeHref: tradeHrefFn })}
-        />
-      ))}
+      {allGroups.map((group) => {
+        const open: MarketRow[] = [];
+        const closed: MarketRow[] = [];
+        for (const market of group.markets) {
+          const status = marketStatus(market, now);
+          if (status === "Open" || status === "ClosingSoon") {
+            open.push(market);
+          } else {
+            closed.push(market);
+          }
+        }
+        return (
+          <TickerLadder
+            key={group.ticker}
+            ticker={group.ticker}
+            openMarkets={[...open].sort((a, b) =>
+              a.strikeCents < b.strikeCents ? -1 : a.strikeCents > b.strikeCents ? 1 : 0,
+            )}
+            closedMarkets={[...closed].sort((a, b) =>
+              a.strikeCents < b.strikeCents ? -1 : a.strikeCents > b.strikeCents ? 1 : 0,
+            )}
+            pythQuote={pythQuotes.quotes[group.ticker]}
+            data={strikeData}
+            ctx={ctx}
+            {...(tradeHrefFn === undefined ? {} : { tradeHref: tradeHrefFn })}
+          />
+        );
+      })}
     </div>
   );
 }
