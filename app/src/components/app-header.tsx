@@ -88,7 +88,8 @@ export function AppHeader({
 
   const handleDemoConnect = () => {
     // Connect to burner wallet (demo wallet adapter)
-    select("burner");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    select("burner" as any);
   };
 
   return (
