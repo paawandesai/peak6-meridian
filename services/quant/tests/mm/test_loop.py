@@ -1261,7 +1261,8 @@ async def test_sync_inventory_never_mints_on_closed_markets(mm_config: MMConfig)
         clock=lambda: now,
     )
 
-    synced = await mm._sync_inventory([closed, near_close, live])
+    # P1-MM-REQUOTE: inventory is synced per market (_sync_market) instead of in one batch
+    synced = [m for m in (closed, near_close, live) if await mm._sync_market(m)]
 
     assert [m.market for m in synced] == [live.market]
     minted = [c.kwargs["market"] for c in order_client.mint_pair.await_args_list]

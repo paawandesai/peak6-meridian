@@ -39,6 +39,9 @@ class FakeOrderClient:
         self._yes_balances: dict[tuple[str, str], int] = defaultdict(int)
         self._no_balances: dict[tuple[str, str], int] = defaultdict(int)
         self.cycles_started = 0
+        # (operation, market) for every transaction-sending call, in call order (test helper:
+        # lets tests check the per-market cancel -> settle -> mint -> place sequence)
+        self.call_log: list[tuple[str, str]] = []
 
     def begin_cycle(self) -> None:
         """Count loop cycles (test helper; the chain client resets its blockhash cache)."""
@@ -54,6 +57,7 @@ class FakeOrderClient:
         resting_orders: list[RestingOrder] | None = None,  # noqa: ARG002 - unused in fake
     ) -> int:
         """Place an order and return its ID."""
+        self.call_log.append(("place", market))
         order_id = self._next_order_id
         self._next_order_id += 1
 
@@ -74,6 +78,7 @@ class FakeOrderClient:
 
     async def cancel_order(self, market: str, order_id: int, owner: str) -> None:
         """Cancel an order."""
+        self.call_log.append(("cancel", market))
         self._orders[market] = [
             o for o in self._orders[market] if not (o.order_id == order_id and o.owner == owner)
         ]
@@ -97,13 +102,14 @@ class FakeOrderClient:
 
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
         """Mint a YES+NO pair - increases both YES and NO balances."""
+        self.call_log.append(("mint", market))
         key = (market, owner)
         self._yes_balances[key] = self._yes_balances[key] + qty
         self._no_balances[key] = self._no_balances[key] + qty
 
     async def settle_funds(self, market: str, owner: str) -> None:
         """Settle funds to withdraw fill proceeds (no-op in fake)."""
-        pass
+        self.call_log.append(("settle", market))
 
     async def get_yes_token_balance(self, market: str, owner: str) -> int:
         """Get YES token balance for owner in market."""
