@@ -257,3 +257,64 @@ describe("agreement arithmetic", () => {
     );
   });
 });
+
+describe("fetchPrevClose: rate limits and request economy (#53)", () => {
+  const withHeaders = (status: number, headers: Record<string, string>): HttpResponse => ({
+    status,
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
+    text: () => Promise.resolve(""),
+  });
+  const deps = (http: HttpGet) => ({
+    http,
+    tiingoApiKey: TIINGO_KEY,
+    twelveDataApiKey: TWELVE_KEY,
+  });
+
+  it("a Tiingo 429 is a rate limit with its Retry-After, and Twelve Data is not asked", async () => {
+    const http = fakeHttp(
+      withHeaders(429, { "retry-after": "120" }),
+      ok("twelvedata_aapl_2026-10-05_agree.json"),
+    );
+    const error = expectError(await fetchPrevClose(deps(http), "AAPL", DATE));
+    expect(error).toMatchObject({
+      kind: "source_unavailable",
+      source: "tiingo",
+      rateLimit: { retryAfter: "120" },
+    });
+    expect(http).toHaveBeenCalledTimes(1);
+    expect(new URL(http.mock.calls[0]?.[0] ?? "").host).toBe("api.tiingo.com");
+  });
+
+  it("a 429 without Retry-After (or without headers at all) is still a rate limit", async () => {
+    const error = expectError(
+      await run(reply(429, "slow down"), ok("twelvedata_aapl_2026-10-05_agree.json")),
+    );
+    expect(error.rateLimit).toEqual({ retryAfter: null });
+  });
+
+  it("Twelve Data's code-429 body (HTTP 200, out of credits) is a rate limit", async () => {
+    const error = expectError(
+      await run(ok("tiingo_aapl_2026-10-05.json"), ok("twelvedata_error_429.json")),
+    );
+    expect(error).toMatchObject({ source: "twelvedata", rateLimit: { retryAfter: null } });
+  });
+
+  it("other failures carry no rate limit", async () => {
+    const badKey = reply(200, '{"status":"error","code":401,"message":"bad key"}');
+    for (const [tiingo, twelve] of [
+      [reply(503, ""), ok("twelvedata_aapl_2026-10-05_agree.json")],
+      [ok("tiingo_aapl_2026-10-05.json"), badKey],
+      [ok("tiingo_empty.json"), ok("twelvedata_aapl_2026-10-05_agree.json")],
+    ] as const) {
+      expect(expectError(await run(tiingo, twelve)).rateLimit).toBeUndefined();
+    }
+  });
+
+  it("any Tiingo failure spares the Twelve Data quota", async () => {
+    for (const tiingo of [reply(500, ""), ok("tiingo_empty.json"), new Error("socket hang up")]) {
+      const http = fakeHttp(tiingo, ok("twelvedata_aapl_2026-10-05_agree.json"));
+      expect((await fetchPrevClose(deps(http), "AAPL", DATE)).ok).toBe(false);
+      expect(http.mock.calls.map(([url]) => new URL(url).host)).toEqual(["api.tiingo.com"]);
+    }
+  });
+});

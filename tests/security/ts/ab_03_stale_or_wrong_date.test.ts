@@ -30,8 +30,17 @@ describe("AB-03 off-chain: the wrong date sends nothing", () => {
   it("yesterday's close from both sources: no transaction, no oracle update, one alert after 15 minutes", async () => {
     const w = world();
     w.sourceDate = "2026-10-05";
-    const result = await runSettlement(w.deps());
-    expect(result.status).toBe("failed");
+    // The job runs every minute, one attempt per run (#53): drive it through the window.
+    const runEveryMs = 60_000;
+    for (let elapsed = 0; elapsed <= RETRY_WINDOW_MS; elapsed += runEveryMs) {
+      if (elapsed > 0) {
+        await w.clock.sleep(runEveryMs);
+      }
+      const result = await runSettlement(w.deps());
+      expect(result.status).toBe("failed");
+      const alerts = w.alerter.alerts.filter((a) => a.kind === "settlement_failed");
+      expect(alerts).toHaveLength(elapsed < RETRY_WINDOW_MS ? 0 : 1);
+    }
     expect(w.executor.sent).toEqual([]);
     expect(w.update.requested).toEqual([]);
     expect(w.clock.ms - (CLOSE_TS + 300) * 1_000).toBe(RETRY_WINDOW_MS);
