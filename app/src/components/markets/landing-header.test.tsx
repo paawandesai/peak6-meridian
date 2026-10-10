@@ -24,9 +24,9 @@ describe("LandingHeader", () => {
     render(<LandingHeader />);
 
     expect(
-      screen.getByText(/Connecting asks for nothing and moves nothing/)
+      screen.getByText(/Connecting costs nothing and moves no funds/)
     ).toBeInTheDocument();
-    expect(screen.getByText(/Each trade is one signature/)).toBeInTheDocument();
+    expect(screen.getByText(/each trade asks for one signature/)).toBeInTheDocument();
   });
 
   it("renders demo wallet button when provided", () => {
