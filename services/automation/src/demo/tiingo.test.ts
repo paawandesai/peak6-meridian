@@ -6,14 +6,17 @@ import { describe, it, expect } from "vitest";
 import { createTiingoClient } from "./tiingo";
 
 describe("Tiingo client", () => {
-  it("fetches EOD close price", async () => {
-    const mockFetch: typeof fetch = async (url) => {
-      expect(String(url)).toContain("AAPL");
+  it("fetches EOD close price in integer cents with Authorization header", async () => {
+    const mockFetch: typeof fetch = async (url, init) => {
+      expect(String(url)).toContain("aapl"); // lowercased
       expect(String(url)).toContain("2024-10-08");
-      expect(String(url)).toContain("token=test-key");
+      expect(String(url)).not.toContain("token"); // key NOT in URL
+      expect(init?.headers).toHaveProperty("Authorization", "Token test-key");
       return {
         ok: true,
-        json: async () => [{ date: "2024-10-08T00:00:00.000Z", close: 230.5 }],
+        status: 200,
+        json: async () => [{ date: "2024-10-08T00:00:00.000Z", close: "230.50" }],
+        text: async () => "",
       } as Response;
     };
 
@@ -22,31 +25,26 @@ describe("Tiingo client", () => {
       fetch: mockFetch,
     });
 
-    const close = await client.getEodClose("AAPL", "2024-10-08");
-    expect(close).toBe(230.5);
+    const closeCents = await client.getEodClose("AAPL", "2024-10-08");
+    expect(closeCents).toBe(23050); // 230.50 dollars = 23050 cents
   });
 
-  it("redacts API key from logs", async () => {
-    const logs: Array<{ level: string; event: string; data: unknown }> = [];
-
+  it("handles numeric close prices", async () => {
     const mockFetch: typeof fetch = async () =>
       ({
         ok: true,
+        status: 200,
         json: async () => [{ date: "2024-10-08", close: 680.0 }],
+        text: async () => "",
       }) as Response;
 
     const client = createTiingoClient({
-      apiKey: "secret-api-key-12345",
+      apiKey: "test-key",
       fetch: mockFetch,
-      log: (level, event, data) => logs.push({ level, event, data }),
     });
 
-    await client.getEodClose("META", "2024-10-08");
-
-    const fetchLog = logs.find((l) => l.event === "tiingo_fetch");
-    expect(fetchLog).toBeDefined();
-    expect(JSON.stringify(fetchLog)).not.toContain("secret-api-key-12345");
-    expect(JSON.stringify(fetchLog)).toContain("token=***");
+    const closeCents = await client.getEodClose("META", "2024-10-08");
+    expect(closeCents).toBe(68000); // 680.00 dollars = 68000 cents
   });
 
   it("throws on HTTP error", async () => {
