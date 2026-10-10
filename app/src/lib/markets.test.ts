@@ -1,7 +1,13 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-import { formatStrike, formatTradingDate, groupByTicker, marketStatus } from "./markets";
+import {
+  formatStrike,
+  formatTradingDate,
+  groupByTicker,
+  isSessionMarket,
+  marketStatus,
+} from "./markets";
 import { market } from "@/test-utils";
 
 describe("marketStatus", () => {
@@ -92,5 +98,31 @@ describe("formatters", () => {
 
   it("rejects a strike that is not whole dollars", () => {
     expect(() => formatStrike(68_050n)).toThrow();
+  });
+});
+
+describe("isSessionMarket (P0-1)", () => {
+  it("returns true when closeTs matches the session close", () => {
+    // 2026-10-08 is a Thursday (regular session), closes 16:00 ET = 20:00 UTC
+    const regularDay = market({ tradingDate: 20261008, closeTs: BigInt(Date.parse("2026-10-08T20:00:00Z") / 1000) });
+    expect(isSessionMarket(regularDay)).toBe(true);
+  });
+
+  it("returns false when closeTs does not match the session close", () => {
+    // 2026-10-08 session close is 20:00 UTC, but this market closes at 19:00 UTC (test market)
+    const testMarket = market({ tradingDate: 20261008, closeTs: BigInt(Date.parse("2026-10-08T19:00:00Z") / 1000) });
+    expect(isSessionMarket(testMarket)).toBe(false);
+  });
+
+  it("returns true for early-close days (session close at 13:00 ET)", () => {
+    // 2026-11-27 is day after Thanksgiving (early close at 13:00 ET = 18:00 UTC in EST)
+    const earlyClose = market({ tradingDate: 20261127, closeTs: BigInt(Date.parse("2026-11-27T18:00:00Z") / 1000) });
+    expect(isSessionMarket(earlyClose)).toBe(true);
+  });
+
+  it("returns false for weekend/holiday (no session)", () => {
+    // 2026-10-10 is Saturday, no session
+    const weekend = market({ tradingDate: 20261010, closeTs: BigInt(Date.parse("2026-10-10T20:00:00Z") / 1000) });
+    expect(isSessionMarket(weekend)).toBe(false);
   });
 });
