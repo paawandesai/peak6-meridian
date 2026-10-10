@@ -51,7 +51,7 @@ type Props = {
   readonly insight?: TradeInsight;
 };
 
-const NO_FAIR: FairValues = { status: "unavailable", byMarket: {}, refreshFailed: false };
+const NO_FAIR: FairValues = { status: "unavailable", byMarket: {}, lastSuccessSecs: null };
 
 /** Live stock price from Pyth with freshness indicator (M3-10, D-055). */
 function LivePrice({ market, nowSecs }: { readonly market: MarketRow; readonly nowSecs: number }) {
@@ -96,7 +96,7 @@ function ladderPoints(
   const fair = Object.fromEntries(
     Object.entries(insight.fair.byMarket).map(([address, value]) => [address, value.fair_cents]),
   );
-  const staleness = fairStaleness(insight.fair.byMarket, insight.fair.refreshFailed, nowSecs);
+  const staleness = fairStaleness(insight.fair.byMarket, insight.fair.lastSuccessSecs, nowSecs);
   return distributionPoints(insight.ladder, quotes, fair, staleness).map((point) =>
     point.market === market.address && haveBook ? { ...point, yesCents: ownYes } : point,
   );

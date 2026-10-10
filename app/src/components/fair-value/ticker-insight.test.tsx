@@ -36,7 +36,7 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
         books={books}
         fair={{
           status: "ready",
-          refreshFailed: false,
+          lastSuccessSecs: NOW - 1,
           byMarket: {
             [a180?.address ?? ""]: fair({ market: a180?.address ?? "", fair_cents: 52 }),
           },
@@ -56,7 +56,7 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
         market={a180 as never}
         ladder={ladder()}
         books={books}
-        fair={{ status: "unavailable", refreshFailed: true, byMarket: {} }}
+        fair={{ status: "unavailable", lastSuccessSecs: null, byMarket: {} }}
         nowSecs={NOW}
       />,
     );
@@ -72,7 +72,7 @@ describe("TickerInsightView (the Trade page's M3-03 mount)", () => {
         books={{ [a180?.address ?? ""]: { state: "unavailable" } }}
         fair={{
           status: "ready",
-          refreshFailed: false,
+          lastSuccessSecs: NOW - 1,
           byMarket: { [a180?.address ?? ""]: fair({ market: a180?.address ?? "" }) },
         }}
         nowSecs={NOW}
@@ -91,7 +91,7 @@ describe("TickerInsight (reads the proxy)", () => {
         books={books}
         fair={{
           status: "ready",
-          refreshFailed: false,
+          lastSuccessSecs: NOW - 1,
           byMarket: {
             [a180?.address ?? ""]: fair({ market: a180?.address ?? "", fair_cents: 52 }),
           },

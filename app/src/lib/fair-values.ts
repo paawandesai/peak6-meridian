@@ -23,8 +23,10 @@ export {
   fetchFairValues,
   formatAge,
   isStale,
+  NO_UPDATE_STALE_AFTER_SECS,
   REFRESH_MS,
-  STALE_AFTER_SECS,
+  type StaleReason,
+  staleReasons,
 } from "./fair-values-core";
 import { fetchFairValues, type FairValue, REFRESH_MS } from "./fair-values-core";
 import { isDocumentVisible } from "./visibility";
@@ -33,16 +35,24 @@ export type FairValues = {
   readonly status: "loading" | "ready" | "unavailable";
   /** By market address. */
   readonly byMarket: Readonly<Record<string, FairValue>>;
-  /** The last refresh failed; the values shown are the last good ones and must read as stale. */
-  readonly refreshFailed: boolean;
+  /**
+   * When the last read succeeded (unix seconds, wall clock), `null` when none has. A failed poll
+   * keeps the last good values and leaves this as it was, so the values read stale once it is
+   * over 30 s old (`isStale`, P0-FV).
+   */
+  readonly lastSuccessSecs: number | null;
 };
 
-const INITIAL: FairValues = { status: "loading", byMarket: {}, refreshFailed: false };
+const INITIAL: FairValues = { status: "loading", byMarket: {}, lastSuccessSecs: null };
+const UNAVAILABLE: FairValues = { status: "unavailable", byMarket: {}, lastSuccessSecs: null };
+
+const wallClockSecs = (): number => Math.floor(Date.now() / 1000);
 
 /**
  * Polls fair values every {@link REFRESH_MS} while `enabled`. A failed poll keeps the last good
- * values and sets `refreshFailed` so they are labelled stale; with nothing ever read the state is
- * `unavailable`, never a made-up number. A tick is skipped while a read is in flight.
+ * values and their `lastSuccessSecs`, so they read stale once no read has succeeded for 30 s;
+ * with nothing ever read the state is `unavailable`, never a made-up number. A tick is skipped
+ * while a read is in flight.
  */
 export function useFairValues(
   options: {
@@ -62,7 +72,7 @@ export function useFairValues(
       return {
         status: "ready",
         byMarket: Object.fromEntries(values.map((value) => [value.market, value])),
-        refreshFailed: false,
+        lastSuccessSecs: wallClockSecs(),
       };
     } catch {
       return "skip";
@@ -72,11 +82,7 @@ export function useFairValues(
   useEffect(() => {
     if (!enabled) {
       // When disabled and nothing has been read, surface unavailable instead of loading forever.
-      setState((previous) =>
-        previous.status === "loading"
-          ? { status: "unavailable", byMarket: {}, refreshFailed: false }
-          : previous,
-      );
+      setState((previous) => (previous.status === "loading" ? UNAVAILABLE : previous));
       return undefined;
     }
     let cancelled = false;
@@ -87,12 +93,9 @@ export function useFairValues(
       const next = await load();
       inFlight = false;
       if (cancelled) return;
+      // A failed read keeps the last good values and the time they were read.
       setState((previous) =>
-        next === "skip"
-          ? previous.status === "ready"
-            ? { ...previous, refreshFailed: true }
-            : { status: "unavailable", byMarket: {}, refreshFailed: true }
-          : next,
+        next === "skip" ? (previous.status === "ready" ? previous : UNAVAILABLE) : next,
       );
     };
     void run();

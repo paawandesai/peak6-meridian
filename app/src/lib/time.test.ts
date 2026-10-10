@@ -6,6 +6,7 @@ import {
   activeDateMarkets,
   etTradingDate,
   formatCountdown,
+  formatEtDayHms,
   formatEtHm,
   formatEtHms,
   nextClose,
@@ -42,6 +43,34 @@ describe("ET formatting (Intl, America/New_York)", () => {
   it("takes the ET calendar date, not the UTC one", () => {
     expect(etTradingDate(utc("2026-10-08T03:30:00Z"))).toBe(20261007); // 23:30 ET the day before
     expect(etTradingDate(utc("2026-10-08T14:00:00Z"))).toBe(20261008);
+  });
+});
+
+describe("formatEtDayHms (P0-FV spot time)", () => {
+  // Saturday 2026-10-10 15:00 ET; Friday's close print was 19:59:59 ET the evening before.
+  const now = utc("2026-10-10T19:00:00Z");
+
+  it("is the bare time on today's ET date", () => {
+    expect(formatEtDayHms(utc("2026-10-10T14:00:00Z"), now)).toBe("10:00:00");
+  });
+
+  it("adds the weekday for an earlier ET date within the week", () => {
+    expect(formatEtDayHms(utc("2026-10-09T23:59:59Z"), now)).toBe("Fri 19:59:59");
+    // 00:30 UTC Saturday is still Friday in ET: the ET date decides, not the UTC one.
+    expect(formatEtDayHms(utc("2026-10-10T00:30:00Z"), now)).toBe("Fri 20:30:00");
+  });
+
+  it("adds the month and day once a weekday alone would be ambiguous", () => {
+    expect(formatEtDayHms(utc("2026-10-02T23:59:59Z"), now)).toBe("Fri Oct 2 19:59:59");
+  });
+
+  it("always ends with the ET clock time (property)", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 30 * 86_400 }), (back) => {
+        const at = now - back;
+        expect(formatEtDayHms(at, now).endsWith(formatEtHms(at))).toBe(true);
+      }),
+    );
   });
 });
 
@@ -87,7 +116,12 @@ describe("nextClose (header rule, P0-1 session markets only)", () => {
     const sessionMarket = market({ address: "a", tradingDate: date, closeTs: closeNormal });
     const testMarket = market({ address: "b", tradingDate: date, closeTs: closeTest });
     const result = nextClose([sessionMarket, testMarket], NOW); // 15:00 ET: 1 hour before session close
-    expect(result).toEqual({ kind: "countdown", closeTs: closeNormal, secondsLeft: 3_600, hourET: 16 });
+    expect(result).toEqual({
+      kind: "countdown",
+      closeTs: closeNormal,
+      secondsLeft: 3_600,
+      hourET: 16,
+    });
   });
 
   it("uses an early-close session market's 13:00 ET close_ts", () => {

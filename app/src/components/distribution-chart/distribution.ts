@@ -8,7 +8,7 @@
  */
 import type { BookQuotes } from "@meridian/client";
 
-import { asOfSecs, type FairValue, isStale } from "@/lib/fair-values-core";
+import { asOfSecs, type FairValue, type StaleReason, staleReasons } from "@/lib/fair-values-core";
 import type { MarketRow } from "@/lib/markets";
 
 /** The displayed-price rule (design.md § "Displayed price rule"): a mid only for a tight book. */
@@ -23,12 +23,18 @@ export type DistributionPoint = {
   readonly fairCents: number | null;
   /** The fair value is the service's last one, flagged stale (shown, not hidden). */
   readonly fairStale?: boolean;
-  /** When the fair value was computed (unix seconds), for the stale tag's age. */
+  /** The fair value's spot time (unix seconds), for the tag's detail. */
   readonly fairAsOfSecs?: number | null;
+  /** Why the fair value is stale, for the tag's detail. */
+  readonly fairStaleReasons?: readonly StaleReason[];
 };
 
-/** Per market: is its fair value stale, and when was it computed. */
-export type FairStaleness = { readonly stale: boolean; readonly asOfSecs: number };
+/** Per market: is its fair value stale, its spot time, and why it is stale. */
+export type FairStaleness = {
+  readonly stale: boolean;
+  readonly asOfSecs: number;
+  readonly reasons: readonly StaleReason[];
+};
 
 export type Violation = {
   readonly lowerStrikeCents: bigint;
@@ -46,19 +52,20 @@ export function displayedYes(quotes: BookQuotes | null | undefined): number | nu
 }
 
 /**
- * Per market, whether its fair value is stale (the service says so, it is old, or the last
- * refresh failed) and when it was computed. A stale value is still drawn and tabled, flagged.
+ * Per market, whether its fair value is stale (the service flagged it, or no read has succeeded
+ * for 30 s: {@link staleReasons}), why, and its spot time. A stale value is still drawn and
+ * tabled, flagged.
  */
 export function fairStaleness(
   byMarket: Readonly<Record<string, FairValue>>,
-  refreshFailed: boolean,
+  lastSuccessSecs: number | null,
   nowSecs: number,
 ): Record<string, FairStaleness> {
   return Object.fromEntries(
-    Object.entries(byMarket).map(([address, value]) => [
-      address,
-      { stale: refreshFailed || isStale(value, nowSecs), asOfSecs: asOfSecs(value) },
-    ]),
+    Object.entries(byMarket).map(([address, value]) => {
+      const reasons = staleReasons(value, lastSuccessSecs, nowSecs);
+      return [address, { stale: reasons.length > 0, asOfSecs: asOfSecs(value), reasons }];
+    }),
   );
 }
 
@@ -78,6 +85,7 @@ export function distributionPoints(
       fairCents: fair[market.address] ?? null,
       fairStale: staleness[market.address]?.stale === true,
       fairAsOfSecs: staleness[market.address]?.asOfSecs ?? null,
+      fairStaleReasons: staleness[market.address]?.reasons ?? [],
     }));
 }
 

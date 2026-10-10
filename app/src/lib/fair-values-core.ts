@@ -28,8 +28,12 @@ export type FairValue = z.infer<typeof fairValueSchema>;
 export const FAIR_VALUES_PATH = "/api/fair-values";
 /** Fair values are re-read at least this often while a market is open (M3-03 AC2). */
 export const REFRESH_MS = 5_000;
-/** A value older than this is shown with a stale label even if the service did not flag it. */
-export const STALE_AFTER_SECS = 10;
+/**
+ * With no successful read of {@link FAIR_VALUES_PATH} for longer than this, every value shown reads
+ * stale (the pricing service unreachable, the route failing, the network down). The value's own
+ * `as_of` (its spot time) is information only: the service owns staleness and sends `stale`.
+ */
+export const NO_UPDATE_STALE_AFTER_SECS = 30;
 
 /** Reads the proxy; throws plain words (never the response body) on failure. */
 export async function fetchFairValues(
@@ -93,8 +97,39 @@ export function edgeTone(edge: number): EdgeTone {
   return edge < 0 ? "yes" : edge > 0 ? "no" : "neutral";
 }
 
-/** A value is stale when the service says so or its `as_of` is older than {@link STALE_AFTER_SECS}. */
-export function isStale(value: FairValue, nowSecs: number): boolean {
-  if (value.stale) return true;
-  return nowSecs - Math.floor(Date.parse(value.as_of) / 1000) > STALE_AFTER_SECS;
+/**
+ * Why a value reads stale: the app has had no successful read for over
+ * {@link NO_UPDATE_STALE_AFTER_SECS} (`secs` is that time, `null` when nothing was ever read), or
+ * the service flagged it (`stale: true`).
+ */
+export type StaleReason =
+  { readonly kind: "no-update"; readonly secs: number | null } | { readonly kind: "server" };
+
+/**
+ * Every reason `value` is stale, given when the app last read fair values successfully
+ * (`lastSuccessSecs`, unix seconds) and the page's clock; empty means fresh. The spot `as_of`
+ * never enters the decision: the server owns that rule (in the weekend demo the spot is hours
+ * old on purpose and the server sends `stale: false`).
+ */
+export function staleReasons(
+  value: FairValue,
+  lastSuccessSecs: number | null,
+  nowSecs: number,
+): StaleReason[] {
+  const reasons: StaleReason[] = [];
+  const sinceSuccess = lastSuccessSecs === null ? null : ageSecs(lastSuccessSecs, nowSecs);
+  if (sinceSuccess === null || sinceSuccess > NO_UPDATE_STALE_AFTER_SECS) {
+    reasons.push({ kind: "no-update", secs: sinceSuccess });
+  }
+  if (value.stale) reasons.push({ kind: "server" });
+  return reasons;
+}
+
+/** Stale iff the service flagged it or the last successful read is over 30 s old (P0-FV). */
+export function isStale(
+  value: FairValue,
+  lastSuccessSecs: number | null,
+  nowSecs: number,
+): boolean {
+  return staleReasons(value, lastSuccessSecs, nowSecs).length > 0;
 }

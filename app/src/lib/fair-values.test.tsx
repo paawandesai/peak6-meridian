@@ -16,7 +16,9 @@ import {
   type FairValue,
   FAIR_VALUES_PATH,
   isStale,
+  NO_UPDATE_STALE_AFTER_SECS,
   REFRESH_MS,
+  staleReasons,
   useFairValues,
 } from "./fair-values";
 import { fair, NOW } from "@/components/fair-value/test-support";
@@ -130,14 +132,58 @@ describe("fairValueSchema", () => {
   });
 });
 
-describe("isStale (M3-03 AC2)", () => {
+describe("isStale (P0-FV: staleness comes from the server)", () => {
+  const isoAt = (secs: number): string => new Date(secs * 1000).toISOString();
+
   it("is stale when the service says so", () => {
-    expect(isStale(fair({ stale: true }), NOW)).toBe(true);
+    expect(isStale(fair({ stale: true }), NOW, NOW)).toBe(true);
+    expect(staleReasons(fair({ stale: true }), NOW, NOW)).toEqual([{ kind: "server" }]);
   });
 
-  it("is stale when as_of is more than 10 s old, not at exactly 10 s", () => {
-    expect(isStale(fair({ as_of: new Date((NOW - 10) * 1000).toISOString() }), NOW)).toBe(false);
-    expect(isStale(fair({ as_of: new Date((NOW - 11) * 1000).toISOString() }), NOW)).toBe(true);
+  it("is not stale for a spot hours old when the service sends stale: false (weekend demo)", () => {
+    const fridayClose = fair({ as_of: isoAt(NOW - 20 * 3_600) });
+    expect(isStale(fridayClose, NOW - 1, NOW)).toBe(false);
+    expect(staleReasons(fridayClose, NOW - 1, NOW)).toEqual([]);
+  });
+
+  it("is stale once the last successful read is over 30 s old, not at exactly 30 s", () => {
+    expect(NO_UPDATE_STALE_AFTER_SECS).toBe(30);
+    expect(isStale(fair(), NOW - 30, NOW)).toBe(false);
+    expect(isStale(fair(), NOW - 31, NOW)).toBe(true);
+    expect(staleReasons(fair(), NOW - 45, NOW)).toEqual([{ kind: "no-update", secs: 45 }]);
+  });
+
+  it("is stale, with no age, when nothing was ever read", () => {
+    expect(staleReasons(fair(), null, NOW)).toEqual([{ kind: "no-update", secs: null }]);
+  });
+
+  it("gives both reasons when both hold, no-update first", () => {
+    expect(staleReasons(fair({ stale: true }), NOW - 60, NOW)).toEqual([
+      { kind: "no-update", secs: 60 },
+      { kind: "server" },
+    ]);
+  });
+
+  it("reads a last success ahead of the clock as just now (never stale by skew)", () => {
+    expect(isStale(fair(), NOW + 120, NOW)).toBe(false);
+  });
+
+  it("is stale iff the server flag or last-success age > 30 s, whatever as_of is (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.boolean(),
+        fc.integer({ min: 0, max: 7 * 86_400 }),
+        fc.option(fc.integer({ min: -60, max: 86_400 }), { nil: null }),
+        (serverStale, spotAgeSecs, sinceSuccess) => {
+          const value = fair({ stale: serverStale, as_of: isoAt(NOW - spotAgeSecs) });
+          const lastSuccess = sinceSuccess === null ? null : NOW - sinceSuccess;
+          const expected = serverStale || sinceSuccess === null || sinceSuccess > 30;
+          expect(isStale(value, lastSuccess, NOW)).toBe(expected);
+          // Moving as_of never changes the verdict.
+          expect(isStale(fair({ ...value, as_of: isoAt(NOW) }), lastSuccess, NOW)).toBe(expected);
+        },
+      ),
+    );
   });
 });
 
@@ -159,7 +205,10 @@ describe("fetchFairValues", () => {
 });
 
 describe("useFairValues (M3-03 AC2: fake timers)", () => {
-  beforeEach(() => vi.useFakeTimers());
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW * 1000);
+  });
   afterEach(() => {
     vi.useRealTimers();
     setVisibility("visible");
@@ -173,12 +222,13 @@ describe("useFairValues (M3-03 AC2: fake timers)", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(result.current).toMatchObject({ status: "ready", refreshFailed: false });
+    expect(result.current).toMatchObject({ status: "ready", lastSuccessSecs: NOW });
     expect(result.current.byMarket[fair().market]?.fair_cents).toBe(58);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(REFRESH_MS);
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current.lastSuccessSecs).toBe(NOW + REFRESH_MS / 1000);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(REFRESH_MS * 3);
     });
@@ -203,7 +253,7 @@ describe("useFairValues (M3-03 AC2: fake timers)", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the last good values and marks the refresh failed when a read fails", async () => {
+  it("keeps the last good values and their read time when a read fails, then recovers", async () => {
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce([fair()])
@@ -216,13 +266,41 @@ describe("useFairValues (M3-03 AC2: fake timers)", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(REFRESH_MS);
     });
-    expect(result.current.refreshFailed).toBe(true);
+    expect(result.current).toMatchObject({ status: "ready", lastSuccessSecs: NOW });
     expect(result.current.byMarket[fair().market]?.fair_cents).toBe(58);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(REFRESH_MS);
     });
-    expect(result.current).toMatchObject({ status: "ready", refreshFailed: false });
+    expect(result.current).toMatchObject({ status: "ready", lastSuccessSecs: NOW + 10 });
     expect(result.current.byMarket[fair().market]?.fair_cents).toBe(61);
+  });
+
+  it("reads stale only once failures have run for over 30 s after the last success", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce([fair()])
+      .mockRejectedValue(new Error("quant unreachable"));
+    const { result } = renderHook(() => useFairValues({ fetcher }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const shown = (): FairValue | undefined => result.current.byMarket[fair().market];
+    const staleAt = (nowSecs: number): boolean => {
+      const value = shown();
+      if (value === undefined) throw new Error("the last good value was dropped");
+      return isStale(value, result.current.lastSuccessSecs, nowSecs);
+    };
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REFRESH_MS * 6); // 30 s of failed reads
+    });
+    expect(fetcher).toHaveBeenCalledTimes(7);
+    expect(result.current).toMatchObject({ status: "ready", lastSuccessSecs: NOW });
+    expect(staleAt(NOW + 30)).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REFRESH_MS);
+    });
+    expect(shown()?.fair_cents).toBe(58);
+    expect(staleAt(NOW + 35)).toBe(true);
   });
 
   it("is unavailable, with no numbers, when nothing was ever read", async () => {
@@ -231,7 +309,20 @@ describe("useFairValues (M3-03 AC2: fake timers)", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(result.current).toEqual({ status: "unavailable", byMarket: {}, refreshFailed: true });
+    expect(result.current).toEqual({ status: "unavailable", byMarket: {}, lastSuccessSecs: null });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(REFRESH_MS * 8);
+    });
+    expect(result.current).toEqual({ status: "unavailable", byMarket: {}, lastSuccessSecs: null });
+  });
+
+  it("is unavailable, not loading forever, when disabled before any read", async () => {
+    const fetcher = vi.fn().mockResolvedValue([fair()]);
+    const { result } = renderHook(() => useFairValues({ fetcher, enabled: false }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current).toEqual({ status: "unavailable", byMarket: {}, lastSuccessSecs: null });
   });
 
   it("does not read while disabled, and stops reading on unmount", async () => {
