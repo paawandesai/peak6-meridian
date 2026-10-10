@@ -6,6 +6,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 const BASE_URL = 'http://127.0.0.1:3100';
 const ROUTES = ['/', '/portfolio', '/status'];
+// Trade route will be tested separately with a market address
 
 async function checkPageErrors(page: Page, route: string): Promise<{ errors: string[], console429: string[] }> {
   const errors: string[] = [];
@@ -173,6 +174,87 @@ test.describe('P0-2 Desktop (1280x800)', () => {
         (hasCanvas && canvasWidth > 0) || hasStatus,
         'AC3: Chart must show canvas with width > 0 or status text, never blank'
       ).toBe(true);
+    }
+  });
+});
+
+test.describe('P0-2 Trade route', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('/trade/<market> - mobile zero page errors', async ({ page }) => {
+    // Try to find a market from the Markets page
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
+    await page.locator('h2').first().waitFor({ timeout: 15000 }).catch(() => {});
+    
+    const tradeLink = page.locator('a[href^="/trade/"]').first();
+    const hasLink = await tradeLink.isVisible().catch(() => false);
+    
+    if (hasLink) {
+      const errors: string[] = [];
+      const console429: string[] = [];
+      
+      page.on('pageerror', (err) => errors.push(`[pageerror] ${err.message}`));
+      page.on('console', (msg) => {
+        if (msg.type() === 'error') {
+          const text = msg.text();
+          if (text.includes('429') || text.includes('rate limit')) {
+            console429.push(text);
+          } else {
+            errors.push(`[console.error] ${text}`);
+          }
+        }
+      });
+      
+      await tradeLink.click();
+      await page.locator('h1').first().waitFor({ timeout: 15000 }).catch(() => {});
+      
+      console.log('Mobile /trade/<market>:');
+      console.log(`  Page errors: ${errors.length}`);
+      console.log(`  429/rate-limit console noise: ${console429.length}`);
+      
+      expect(errors, 'Zero page errors on mobile /trade/<market>').toEqual([]);
+    } else {
+      console.log('Mobile /trade: no markets available, skipping');
+    }
+  });
+});
+
+test.describe('P0-2 Trade route - Desktop', () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test('/trade/<market> - desktop zero page errors', async ({ page }) => {
+    await page.goto(`${BASE_URL}/`, { waitUntil: 'load' });
+    await page.locator('h2').first().waitFor({ timeout: 15000 }).catch(() => {});
+    
+    const tradeLink = page.locator('a[href^="/trade/"]').first();
+    const hasLink = await tradeLink.isVisible().catch(() => false);
+    
+    if (hasLink) {
+      const errors: string[] = [];
+      const console429: string[] = [];
+      
+      page.on('pageerror', (err) => errors.push(`[pageerror] ${err.message}`));
+      page.on('console', (msg) => {
+        if (msg.type() === 'error') {
+          const text = msg.text();
+          if (text.includes('429') || text.includes('rate limit')) {
+            console429.push(text);
+          } else {
+            errors.push(`[console.error] ${text}`);
+          }
+        }
+      });
+      
+      await tradeLink.click();
+      await page.locator('h1').first().waitFor({ timeout: 15000 }).catch(() => {});
+      
+      console.log('Desktop /trade/<market>:');
+      console.log(`  Page errors: ${errors.length}`);
+      console.log(`  429/rate-limit console noise: ${console429.length}`);
+      
+      expect(errors, 'Zero page errors on desktop /trade/<market>').toEqual([]);
+    } else {
+      console.log('Desktop /trade: no markets available, skipping');
     }
   });
 });
