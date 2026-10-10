@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { PublicKey } from "@solana/web3.js";
 
-import { backoffMs, dedupe, getMultipleChunked, sharedConnection, withRateLimitRetry } from "./rpc";
+import { backoffMs, dedupe, sharedConnection, withRateLimitRetry } from "./rpc";
 
 const res = (status: number, headers: Record<string, string> = {}) =>
   new Response("{}", { status, headers });
@@ -69,53 +68,5 @@ describe("sharedConnection", () => {
   it("returns one connection per URL", () => {
     expect(sharedConnection("http://a.test")).toBe(sharedConnection("http://a.test"));
     expect(sharedConnection("http://a.test")).not.toBe(sharedConnection("http://b.test"));
-  });
-});
-
-describe("getMultipleChunked", () => {
-  it("chunks keys into batches of 99 to stay under the 100-key limit", async () => {
-    const keys = Array.from({ length: 250 }, (_, i) => new PublicKey(i + 1));
-    const calls: number[] = [];
-    const connection = {
-      getMultipleParsedAccounts: vi.fn(async (chunk: PublicKey[]) => {
-        calls.push(chunk.length);
-        return { value: chunk.map(() => null) };
-      }),
-    };
-    const result = await getMultipleChunked(connection, keys, { commitment: "confirmed" });
-    expect(result).toHaveLength(250);
-    expect(calls).toEqual([99, 99, 52]); // 3 chunks: 99, 99, 52
-    expect(connection.getMultipleParsedAccounts).toHaveBeenCalledTimes(3);
-  });
-
-  it("returns results in the same order as keys", async () => {
-    const keys = Array.from({ length: 150 }, (_, i) => new PublicKey(i + 1));
-    const connection = {
-      getMultipleParsedAccounts: vi.fn(async (chunk: PublicKey[]) => {
-        return { value: chunk.map((key) => ({ data: key.toBase58() })) };
-      }),
-    };
-    const result = await getMultipleChunked(connection, keys);
-    expect(result).toHaveLength(150);
-    expect(result[0]).toEqual({ data: keys.at(0)?.toBase58() });
-    expect(result[149]).toEqual({ data: keys.at(149)?.toBase58() });
-  });
-
-  it("handles empty key list", async () => {
-    const connection = {
-      getMultipleParsedAccounts: vi.fn(async () => ({ value: [] })),
-    };
-    const result = await getMultipleChunked(connection, []);
-    expect(result).toEqual([]);
-    expect(connection.getMultipleParsedAccounts).not.toHaveBeenCalled();
-  });
-
-  it("handles exactly 99 keys in one call", async () => {
-    const keys = Array.from({ length: 99 }, (_, i) => new PublicKey(i + 1));
-    const connection = {
-      getMultipleParsedAccounts: vi.fn(async () => ({ value: keys.map(() => null) })),
-    };
-    await getMultipleChunked(connection, keys);
-    expect(connection.getMultipleParsedAccounts).toHaveBeenCalledTimes(1);
   });
 });

@@ -10,4 +10,5 @@ export {
   type OverridePendingProp,
   type StateBadgeProps,
 } from "./state-badge";
+export { TestMarketBadge, TestMarketToggle, type TestMarketToggleProps } from "./test-market-toggle";
 export { TxStatus, txStatusText, type TxStatusProps } from "./tx-status";

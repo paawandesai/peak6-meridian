@@ -6,7 +6,6 @@ import { z } from "zod";
 import { decodeEvents } from "@/lib/events";
 import type { MarketRow } from "@/lib/markets";
 import { factsFromEvents, NO_FACTS, type MarketFacts } from "@/lib/status";
-import { getMultipleChunked } from "@/lib/rpc";
 
 export type StatusRpc = Pick<
   Connection,
@@ -16,8 +15,6 @@ export type StatusRpc = Pick<
 const SIGNATURE_PAGE = 1_000;
 /** Only the newest trading dates are inspected, which bounds the RPC cost (7 markets per day). */
 export const MAX_DAYS = 2;
-/** Concurrent market-facts fetches to limit RPC burst. */
-const CONCURRENCY_CAP = 4;
 
 const tokenAccount = z.object({
   data: z.object({
@@ -32,7 +29,7 @@ export async function loadVaultBalances(
   programId: PublicKey,
 ): Promise<Map<string, bigint | null>> {
   const keys = markets.map((row) => findVaultPda(new PublicKey(row.address), programId).address);
-  const value = await getMultipleChunked(rpc, keys, { commitment: "confirmed" });
+  const { value } = await rpc.getMultipleParsedAccounts(keys, { commitment: "confirmed" });
   return new Map(
     markets.map((row, index) => {
       const parsed = tokenAccount.safeParse(value[index]);
@@ -88,50 +85,30 @@ async function factsOf(
  * transaction is NOT the newest one: redeems, withdrawals and orders after settlement also list
  * the market account, so the newest transactions are scanned in batches until one emits
  * `MarketSettled` (at most `MAX_SETTLE_SCAN`; beyond that the metrics stay unavailable).
- * Returns `NO_FACTS` on any error (per-market error isolation for /status).
  */
 export async function loadMarketFacts(
   rpc: StatusRpc,
   market: MarketRow,
   programId: PublicKey,
 ): Promise<MarketFacts> {
-  try {
-    const address = new PublicKey(market.address);
-    const all = (await rpc.getSignaturesForAddress(address, { limit: SIGNATURE_PAGE })).filter(
-      (entry) => entry.err === null,
-    );
-    const oldest = all.length < SIGNATURE_PAGE ? all.at(-1) : undefined;
-    let facts = oldest === undefined ? NO_FACTS : await factsOf(rpc, [oldest], programId);
-    if (!market.settled) return facts;
-    const candidates = all.slice(0, MAX_SETTLE_SCAN);
-    for (let at = 0; at < candidates.length && facts.settledAt === null; at += SETTLE_SCAN_BATCH) {
-      const found = await factsOf(rpc, candidates.slice(at, at + SETTLE_SCAN_BATCH), programId);
-      facts = {
-        createdAt: facts.createdAt ?? found.createdAt,
-        settledAt: found.settledAt,
-        settleSlot: found.settleSlot,
-        oracleSlot: found.oracleSlot,
-      };
-    }
-    return facts;
-  } catch {
-    return NO_FACTS;
+  const address = new PublicKey(market.address);
+  const all = (await rpc.getSignaturesForAddress(address, { limit: SIGNATURE_PAGE })).filter(
+    (entry) => entry.err === null,
+  );
+  const oldest = all.length < SIGNATURE_PAGE ? all.at(-1) : undefined;
+  let facts = oldest === undefined ? NO_FACTS : await factsOf(rpc, [oldest], programId);
+  if (!market.settled) return facts;
+  const candidates = all.slice(0, MAX_SETTLE_SCAN);
+  for (let at = 0; at < candidates.length && facts.settledAt === null; at += SETTLE_SCAN_BATCH) {
+    const found = await factsOf(rpc, candidates.slice(at, at + SETTLE_SCAN_BATCH), programId);
+    facts = {
+      createdAt: facts.createdAt ?? found.createdAt,
+      settledAt: found.settledAt,
+      settleSlot: found.settleSlot,
+      oracleSlot: found.oracleSlot,
+    };
   }
-}
-
-/** Runs tasks in batches of `concurrency` at a time (serial within each batch). */
-async function runWithConcurrency<T, R>(
-  items: readonly T[],
-  concurrency: number,
-  task: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = [];
-  for (let i = 0; i < items.length; i += concurrency) {
-    const batch = items.slice(i, i + concurrency);
-    const batchResults = await Promise.all(batch.map(task));
-    results.push(...batchResults);
-  }
-  return results;
+  return facts;
 }
 
 export type StatusData = {
@@ -140,11 +117,7 @@ export type StatusData = {
   readonly facts: ReadonlyMap<string, MarketFacts>;
 };
 
-/**
- * Everything the page needs for the newest `MAX_DAYS` trading dates. Only scans markets from
- * those dates to limit RPC load. Facts are fetched with concurrency cap and per-market error
- * isolation (a failed row shows "unavailable"; the page still renders).
- */
+/** Everything the page needs for the newest `MAX_DAYS` trading dates. */
 export async function loadStatusData(
   rpc: StatusRpc,
   all: readonly MarketRow[],
@@ -153,12 +126,13 @@ export async function loadStatusData(
   const dates = [...new Set(all.map((row) => row.tradingDate))].sort((a, b) => b - a);
   const markets = all.filter((row) => dates.slice(0, MAX_DAYS).includes(row.tradingDate));
   if (markets.length === 0) return { markets, vaults: new Map(), facts: new Map() };
-  const [vaults, factsArray] = await Promise.all([
+  const [vaults, facts] = await Promise.all([
     loadVaultBalances(rpc, markets, programId),
-    runWithConcurrency(markets, CONCURRENCY_CAP, async (row) => {
-      const result = await loadMarketFacts(rpc, row, programId);
-      return [row.address, result] as const;
-    }),
+    Promise.all(
+      markets.map(
+        async (row) => [row.address, await loadMarketFacts(rpc, row, programId)] as const,
+      ),
+    ),
   ]);
-  return { markets, vaults, facts: new Map(factsArray) };
+  return { markets, vaults, facts: new Map(facts) };
 }
