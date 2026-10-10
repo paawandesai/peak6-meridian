@@ -430,9 +430,14 @@ class MarketMakerLoop:
             )
 
             # Place orders (would check existing orders and update/replace as needed)
-            await self._place_quote(fv_market, quote)
-            # Update count after placing (2 orders per market: bid + ask)
-            orders_per_market[fv_market.market] = orders_per_market.get(fv_market.market, 0) + 2
+            try:
+                await self._place_quote(fv_market, quote)
+                # Update count only after both sides confirm (AC3 / AB-10 cap enforcement)
+                orders_per_market[fv_market.market] = orders_per_market.get(fv_market.market, 0) + 2
+            except Exception:
+                # Place failed - don't increment count (may have 0 or 1 order if rollback failed)
+                logger.exception(f"Failed to place quote for {fv.ticker}, skipping count update")
+                continue
 
     async def _place_quote(self, market: MarketState, quote: Quote) -> None:
         """Place a two-sided quote.
@@ -442,6 +447,10 @@ class MarketMakerLoop:
 
         Atomicity: if Ask placement fails after Bid succeeds, cancel the Bid
         to avoid leaving a one-sided quote.
+
+        Raises:
+            Exception: If either Bid or Ask placement fails. Caller must not
+                increment order count on failure (AC3/AB-10 cap enforcement).
         """
         bid_placed = False
         try:
@@ -481,6 +490,8 @@ class MarketMakerLoop:
                             logger.exception(f"Failed to cancel orphaned Bid {order.order_id}")
                 except Exception:
                     logger.exception(f"Failed to clean up orphaned Bid for {market.ticker}")
+            # Re-raise to signal failure to caller (don't increment order count)
+            raise
 
     async def _cancel_all_quotes(self, markets: list[MarketState] | None = None) -> set[str]:
         """Cancel all resting MM orders (AC2: actually cancels orders).
