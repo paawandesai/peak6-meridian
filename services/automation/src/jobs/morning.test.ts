@@ -67,6 +67,17 @@ describe("runMorning: trading days", () => {
     });
   });
 
+  it("hands each creation signature to onCreated, once, and none for existing markets (P1-4)", async () => {
+    const t = setup(TUESDAY_0800);
+    const noted: string[] = [];
+    await runMorning({ ...t.deps, onCreated: (signature) => noted.push(signature) });
+    expect(noted).toHaveLength(38);
+    expect(new Set(noted).size).toBe(38);
+    noted.length = 0;
+    await runMorning({ ...t.deps, onCreated: (signature) => noted.push(signature) });
+    expect(noted).toEqual([]);
+  });
+
   it("is skipped on a holiday: no data fetched, nothing created, no alert (AC1)", async () => {
     // Thanksgiving, 08:00 EST = 13:00Z.
     const t = setup(new Date("2026-11-26T13:00:00Z"));

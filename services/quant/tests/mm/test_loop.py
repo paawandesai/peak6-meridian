@@ -1217,3 +1217,52 @@ async def test_demo_session_near_close_still_pulls(mm_config: MMConfig) -> None:
         clock=lambda: now,
     )
     assert mm._should_pull_all_quotes([fv], [demo]) is True
+
+
+@pytest.mark.asyncio
+async def test_sync_inventory_never_mints_on_closed_markets(mm_config: MMConfig) -> None:
+    """mint_pair fails with MarketClosed at/after close_ts: closed markets are not minted
+    into or returned as synced, while a live market still is (devnet 2026-10-10 log)."""
+    now = datetime(2026, 10, 10, 16, 0, tzinfo=UTC)
+    closed = MarketState(
+        market=TEST_MARKET_PUBKEY,
+        ticker="AAPL",
+        strike_cents=34000,
+        trading_date=20261009,
+        close_ts=int((now - timedelta(hours=7)).timestamp()),
+        is_open=True,
+        pairs_outstanding=0,
+    )
+    near_close = MarketState(
+        market="AAPL_20261011_35000",
+        ticker="AAPL",
+        strike_cents=35000,
+        trading_date=20261011,
+        close_ts=int((now + timedelta(seconds=30)).timestamp()),
+        is_open=True,
+        pairs_outstanding=0,
+    )
+    live = MarketState(
+        market="AAPL_20261011_34000",
+        ticker="AAPL",
+        strike_cents=34000,
+        trading_date=20261011,
+        close_ts=int((now + timedelta(hours=32)).timestamp()),
+        is_open=True,
+        pairs_outstanding=0,
+    )
+    order_client = FakeOrderClient()
+    order_client.mint_pair = AsyncMock()  # type: ignore[method-assign]
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource([closed, near_close, live]),
+        fair_value_source=FakeFairValueSource([]),
+        order_client=order_client,
+        clock=lambda: now,
+    )
+
+    synced = await mm._sync_inventory([closed, near_close, live])
+
+    assert [m.market for m in synced] == [live.market]
+    minted = [c.kwargs["market"] for c in order_client.mint_pair.await_args_list]
+    assert minted == [live.market]

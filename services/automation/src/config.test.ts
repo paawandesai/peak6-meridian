@@ -52,6 +52,21 @@ describe("parseEnv", () => {
     }
     expect(() => parseEnv({})).toThrow(/invalid environment/);
   });
+
+  it("caps settlement data-API requests per run at 8 by default, configurable within 4..100 (#53)", () => {
+    expect(parseEnv(ENV).SETTLE_MAX_API_CALLS_PER_RUN).toBe(8);
+    expect(
+      parseEnv({ ...ENV, SETTLE_MAX_API_CALLS_PER_RUN: "" }).SETTLE_MAX_API_CALLS_PER_RUN,
+    ).toBe(8);
+    expect(
+      parseEnv({ ...ENV, SETTLE_MAX_API_CALLS_PER_RUN: "12" }).SETTLE_MAX_API_CALLS_PER_RUN,
+    ).toBe(12);
+    for (const bad of ["2", "0", "101", "8.5", "lots"]) {
+      expect(() => parseEnv({ ...ENV, SETTLE_MAX_API_CALLS_PER_RUN: bad })).toThrow(
+        /SETTLE_MAX_API_CALLS_PER_RUN/,
+      );
+    }
+  });
 });
 
 describe("parseKeypair", () => {

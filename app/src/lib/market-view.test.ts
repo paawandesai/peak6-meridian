@@ -199,15 +199,24 @@ describe("openCloseText", () => {
     expect(openCloseText(open, close, true)).toBe("Opened 09:00 ET · closes 16:00 ET");
     expect(openCloseText(null, close, true)).toBe("Opened — · closes 16:00 ET");
   });
+  it("says the open time is unavailable when the index cannot be read (P1-4)", () => {
+    const close = BigInt(Math.floor(Date.parse("2026-10-08T20:00:00Z") / 1000));
+    expect(openCloseText("unavailable", close, true)).toBe(
+      "Open time unavailable · closes 16:00 ET",
+    );
+    expect(openCloseText("unavailable", close, false)).toBe(
+      "Open time unavailable · closes 16:00 ET (not the session close)",
+    );
+  });
   it("renders ET across a DST boundary (opened in EST, closes in EDT; and the reverse)", () => {
     const secs = (iso: string) => Math.floor(Date.parse(iso) / 1000);
     // 2026-03-08: clocks spring forward at 02:00 ET. 13:00Z the day before is 08:00 EST; close 20:00Z is 16:00 EDT.
-    expect(openCloseText(secs("2026-03-07T13:00:00Z"), BigInt(secs("2026-03-09T20:00:00Z")), true)).toBe(
-      "Opened 08:00 ET · closes 16:00 ET",
-    );
+    expect(
+      openCloseText(secs("2026-03-07T13:00:00Z"), BigInt(secs("2026-03-09T20:00:00Z")), true),
+    ).toBe("Opened 08:00 ET · closes 16:00 ET");
     // 2026-11-01: clocks fall back. 13:00Z in October is 09:00 EDT; close 21:00Z in November is 16:00 EST.
-    expect(openCloseText(secs("2026-10-31T13:00:00Z"), BigInt(secs("2026-11-02T21:00:00Z")), true)).toBe(
-      "Opened 09:00 ET · closes 16:00 ET",
-    );
+    expect(
+      openCloseText(secs("2026-10-31T13:00:00Z"), BigInt(secs("2026-11-02T21:00:00Z")), true),
+    ).toBe("Opened 09:00 ET · closes 16:00 ET");
   });
 });

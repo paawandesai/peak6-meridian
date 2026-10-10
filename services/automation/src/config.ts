@@ -6,6 +6,7 @@ import { Keypair } from "@solana/web3.js";
 import { z } from "zod";
 
 import type { Logger } from "./log";
+import { DEFAULT_MAX_API_CALLS_PER_RUN } from "./settlePacing";
 
 const emptyToUndefined = (value: unknown): unknown =>
   typeof value === "string" && value.trim() === "" ? undefined : value;
@@ -29,6 +30,12 @@ const envSchema = z.object({
   DEMO_CLOSE_IN_SECS: z.preprocess(
     emptyToUndefined,
     z.coerce.number().int().min(300).max(14_400).default(3600),
+  ),
+  // Data-API requests one settlement run (one per minute) may cause (#53). The default of 8 fits
+  // Twelve Data's free tier (8/min); the minimum of 4 is one devnet attempt (2 checks + 2 oracle).
+  SETTLE_MAX_API_CALLS_PER_RUN: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().min(4).max(100).default(DEFAULT_MAX_API_CALLS_PER_RUN),
   ),
 });
 

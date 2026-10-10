@@ -17,6 +17,7 @@ import { groupByTicker, marketStatus, partitionMarkets, type MarketRow } from "@
 import { tradeHref } from "@/app/trade/_lib/href";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
 import { useFairValues } from "@/lib/fair-values";
+import { useOpenTimes } from "@/lib/open-times";
 import { useTickerSelection } from "@/hooks/use-ticker-selection";
 
 /** Inert sources for pages without a data provider: nothing is live, so rows show "—". */
@@ -24,9 +25,6 @@ const NO_SOURCES: MarketDataSources = {
   fetchPrices: () => Promise.reject(new Error("no price source")),
   fetchBooks: () => Promise.resolve({}),
 };
-
-// P0-4: removed useOpenTimes hook. Markets page shows "Opened —" (null openedAt).
-// Only Trade page fetches the real creation time via reader.getOpenTime().
 
 /**
  * Read-only list of on-chain markets as one strike ladder per ticker (FR-16, UI-03): all open
@@ -63,6 +61,8 @@ export function MarketsView({
   const pythQuotes = usePythQuotes();
   // M3-03: Fair values for edge calculation and distribution chart
   const fairValues = useFairValues();
+  // P1-4: real open times from the automation creation-time index, one request for all markets.
+  const openTimes = useOpenTimes();
   // P0-3 MR A: Ticker selection with ?t= deep link
   const [selectedTicker] = useTickerSelection();
 
@@ -87,7 +87,7 @@ export function MarketsView({
     const book = data.books[market.address];
     const fairValue = fairValues.byMarket[market.address];
     return {
-      openedAt: null, // P0-4: Markets shows "Opened —"; Trade fetches real time
+      openedAt: openTimes.openTime(market.address),
       ...(book?.state === "ready" ? { quotes: book.quotes } : {}),
       fair: fairValue,
       fairStatus: fairValues.status,
@@ -140,9 +140,7 @@ export function MarketsView({
   // P0-3 MR A: Filter by selected ticker
   const tickerGroups = groupByTicker(allMarkets);
   const filteredMarkets =
-    selectedTicker === "All"
-      ? allMarkets
-      : allMarkets.filter((m) => m.ticker === selectedTicker);
+    selectedTicker === "All" ? allMarkets : allMarkets.filter((m) => m.ticker === selectedTicker);
   const filteredSession = filteredMarkets.filter((m) => session.includes(m));
   const filteredTest = filteredMarkets.filter((m) => test.includes(m));
 

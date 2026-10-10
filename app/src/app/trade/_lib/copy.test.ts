@@ -65,6 +65,10 @@ describe("openClose (D-050)", () => {
     expect(openClose(NORMAL, null)).toBe("Opened — · Closes 16:00 ET");
   });
 
+  it("says the open time is unavailable when the index cannot be read (P1-4)", () => {
+    expect(openClose(NORMAL, "unavailable")).toBe("Open time unavailable · Closes 16:00 ET");
+  });
+
   it("adds the date when the market was created on an earlier ET day", () => {
     // 2026-10-07 18:00 EDT = 22:00Z
     expect(openClose(NORMAL, 1_791_410_400)).toBe("Opened 2026-10-07 18:00 ET · Closes 16:00 ET");

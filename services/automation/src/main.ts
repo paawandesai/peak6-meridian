@@ -2,7 +2,8 @@
  * Entry point of the automation service: `pnpm --filter automation start`.
  * Configuration comes from the environment (docs/environment.md); nothing secret is logged.
  */
-import { MERIDIAN_PROGRAM_ID, findConfigPda } from "@meridian/client";
+import { AnchorProvider } from "@coral-xyz/anchor";
+import { MERIDIAN_PROGRAM_ID, createMeridianProgram, findConfigPda } from "@meridian/client";
 import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
 
 import { createAlerter } from "./alerts";
@@ -11,6 +12,7 @@ import { assertCluster } from "./cluster";
 import { loadAutomationKey, parseEnv } from "./config";
 import { checkBalance, createSettlementJob, JOB_OPTIONS, SettleMemory } from "./jobs/settle";
 import { consoleLogger, describeError } from "./log";
+import { connectionOpenTimeRpc, createOpenTimeIndex } from "./openTimes";
 import { buildRuntime, readKeypairFile } from "./runtime";
 import { defaultCron } from "./scheduler";
 import { startService } from "./service";
@@ -40,6 +42,31 @@ async function main(): Promise<void> {
   });
   const state = new RunState();
   const memory = new SettleMemory();
+  const settleOptions = { ...JOB_OPTIONS, maxApiCallsPerRun: env.SETTLE_MAX_API_CALLS_PER_RUN };
+  // The open-time index (P1-4) reads the chain only, so it needs no signer and runs in every
+  // degraded mode; it learns the automation authority from Config. `env.SOLANA_RPC_URL` is the
+  // same resolved URL every other chain read here uses (parseEnv: MERIDIAN_DEVNET_RPC_URL first).
+  const readConnection = new Connection(env.SOLANA_RPC_URL, "confirmed");
+  const readOnly = createMeridianProgram(
+    new AnchorProvider(
+      readConnection,
+      {
+        publicKey: PublicKey.default,
+        signTransaction: () => Promise.reject(new Error("read-only")),
+        signAllTransactions: () => Promise.reject(new Error("read-only")),
+      },
+      { commitment: "confirmed" },
+    ),
+    programId,
+  );
+  const openTimes = createOpenTimeIndex({
+    rpc: connectionOpenTimeRpc(readConnection),
+    programId,
+    readAuthority: async () =>
+      (await readOnly.account.config.fetch(findConfigPda(programId).address)).automationAuthority,
+    now: () => new Date(),
+    log,
+  });
 
   const service = await startService({
     serviceToken: env.SERVICE_TOKEN,
@@ -87,7 +114,6 @@ async function main(): Promise<void> {
         // Settlement is permissionless: the loaded key is only the fee payer here (AB-19).
         settlement: createSettlementJob({
           now,
-          sleep,
           chain: runtime.chain,
           verifyClose: runtime.verifyClose,
           adapter: runtime.adapter,
@@ -98,17 +124,18 @@ async function main(): Promise<void> {
           incidents: runtime.incidents,
           state,
           log,
-          options: JOB_OPTIONS,
+          options: settleOptions,
           memory,
         }),
         // The payer must be funded before the first settlement is due (ticket: checked at startup).
         startupCheck: () =>
-          checkBalance({ chain: runtime.chain, alerter, options: JOB_OPTIONS }, memory),
+          checkBalance({ chain: runtime.chain, alerter, options: settleOptions }, memory),
       };
     },
     cron: defaultCron,
     alerter,
     log,
+    openTimes,
   });
 
   const shutdown = (signal: string): void => {

@@ -4,7 +4,9 @@
  * a funded test wallet and the app (`next dev`) wired to the validator. Everything is throwaway and
  * local: the validator's keys never leave the temp dir and the app only gets them as env.
  *
- * Environment (optional): E2E_RPC_PORT (8899), E2E_FAUCET_PORT (9900), E2E_APP_PORT (3100).
+ * Environment (optional): E2E_RPC_PORT (8899), E2E_FAUCET_PORT (9900), E2E_APP_PORT (3100),
+ * E2E_APP_MODE (`dev`, the default, runs `next dev`; `production` runs `next build` then
+ * `next start`, for evidence and Lighthouse runs that must measure the production bundle).
  */
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import {
@@ -35,6 +37,7 @@ const FAUCET_PORT = Number(process.env.E2E_FAUCET_PORT ?? "9900");
 const APP_PORT = Number(process.env.E2E_APP_PORT ?? "3100");
 const RPC_URL = `http://127.0.0.1:${RPC_PORT}`;
 const APP_URL = `http://127.0.0.1:${APP_PORT}`;
+const APP_MODE = process.env.E2E_APP_MODE === "production" ? "production" : "dev";
 
 const log = (message: string): void => console.log(`[playwright-setup] ${message}`);
 
@@ -144,29 +147,47 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     const usdcMint = /^SEED_USDC_MINT=(\S+)$/m.exec(seed)?.[1];
     if (usdcMint === undefined) throw new Error("the seed did not report the USDC mint");
 
-    log(`starting the app on ${APP_URL}`);
+    const appEnv = {
+      ...process.env,
+      NEXT_PUBLIC_CLUSTER: "devnet",
+      NEXT_PUBLIC_RPC_URL: RPC_URL,
+      NEXT_PUBLIC_PROGRAM_ID: programId,
+      NEXT_PUBLIC_USDC_MINT: usdcMint,
+      SOLANA_CLUSTER: "localnet",
+      SOLANA_RPC_URL: RPC_URL,
+      USDC_MINT: usdcMint,
+      // The admin key is the throwaway mint authority of the seeded test-USDC.
+      FAUCET_KEYPAIR: JSON.stringify(Array.from(admin.secretKey)),
+      NEXT_TELEMETRY_DISABLED: "1",
+    };
     const appLog = openSync(join(work, "app.log"), "a");
+    if (APP_MODE === "production") {
+      // NEXT_PUBLIC_* are inlined at build time, so the build runs after the seed knows the mint.
+      log("building the app (next build, production)");
+      try {
+        execFileSync("pnpm", ["--filter", "app", "exec", "next", "build"], {
+          cwd: ROOT,
+          stdio: ["ignore", appLog, appLog],
+          env: appEnv,
+        });
+      } catch (error) {
+        const tail = readFileSync(join(work, "app.log"), "utf8").split("\n").slice(-25).join("\n");
+        throw new Error(`next build failed: ${String(error)}\napp log (tail):\n${tail}`);
+      }
+    }
+    log(`starting the app on ${APP_URL} (${APP_MODE})`);
     const app = spawn(
       "pnpm",
-      ["--filter", "app", "exec", "next", "dev", "--port", String(APP_PORT)],
-      {
-        cwd: ROOT,
-        detached: true,
-        stdio: ["ignore", appLog, appLog],
-        env: {
-          ...process.env,
-          NEXT_PUBLIC_CLUSTER: "devnet",
-          NEXT_PUBLIC_RPC_URL: RPC_URL,
-          NEXT_PUBLIC_PROGRAM_ID: programId,
-          NEXT_PUBLIC_USDC_MINT: usdcMint,
-          SOLANA_CLUSTER: "localnet",
-          SOLANA_RPC_URL: RPC_URL,
-          USDC_MINT: usdcMint,
-          // The admin key is the throwaway mint authority of the seeded test-USDC.
-          FAUCET_KEYPAIR: JSON.stringify(Array.from(admin.secretKey)),
-          NEXT_TELEMETRY_DISABLED: "1",
-        },
-      },
+      [
+        "--filter",
+        "app",
+        "exec",
+        "next",
+        APP_MODE === "production" ? "start" : "dev",
+        "--port",
+        String(APP_PORT),
+      ],
+      { cwd: ROOT, detached: true, stdio: ["ignore", appLog, appLog], env: appEnv },
     );
     children.push(app);
     // Warm the first compile so the specs do not pay for it; a non-2xx (for example a config

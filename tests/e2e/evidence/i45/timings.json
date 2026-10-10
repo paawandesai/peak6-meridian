@@ -1,0 +1,42 @@
+{
+  "recordedAt": "2026-10-10T17:09:55.456Z",
+  "appMode": "production",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "rpcUrl": "http://127.0.0.1:8899",
+  "programId": "H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm",
+  "market": "DAk6mzK4wE6kHJQH9KSZLUi5fEUe3jX34npy1Cb2nVjP",
+  "budgetMs": 3000,
+  "timings": [
+    {
+      "intent": "Buy YES, market (worst 60¢)",
+      "slot": 112,
+      "confirmMs": 331,
+      "bookMs": 332,
+      "signatureRequests": 1
+    },
+    {
+      "intent": "Sell YES, limit 55¢",
+      "slot": 116,
+      "confirmMs": 829,
+      "bookMs": 831,
+      "signatureRequests": 1
+    },
+    {
+      "intent": "Buy NO, market (worst 55¢)",
+      "slot": 120,
+      "confirmMs": 830,
+      "bookMs": 832,
+      "signatureRequests": 1
+    },
+    {
+      "intent": "Sell NO, limit 30¢ (IOC at a limit price)",
+      "slot": 124,
+      "confirmMs": 825,
+      "bookMs": 827,
+      "signatureRequests": 1
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import {
   type MarketRow,
   type MarketStatus,
 } from "./markets";
+import type { OpenTime } from "./open-times-core";
 import { formatCountdown, formatEtHm } from "./time";
 import type { StateBadgeProps } from "@/components/ui";
 
@@ -144,13 +145,22 @@ export function nextTransition(
   }
 }
 
-/** The open (creation) and close times of a market in ET: `Opens 09:00 ET · closes 16:00 ET`. */
+/**
+ * The open (creation) and close times of a market in ET: `Opened 09:00 ET · closes 16:00 ET`.
+ * `openedAt` is unix seconds, `null` for a market with no known creation time (`—`), or
+ * `"unavailable"` when the open-time index could not be read (P1-4: never a guessed time).
+ */
 export function openCloseText(
-  openedAt: number | null,
+  openedAt: OpenTime,
   closeTs: bigint,
   isSessionMarket: boolean,
 ): string {
-  const opened = openedAt === null ? "Opened —" : `Opened ${formatEtHm(openedAt)} ET`;
+  const opened =
+    openedAt === "unavailable"
+      ? "Open time unavailable"
+      : openedAt === null
+        ? "Opened —"
+        : `Opened ${formatEtHm(openedAt)} ET`;
   const closeTime = formatEtHm(closeTs);
   const qualifier = isSessionMarket ? "" : " (not the session close)";
   return `${opened} · closes ${closeTime} ET${qualifier}`;

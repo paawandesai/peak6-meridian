@@ -121,8 +121,10 @@ export async function connectWallet(page: Page, address: string): Promise<void> 
     .first()
     .click();
   await page.getByRole("button", { name: new RegExp(WALLET_NAME) }).click();
+  // The connected button's accessible name is the wallet icon's alt text, then the short
+  // address ("E2E Test Wallet icon 56RN..85xA"), so match the address prefix anywhere.
   await page
-    .getByRole("button", { name: new RegExp(`^${address.slice(0, 4)}`) })
+    .getByRole("button", { name: new RegExp(`\\b${address.slice(0, 4)}\\.\\.`) })
     .first()
     .waitFor();
 }

@@ -160,53 +160,28 @@ describe("decodeBook", () => {
   });
 });
 
-describe("fetchOpenTime (D-050)", () => {
-  const market = Keypair.generate().publicKey;
-  const entry = (signature: string, blockTime: number | null) => ({
-    signature,
-    slot: 1,
-    err: null,
-    memo: null,
-    blockTime,
+describe("fetchOpenTime (D-050, P1-4: from the automation index, no signature scan)", () => {
+  const market = Keypair.generate().publicKey.toBase58();
+
+  it("is the indexed creation time of the market", async () => {
+    const read = vi.fn().mockResolvedValue({ ready: true, byMarket: { [market]: 1_791_288_000 } });
+    expect(await fetchOpenTime(market, read)).toBe(1_791_288_000);
+    expect(read).toHaveBeenCalledTimes(1);
   });
 
-  it("is the block time of the oldest signature", async () => {
-    const connection = {
-      getSignaturesForAddress: vi.fn().mockResolvedValue([entry("new", 200), entry("old", 100)]),
-    };
-    expect(await fetchOpenTime(connection, market)).toBe(100);
+  it("is null (shown as —) when a ready index has no record of the market", async () => {
+    const read = vi.fn().mockResolvedValue({ ready: true, byMarket: {} });
+    expect(await fetchOpenTime(market, read)).toBeNull();
   });
 
-  it("pages back while pages are full", async () => {
-    const full = Array.from({ length: 1000 }, (_, i) => entry(`s${i}`, 500 - i / 10));
-    const connection = {
-      getSignaturesForAddress: vi
-        .fn()
-        .mockResolvedValueOnce(full)
-        .mockResolvedValueOnce([entry("first", 42)]),
-    };
-    expect(await fetchOpenTime(connection, market)).toBe(42);
-    expect(connection.getSignaturesForAddress).toHaveBeenLastCalledWith(
-      market,
-      { limit: 1000, before: "s999" },
-      "confirmed",
-    );
+  it("is unavailable while the index is still rebuilding", async () => {
+    const read = vi.fn().mockResolvedValue({ ready: false, byMarket: {} });
+    expect(await fetchOpenTime(market, read)).toBe("unavailable");
   });
 
-  it("is null when there is no history, no block time, or too much history", async () => {
-    expect(
-      await fetchOpenTime({ getSignaturesForAddress: vi.fn().mockResolvedValue([]) }, market),
-    ).toBeNull();
-    expect(
-      await fetchOpenTime(
-        { getSignaturesForAddress: vi.fn().mockResolvedValue([entry("a", null)]) },
-        market,
-      ),
-    ).toBeNull();
-    const full = Array.from({ length: 1000 }, (_, i) => entry(`s${i}`, 1));
-    const endless = { getSignaturesForAddress: vi.fn().mockResolvedValue(full) };
-    expect(await fetchOpenTime(endless, market)).toBeNull();
-    expect(endless.getSignaturesForAddress).toHaveBeenCalledTimes(5);
+  it("rejects when the index cannot be read, so the page shows unavailable", async () => {
+    const read = vi.fn().mockRejectedValue(new Error("open times could not be read (502)"));
+    await expect(fetchOpenTime(market, read)).rejects.toThrow("502");
   });
 });
 
