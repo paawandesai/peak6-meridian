@@ -6,6 +6,17 @@ import { type MarketRow } from "@/lib/markets";
 import { formatEtHm } from "@/lib/time";
 
 /**
+ * The header close time: the soonest close among markets still trading (close in the future);
+ * when none are open, the earliest close overall.
+ */
+export function soonestOpenClose(markets: readonly MarketRow[], nowSecs: number): bigint {
+  const now = BigInt(Math.floor(nowSecs));
+  const min = (list: readonly MarketRow[]) =>
+    list.reduce<bigint | null>((m, row) => (m === null || row.closeTs < m ? row.closeTs : m), null);
+  return min(markets.filter((m) => !m.settled && m.closeTs > now)) ?? min(markets) ?? 0n;
+}
+
+/**
  * One ticker's strike ladder. The `h2` holds only the symbol; the live price, as-of time and the
  * strike count and close time are siblings in the header line, so the ticker list stays a clean
  * heading list and the table keeps exactly one header row and one row per strike.
@@ -33,10 +44,7 @@ export function TickerLadder({
   // The live price falls between the strike at or below it and the next one up.
   const belowIndex =
     live === null ? -1 : strikes.reduce((found, strike, i) => (strike <= live ? i : found), -1);
-  const earliestClose = markets.reduce(
-    (min, m) => (m.closeTs < min ? m.closeTs : min),
-    markets[0]?.closeTs ?? 0n,
-  );
+  const earliestClose = soonestOpenClose(markets, ctx.nowSecs);
   return (
     <section aria-label={ticker}>
       <div className="mb-mer-2 flex flex-wrap items-baseline gap-x-mer-4 gap-y-mer-1">
