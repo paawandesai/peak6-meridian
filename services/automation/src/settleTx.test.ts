@@ -56,6 +56,11 @@ describe("buildSettleInstructions (AC4, AB-04)", () => {
         w.open[i]?.address.toBase58(),
         fx.feeds[0].toBase58(),
         fx.feeds[1].toBase58(),
+        // RedStone optional accounts (null = program ID placeholder)
+        w.program.programId.toBase58(), // redstonePrice
+        w.program.programId.toBase58(), // oracleConfig
+        // Pyth optional accounts (M3-10b)
+        w.program.programId.toBase58(), // instructionsSysvar
         w.payer.publicKey.toBase58(),
       ]);
       expect(ix.keys.filter((k) => k.isSigner).map((k) => k.pubkey.toBase58())).toEqual([

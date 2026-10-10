@@ -150,12 +150,15 @@ export async function trySettle(
 ): Promise<string> {
   try {
     await v.program.methods
-      .settleMarket()
+      .settleMarket(null)
       .accountsStrict({
         config: v.config,
         market,
         feedTiingo: feeds[0],
         feedTwelveData: feeds[1],
+        redstonePrice: null, // Local oracle path (Switchboard)
+        oracleConfig: null, // Local oracle path
+        instructionsSysvar: null,
         payer: v.admin.publicKey,
       })
       .rpc();

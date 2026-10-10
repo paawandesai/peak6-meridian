@@ -171,3 +171,30 @@ def _json_list(body: bytes) -> list[object]:
     if not isinstance(data, list):
         raise ValueError("expected a list")
     return data
+
+
+def fetch_daily_closes_pyth(
+    client: httpx.Client, ticker: str, pyth_token: str, today: date
+) -> list[Decimal]:
+    """Daily closes, oldest first, from Pyth Pro's history API (fallback when Tiingo is limited)."""
+    ticker = _check_ticker(ticker)
+    end = datetime.combine(today, datetime.max.time(), tzinfo=UTC)
+    body = _get(
+        client,
+        "https://pyth.dourolabs.app/v1/fixed_rate@200ms/history",
+        {"Authorization": f"Bearer {pyth_token}"},
+        {
+            "symbol": f"Equity.US.{ticker}/USD",
+            "resolution": "D",
+            "from": str(int((end - timedelta(days=CLOSE_LOOKBACK_DAYS)).timestamp())),
+            "to": str(int(end.timestamp())),
+        },
+    )
+    try:
+        data = json.loads(body)
+        if data.get("s") != "ok":
+            raise ValueError("status not ok")
+        pairs = sorted(zip(data["t"], data["c"], strict=True))
+        return [Decimal(str(close)) for _, close in pairs]
+    except (ValueError, KeyError, TypeError, AttributeError):
+        raise PriceError(f"{ticker}: malformed Pyth daily closes") from None

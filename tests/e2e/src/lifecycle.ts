@@ -690,12 +690,15 @@ async function main(): Promise<void> {
     }
     sigs.push(
       await program.methods
-        .settleMarket()
+        .settleMarket(null)
         .accountsStrict({
           config: findConfigPda(programId).address,
           market: addresses.market,
           feedTiingo: localFeedPda(TRADED.symbol, 0),
           feedTwelveData: localFeedPda(TRADED.symbol, 1),
+          redstonePrice: null, // Local oracle path (Switchboard)
+          oracleConfig: null, // Local oracle path
+          instructionsSysvar: null,
           payer: admin.publicKey,
         })
         .rpc({ commitment: "confirmed" }),

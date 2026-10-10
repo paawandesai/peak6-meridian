@@ -29,6 +29,8 @@ const INTERFACE = [
   "unpause",
   "local_oracle_set",
   "version",
+  "set_oracle_config",
+  "post_redstone_price",
 ];
 
 function offlineProvider(): AnchorProvider {
@@ -96,7 +98,7 @@ describe("generated client", () => {
       [configPda, admin, usdcMint].map((key) => key.toBase58()),
     );
     expect(instruction.keys[1]?.isSigner).toBe(true);
-    // 8-byte discriminator + 32 + 8 + 2 + 8 scalars + 4-byte vec length + 6 × (1 + 136) slots.
-    expect(instruction.data.length).toBe(8 + 50 + 4 + 6 * 137);
+    // 8-byte discriminator + 32 + 8 + 2 + 8 scalars + 32 (pyth_lazer_signer) + 28 (pyth_feed_ids) + 8 (pyth_max_age_secs) + 4-byte vec length + 6 × (1 + 136) slots.
+    expect(instruction.data.length).toBe(8 + 50 + 68 + 4 + 6 * 137);
   });
 });

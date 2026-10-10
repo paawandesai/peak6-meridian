@@ -13,6 +13,7 @@
 )]
 
 pub mod orders;
+pub mod redstone;
 
 use std::path::PathBuf;
 
@@ -94,6 +95,9 @@ pub fn default_params(automation_authority: Pubkey) -> ConfigParams {
         max_conf_bps: 5,
         override_delay_secs: 3_600,
         tickers: mag7_slots(0..6),
+        pyth_lazer_signer: Pubkey::default(),
+        pyth_feed_ids: [0; 7], // No Pyth feeds configured by default
+        pyth_max_age_secs: 30, // Same default as max_staleness_slots (~12s converted to seconds)
     }
 }
 
@@ -315,6 +319,18 @@ pub fn assert_meridian_error(result: &TransactionResult, expected: MeridianError
     assert_eq!(
         failure.err,
         TransactionError::InstructionError(0, InstructionError::Custom(error_code(expected))),
+        "expected {expected:?}; logs: {:#?}",
+        failure.meta.logs
+    );
+}
+
+/// Asserts that the transaction failed with the given `MeridianError` when using `send_with_budget`.
+/// The error is at index 1 because ComputeBudget instruction is at index 0.
+pub fn assert_meridian_error_with_budget(result: &TransactionResult, expected: MeridianError) {
+    let failure = expect_failure(result);
+    assert_eq!(
+        failure.err,
+        TransactionError::InstructionError(1, InstructionError::Custom(error_code(expected))),
         "expected {expected:?}; logs: {:#?}",
         failure.meta.logs
     );

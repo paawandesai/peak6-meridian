@@ -19,7 +19,8 @@ export type FairEdgeProps = {
 export function FairEdge({ yesCents, fair, status, refreshFailed, nowSecs }: FairEdgeProps) {
   if (status === "loading") return <p role="status">Fair value loading…</p>;
   if (fair === undefined) {
-    return <p className="text-mer-sm text-mer-ink-muted">Fair value unavailable</p>;
+    // When fair values unavailable (503), probability already shown in Probability column
+    return null;
   }
   const stale = refreshFailed || isStale(fair, nowSecs);
   return (

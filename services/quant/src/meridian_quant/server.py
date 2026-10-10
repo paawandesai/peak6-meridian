@@ -18,6 +18,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
 
+from meridian_quant.demo import demo_allow_stale_spot
 from meridian_quant.fair_value import FairValueError, fair_cents, remaining_session_seconds
 from meridian_quant.prices import PriceError, Spot
 from meridian_quant.vol import VolError, realized_vol
@@ -85,7 +86,11 @@ def compute_fair_values(service: Service) -> list[FairValue]:
             continue
         spot, sigma = entry
         try:
-            remaining = remaining_session_seconds(now, info.close_ts)
+            remaining = (
+                max(0, info.close_ts - int(now.timestamp()))
+                if demo_allow_stale_spot()
+                else remaining_session_seconds(now, info.close_ts)
+            )
             cents = fair_cents(spot.price, info.strike_cents, sigma, remaining)
         except FairValueError as error:
             # One unpriceable market (e.g. a non-positive strike) must not 500 every other market.
@@ -100,7 +105,8 @@ def compute_fair_values(service: Service) -> list[FairValue]:
                 sigma=sigma,
                 spot=spot.price,
                 as_of=spot.as_of,
-                stale=(now - spot.as_of).total_seconds() > STALE_AFTER_SECS,
+                stale=(now - spot.as_of).total_seconds() > STALE_AFTER_SECS
+                and not demo_allow_stale_spot(),
             )
         )
     return out

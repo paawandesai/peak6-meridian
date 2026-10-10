@@ -463,19 +463,72 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
     5 * MINUTE,
   );
 
-  it("M2-15b --oracle-config fails closed when set_oracle_config instruction not available", async () => {
-    const configPath = join(work, "oracle-config-fail-closed.json");
+  it("AC6 --oracle-config calls set_oracle_config (M2-15)", async () => {
+    const configPath = join(work, "oracle-config.json");
     writeFileSync(
       configPath,
       JSON.stringify({
-        signers: ["0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"],
-        signerThreshold: 1,
+        signers: [
+          "0x1234567890123456789012345678901234567890",
+          "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+          "0x1111111111111111111111111111111111111111",
+        ],
+        signerThreshold: 2,
         maxPackageDelaySecs: 600,
       }),
     );
-    await expect(run({ oracleConfigPath: configPath })).rejects.toThrow(
-      /--oracle-config is not yet implemented.*depends on !75/,
-    );
+
+    const result = await run({ oracleConfigPath: configPath });
+
+    // Verify set-oracle-config was called
+    expect(result.actions).toContain("set-oracle-config");
+
+    // Verify oracle config is recorded in the deployment record
+    expect(result.record.oracleConfigPda).toBeDefined();
+    expect(result.record.oracleSigners).toEqual([
+      "0x1234567890123456789012345678901234567890",
+      "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      "0x1111111111111111111111111111111111111111",
+    ]);
+    expect(result.record.oracleSignerThreshold).toBe(2);
+    expect(result.record.oracleMaxPackageDelaySecs).toBe(600);
+
+    // Verify on-chain OracleConfig account was written
+    expect(result.record.oracleConfigPda).toBeDefined();
+    const oracleConfigPda = new PublicKey(result.record.oracleConfigPda ?? "");
+    const accountInfo = await validator.connection.getAccountInfo(oracleConfigPda);
+    expect(accountInfo).not.toBeNull();
+    if (accountInfo) {
+      expect(accountInfo.owner.toBase58()).toBe(result.record.programId);
+    }
+
+    // Deserialize and verify signers and threshold match config file
+    const oracleConfig = await program.account.oracleConfig.fetch(oracleConfigPda);
+    expect(oracleConfig.signerThreshold).toBe(2);
+    expect(oracleConfig.maxPackageDelaySecs.toNumber()).toBe(600);
+    expect(oracleConfig.signers).toHaveLength(3);
+
+    // Signers are stored as [u8; 20] arrays on-chain
+    const expectedSigners = [
+      [
+        0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x78, 0x90,
+        0x12, 0x34, 0x56, 0x78, 0x90,
+      ],
+      [
+        0xab, 0xcd, 0xef, 0xab, 0xcd, 0xef, 0xab, 0xcd, 0xef, 0xab, 0xcd, 0xef, 0xab, 0xcd, 0xef,
+        0xab, 0xcd, 0xef, 0xab, 0xcd,
+      ],
+      [
+        0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+        0x11, 0x11, 0x11, 0x11, 0x11,
+      ],
+    ];
+    for (let i = 0; i < 3; i++) {
+      const signer = oracleConfig.signers[i];
+      if (signer) {
+        expect(Array.from(signer)).toEqual(expectedSigners[i]);
+      }
+    }
   });
 
   it(
@@ -623,12 +676,15 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
       }
       const settle = (tiingo: PublicKey, twelve: PublicKey) =>
         program.methods
-          .settleMarket()
+          .settleMarket(null)
           .accountsStrict({
             config: findConfigPda(programId).address,
             market: addresses.market,
             feedTiingo: tiingo,
             feedTwelveData: twelve,
+            redstonePrice: null,
+            oracleConfig: null,
+            instructionsSysvar: null,
             payer: admin.keypair.publicKey,
           })
           .rpc({ commitment: "confirmed" });

@@ -902,6 +902,96 @@ export type Meridian = {
       ];
     },
     {
+      name: "postRedstonePrice";
+      docs: ["Permissionless RedStone package verification and price posting (M2-15, D-054)."];
+      discriminator: [155, 192, 48, 241, 232, 1, 11, 247];
+      accounts: [
+        {
+          name: "payer";
+          docs: ["Payer for the RedstonePrice account if it doesn't exist yet."];
+          writable: true;
+          signer: true;
+        },
+        {
+          name: "oracleConfig";
+          docs: ["OracleConfig PDA (read-only, for signer set and threshold)."];
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "market";
+          docs: [
+            "Market PDA (read-only, for close_ts window validation; AB-03 liveness).",
+            "Must match the symbol being posted. Seeds constrained per settle_market pattern.",
+          ];
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [109, 97, 114, 107, 101, 116];
+              },
+              {
+                kind: "account";
+                path: "market.ticker";
+                account: "market";
+              },
+              {
+                kind: "account";
+                path: "market.trading_date";
+                account: "market";
+              },
+              {
+                kind: "account";
+                path: "market.strike_cents";
+                account: "market";
+              },
+            ];
+          };
+        },
+        {
+          name: "redstonePrice";
+          docs: [
+            "RedstonePrice PDA for this ticker (created if it doesn't exist, updated if it does).",
+          ];
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [114, 101, 100, 115, 116, 111, 110, 101, 95, 112, 114, 105, 99, 101];
+              },
+              {
+                kind: "arg";
+                path: "symbol";
+              },
+            ];
+          };
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
+        },
+      ];
+      args: [
+        {
+          name: "symbol";
+          type: {
+            array: ["u8", 8];
+          };
+        },
+        {
+          name: "payload";
+          type: "bytes";
+        },
+      ];
+    },
+    {
       name: "redeem";
       docs: ["Pair redeem before settlement, winner redeem after (FR-10)."];
       discriminator: [184, 12, 86, 149, 70, 196, 97, 225];
@@ -1082,6 +1172,58 @@ export type Meridian = {
       ];
     },
     {
+      name: "setOracleConfig";
+      docs: ["Admin sets RedStone signer set and thresholds (M2-15, D-054)."];
+      discriminator: [96, 171, 6, 98, 153, 183, 233, 31];
+      accounts: [
+        {
+          name: "admin";
+          docs: ["Admin signer (checked against Config.admin, payer for OracleConfig)."];
+          writable: true;
+          signer: true;
+        },
+        {
+          name: "config";
+          docs: ["Config account (read-only, for admin check)."];
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "oracleConfig";
+          docs: ["OracleConfig PDA (created if it doesn't exist, updated if it does)."];
+          writable: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "systemProgram";
+          address: "11111111111111111111111111111111";
+        },
+      ];
+      args: [
+        {
+          name: "params";
+          type: {
+            defined: {
+              name: "setOracleConfigParams";
+            };
+          };
+        },
+      ];
+    },
+    {
       name: "settleFunds";
       docs: ["Withdraws the owner's free balances (FR-12, D-029). Stub until M1-05."];
       discriminator: [238, 64, 163, 96, 75, 171, 16, 33];
@@ -1144,7 +1286,9 @@ export type Meridian = {
     },
     {
       name: "settleMarket";
-      docs: ["Permissionless settlement from the two oracle feeds (FR-08)."];
+      docs: [
+        "Permissionless settlement from Pyth (primary), RedStone (fallback) or Switchboard (FR-08, M3-10b).",
+      ];
       discriminator: [193, 153, 95, 216, 166, 6, 144, 217];
       accounts: [
         {
@@ -1166,12 +1310,48 @@ export type Meridian = {
           name: "feedTiingo";
           docs: [
             "Feed for source slot 0 (Tiingo). Owner, address and feed hash are checked against the",
-            "config by the oracle adapter.",
+            "config by the oracle adapter. Used for Switchboard path (M2-18 removes).",
           ];
         },
         {
           name: "feedTwelveData";
-          docs: ["Feed for source slot 1 (Twelve Data). Checked like `feed_tiingo`."];
+          docs: [
+            "Feed for source slot 1 (Twelve Data). Checked like `feed_tiingo`. Switchboard path.",
+          ];
+        },
+        {
+          name: "redstonePrice";
+          docs: [
+            "RedStone verified price for this ticker (M2-15, D-054). Optional: used as fallback when",
+            "Pyth is not present, or for two-source spread check when both Pyth and RedStone are present.",
+            "AB-04: PDA seeds constraint ensures this is the price account for market.ticker.",
+          ];
+          optional: true;
+        },
+        {
+          name: "oracleConfig";
+          docs: [
+            "Oracle configuration with RedStone signer set. Required when using RedStone path.",
+            "AB-04: PDA seeds constraint ensures this is the canonical oracle config.",
+          ];
+          optional: true;
+          pda: {
+            seeds: [
+              {
+                kind: "const";
+                value: [111, 114, 97, 99, 108, 101, 95, 99, 111, 110, 102, 105, 103];
+              },
+            ];
+          };
+        },
+        {
+          name: "instructionsSysvar";
+          docs: [
+            "Instructions sysvar (M3-10b, D-055). Required for Pyth Lazer path to validate the",
+            "Ed25519Program signature verification instruction.",
+          ];
+          optional: true;
+          address: "Sysvar1nstructions1111111111111111111111111";
         },
         {
           name: "payer";
@@ -1179,7 +1359,14 @@ export type Meridian = {
           signer: true;
         },
       ];
-      args: [];
+      args: [
+        {
+          name: "ed25519IxIndex";
+          type: {
+            option: "u16";
+          };
+        },
+      ];
     },
     {
       name: "unpause";
@@ -1274,6 +1461,14 @@ export type Meridian = {
       name: "openOrders";
       discriminator: [139, 166, 123, 206, 111, 2, 116, 33];
     },
+    {
+      name: "oracleConfig";
+      discriminator: [133, 196, 152, 50, 27, 21, 145, 254];
+    },
+    {
+      name: "redstonePrice";
+      discriminator: [96, 222, 194, 150, 85, 196, 105, 152];
+    },
   ];
   events: [
     {
@@ -1301,6 +1496,10 @@ export type Meridian = {
       discriminator: [237, 212, 22, 175, 201, 117, 215, 99];
     },
     {
+      name: "oracleConfigSet";
+      discriminator: [248, 155, 240, 40, 76, 69, 13, 4];
+    },
+    {
       name: "orderCancelled";
       discriminator: [108, 56, 128, 68, 168, 113, 168, 239];
     },
@@ -1319,6 +1518,10 @@ export type Meridian = {
     {
       name: "redeemed";
       discriminator: [14, 29, 183, 71, 31, 165, 107, 38];
+    },
+    {
+      name: "redstonePricePosted";
+      discriminator: [107, 134, 33, 214, 200, 199, 239, 225];
     },
     {
       name: "unpaused";
@@ -1498,16 +1701,66 @@ export type Meridian = {
     },
     {
       code: 6034;
+      name: "redStoneMalformedPayload";
+      msg: "RedStone payload is malformed or oversized";
+    },
+    {
+      code: 6035;
+      name: "redStoneInvalidSignature";
+      msg: "RedStone signature verification failed";
+    },
+    {
+      code: 6036;
+      name: "redStoneInsufficientSigners";
+      msg: "RedStone signer threshold not met";
+    },
+    {
+      code: 6037;
+      name: "redStonePackageTooLate";
+      msg: "RedStone package timestamp is after close_ts + max_package_delay_secs";
+    },
+    {
+      code: 6038;
+      name: "redStonePackageOlderThanStored";
+      msg: "RedStone package timestamp is older than the stored value";
+    },
+    {
+      code: 6039;
+      name: "redStoneWrongPricePda";
+      msg: "RedStone price account is not the expected PDA for this ticker";
+    },
+    {
+      code: 6040;
+      name: "redStoneFeedIdMismatch";
+      msg: "RedStone feed_id does not match the canonical feed_id for this ticker";
+    },
+    {
+      code: 6041;
+      name: "oracleTooManySigners";
+      msg: "Too many signers: maximum is 8";
+    },
+    {
+      code: 6042;
+      name: "oracleThresholdTooLow";
+      msg: "Signer threshold must be at least 1";
+    },
+    {
+      code: 6043;
+      name: "oracleThresholdTooHigh";
+      msg: "Signer threshold cannot exceed the signer count";
+    },
+    {
+      code: 6044;
       name: "pairQuantityMismatch";
       msg: "Pair redeem needs equal YES and NO quantities before settlement";
     },
     {
-      code: 6035;
+      code: 6045;
       name: "nothingToRedeem";
       msg: "Nothing to redeem";
     },
     {
-      code: 6036;
+      code: 6046;
       name: "mathOverflow";
       msg: "Arithmetic overflow";
     },
@@ -1683,6 +1936,32 @@ export type Meridian = {
             };
           },
           {
+            name: "pythLazerSigner";
+            docs: [
+              "Pyth Lazer Ed25519 signer pubkey (D-055, M3-10b). Operator-controlled, never",
+              "hard-trusted from payload. Used to verify Pyth signed price updates.",
+            ];
+            type: "pubkey";
+          },
+          {
+            name: "pythFeedIds";
+            docs: [
+              "Pyth feed IDs for MAG7 tickers, in the same order as `tickers`. Each u32 is the",
+              "numeric Pyth Pro feed ID. Zero means no Pyth feed configured for that ticker slot.",
+            ];
+            type: {
+              array: ["u32", 7];
+            };
+          },
+          {
+            name: "pythMaxAgeSecs";
+            docs: [
+              "Maximum age of Pyth timestamp in seconds (D-055). Pyth timestamps are in microseconds",
+              "and checked against clock.unix_timestamp (not slot-based like Core feeds).",
+            ];
+            type: "i64";
+          },
+          {
             name: "bump";
             docs: ["PDA bump."];
             type: "u8";
@@ -1746,6 +2025,20 @@ export type Meridian = {
                 };
               };
             };
+          },
+          {
+            name: "pythLazerSigner";
+            type: "pubkey";
+          },
+          {
+            name: "pythFeedIds";
+            type: {
+              array: ["u32", 7];
+            };
+          },
+          {
+            name: "pythMaxAgeSecs";
+            type: "i64";
           },
         ];
       };
@@ -2118,6 +2411,65 @@ export type Meridian = {
       };
     },
     {
+      name: "oracleConfig";
+      docs: [
+        'Oracle configuration PDA `["oracle_config"]`: pinned RedStone signer set and thresholds.',
+        "Separate from `Config` so the live Config account layout is unchanged.",
+      ];
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "signers";
+            docs: [
+              "Pinned RedStone signer set: Ethereum addresses (20 bytes each), up to 8.",
+              "A signer not in this set is ignored; an unknown signer does not cause rejection.",
+            ];
+            type: {
+              vec: {
+                array: ["u8", 20];
+              };
+            };
+          },
+          {
+            name: "signerThreshold";
+            docs: [
+              "Minimum number of valid signers required for a RedStone package to be accepted (≥ 1, ≤ signers.len()).",
+            ];
+            type: "u8";
+          },
+          {
+            name: "maxPackageDelaySecs";
+            docs: [
+              "Maximum age in seconds for a RedStone package timestamp (default 600 s = 10 min).",
+              "A package timestamp after `close_ts + max_package_delay_secs` is rejected.",
+            ];
+            type: "i64";
+          },
+        ];
+      };
+    },
+    {
+      name: "oracleConfigSet";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "signerCount";
+            type: "u8";
+          },
+          {
+            name: "signerThreshold";
+            type: "u8";
+          },
+          {
+            name: "maxPackageDelaySecs";
+            type: "i64";
+          },
+        ];
+      };
+    },
+    {
       name: "orderCancelled";
       type: {
         kind: "struct";
@@ -2274,6 +2626,102 @@ export type Meridian = {
           {
             name: "usdc";
             type: "u64";
+          },
+        ];
+      };
+    },
+    {
+      name: "redstonePrice";
+      docs: [
+        'RedStone verified price PDA `["redstone_price", symbol]`: stores the most recent verified',
+        "RedStone package for a ticker after `post_redstone_price` verifies signatures and threshold.",
+      ];
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "symbol";
+            docs: ["Ticker symbol (8 bytes, zero-padded)."];
+            type: {
+              array: ["u8", 8];
+            };
+          },
+          {
+            name: "value";
+            docs: ["Price value with 8 decimals (RedStone format, u128 per domain.md)."];
+            type: "u128";
+          },
+          {
+            name: "packageTimestampMs";
+            docs: ["Package timestamp in milliseconds (RedStone format)."];
+            type: "i64";
+          },
+          {
+            name: "postedSlot";
+            docs: ["Slot when this price was posted."];
+            type: "u64";
+          },
+          {
+            name: "signerCount";
+            docs: ["Number of valid signers in the verified package."];
+            type: "u8";
+          },
+        ];
+      };
+    },
+    {
+      name: "redstonePricePosted";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "symbol";
+            type: {
+              array: ["u8", 8];
+            };
+          },
+          {
+            name: "value";
+            type: "u128";
+          },
+          {
+            name: "packageTimestampMs";
+            type: "i64";
+          },
+          {
+            name: "postedSlot";
+            type: "u64";
+          },
+          {
+            name: "signerCount";
+            type: "u8";
+          },
+        ];
+      };
+    },
+    {
+      name: "setOracleConfigParams";
+      type: {
+        kind: "struct";
+        fields: [
+          {
+            name: "signers";
+            docs: ["Pinned RedStone signer set: Ethereum addresses (20 bytes each), up to 8."];
+            type: {
+              vec: {
+                array: ["u8", 20];
+              };
+            };
+          },
+          {
+            name: "signerThreshold";
+            docs: ["Minimum number of valid signers required (≥ 1, ≤ signers.len())."];
+            type: "u8";
+          },
+          {
+            name: "maxPackageDelaySecs";
+            docs: ["Maximum age in seconds for a RedStone package timestamp (default 600 s)."];
+            type: "i64";
           },
         ];
       };
