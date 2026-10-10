@@ -38,6 +38,9 @@ function setup(start: Date, sources?: Partial<FakeSourcesOptions> & { date: stri
     alerter,
     state,
     log: logger.log,
+    demoMode: "live",
+    demoCloseInSecs: 3600,
+    cluster: "devnet",
   };
   return { clock, chain, alerter, state, logger, http, deps };
 }
@@ -258,5 +261,42 @@ describe("catchUpDue", () => {
 
   it("is due when the calendar does not cover the year, so the job can alert", () => {
     expect(catchUpDue(new Date("2027-01-04T15:00:00Z"))).toBe(true);
+  });
+});
+
+describe("runMorning: demo mode", () => {
+  it("creates short-close markets (now + demoCloseInSecs) in demo mode on devnet", async () => {
+    const t = setup(TUESDAY_0800);
+    const demoMorningDeps = {
+      ...t.deps,
+      demoMode: "replay" as const,
+      demoCloseInSecs: 3600,
+      cluster: "devnet",
+    };
+    const result = await runMorning(demoMorningDeps);
+    expect(result).toMatchObject({ status: "ok", tradingDate: "2026-10-06", attempts: 1 });
+    expect(result.created).toBe(38);
+    const closeTs = new Set([...t.chain.markets.values()].map((m) => m.closeTs));
+    const expectedCloseTs = Math.floor(TUESDAY_0800.getTime() / 1000) + 3600;
+    expect([...closeTs]).toEqual([expectedCloseTs]);
+  });
+
+  it("refuses demo mode on non-devnet clusters", async () => {
+    const t = setup(TUESDAY_0800);
+    const mainnetDemoAttempt = { ...t.deps, demoMode: "replay" as const, cluster: "mainnet-beta" };
+    const result = await runMorning(mainnetDemoAttempt);
+    expect(result.status).toBe("failed");
+    expect(result.failedTickers.length).toBe(7);
+    expect(result.created).toBe(0);
+    expect(t.chain.markets.size).toBe(0);
+  });
+
+  it("uses regular 16:00 ET close in live mode (unchanged)", async () => {
+    const t = setup(TUESDAY_0800);
+    const liveMorningDeps = { ...t.deps, demoMode: "live" as const, demoCloseInSecs: 3600 };
+    const result = await runMorning(liveMorningDeps);
+    expect(result).toMatchObject({ status: "ok" });
+    const closeTs = new Set([...t.chain.markets.values()].map((m) => m.closeTs));
+    expect([...closeTs]).toEqual([Date.UTC(2026, 9, 6, 20, 0, 0) / 1000]);
   });
 });

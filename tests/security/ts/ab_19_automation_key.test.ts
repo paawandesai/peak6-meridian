@@ -80,6 +80,9 @@ async function boot(signer: Keypair | null, configured: Keypair) {
           sleep: () => Promise.resolve(),
           marketOps: r.marketOps,
           prevClose: () => Promise.reject(new Error("a mismatched key must not even read prices")),
+          demoMode: "live",
+          demoCloseInSecs: 3600,
+          cluster: "devnet",
         },
         settlement: {
           ...noopSettlementJob(key),

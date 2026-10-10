@@ -43,6 +43,12 @@ export interface MorningDeps {
   readonly log: Logger;
   /** Overrides the calendar's `close_ts` (end-to-end runs only). */
   readonly closeTsOverride?: number;
+  /** Demo mode ("replay" or "live"); creates short-close markets on devnet only. */
+  readonly demoMode: "replay" | "live";
+  /** Demo close time in seconds from now (devnet only). */
+  readonly demoCloseInSecs: number;
+  /** Solana cluster ("localnet", "devnet", or RPC URL). */
+  readonly cluster: string;
 }
 
 export interface MorningResult {
@@ -215,10 +221,20 @@ async function processTicker(
       });
       return { ok: false, message: `${close.error.kind}: ${close.error.message}` };
     }
+
+    // Demo mode: short-close markets (devnet only).
+    let closeTs: number | undefined = deps.closeTsOverride;
+    if (deps.demoMode === "replay" && closeTs === undefined) {
+      if (deps.cluster !== "devnet") {
+        throw new Error("demo mode requires devnet cluster");
+      }
+      closeTs = Math.floor(deps.now().getTime() / 1000) + deps.demoCloseInSecs;
+    }
+
     const plan = planMarkets({
       tradingDate,
       closes: { [ticker]: close.value.closeCents },
-      ...(deps.closeTsOverride === undefined ? {} : { closeTs: deps.closeTsOverride }),
+      ...(closeTs === undefined ? {} : { closeTs }),
     });
     const report = await createMarkets(plan, deps.marketOps, (planned, signature) => {
       deps.log("info", "market_created", {
