@@ -104,6 +104,7 @@ export class DemoWallet implements Wallet {
     },
     "solana:signTransaction": {
       signTransaction: async (...inputs) => {
+        this.#signatureCount += inputs.length;
         return inputs.map(({ transaction }) => {
           const tx = VersionedTransaction.deserialize(transaction);
           tx.sign([this.#keypair]);
