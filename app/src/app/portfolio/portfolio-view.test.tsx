@@ -243,7 +243,7 @@ describe("Portfolio page", () => {
         ]),
       }),
     });
-    expect(await screen.findByText("Redeemable:")).toBeInTheDocument();
+    expect(await screen.findByText("Redeemable now")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Redeem all" }));
     await screen.findByText(/Confirmed in slot 42/);
     expect(actions.redeem).toHaveBeenCalledTimes(1);
@@ -378,9 +378,9 @@ describe("Portfolio page", () => {
         events: as([buyNvda(40, 10n)]),
       }),
     });
-    const totals = await screen.findByTestId("portfolio-filters");
-    expect(totals).toHaveTextContent("USDC: $1,250.00");
-    expect(totals).toHaveTextContent("Redeemable: $0.00");
-    expect(totals).toHaveTextContent("Unrealized: $0.00");
+    const totals = await screen.findByLabelText("Totals");
+    expect(totals).toHaveTextContent("1,250.00 test-USDC");
+    expect(totals).toHaveTextContent("Redeemable now $0.00");
+    expect(totals).toHaveTextContent("Realized $0.00");
   });
 });
