@@ -11,11 +11,13 @@ import {
 } from "@/lib/market-view";
 import { formatStrike, isSessionMarket, marketStatus, type MarketRow } from "@/lib/markets";
 import type { FairValue } from "@/lib/fair-values";
+import type { OpenTime } from "@/lib/open-times-core";
 
 /** What the page knows about one strike's book and fair value. */
 export type StrikeData = {
   readonly quotes?: BookQuotes | null;
-  readonly openedAt: number | null;
+  /** Creation time (unix seconds), `null` when unknown, `"unavailable"` when unreadable (P1-4). */
+  readonly openedAt: OpenTime;
   readonly fair?: FairValue;
   readonly fairStatus: "loading" | "ready" | "unavailable";
   readonly fairRefreshFailed: boolean;

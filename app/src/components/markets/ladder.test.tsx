@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MarketsView } from "../markets-view";
 import { TestMarketProvider } from "../test-market-context";
@@ -23,6 +23,16 @@ vi.mock("@/lib/fair-values", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/fair-values")>()),
   useFairValues: () => mockFairValues,
 }));
+
+// P1-4: open times come from the automation index; tests choose what it answers.
+const mockOpenTimes = vi.hoisted(() => {
+  const state: {
+    status: "loading" | "ready" | "unavailable";
+    openTime: (market: string) => number | null | "unavailable";
+  } = { status: "ready", openTime: () => null };
+  return { state };
+});
+vi.mock("@/lib/open-times", () => ({ useOpenTimes: () => mockOpenTimes.state }));
 
 vi.mock("../price-history-chart/price-history-chart", () => ({
   PriceHistoryChart: () => null,
@@ -161,7 +171,8 @@ const rowFor = async (strikeText: string) =>
 describe("all open markets shown (updated behavior)", () => {
   // Oct 7, 2026 session close (16:00 ET = 20:00 UTC in EDT)
   const oct7Close = BigInt(utc("2026-10-07T20:00:00Z"));
-  const earlier = (n: number) => m(n, { address: addr(n + 5), tradingDate: 20261007, closeTs: oct7Close });
+  const earlier = (n: number) =>
+    m(n, { address: addr(n + 5), tradingDate: 20261007, closeTs: oct7Close });
 
   it("shows all open markets across all dates, no 'Showing markets from' line", async () => {
     renderView([m(1), earlier(2)]);
@@ -275,17 +286,34 @@ describe("states (AC3): every state shows its words", () => {
 });
 
 describe("open time, close time and countdown to the next transition (D-050)", () => {
-  it("Markets page shows dash for open time (P0-4: only Trade fetches real creation time)", async () => {
-    renderView([m(1)]);
+  afterEach(() => {
+    mockOpenTimes.state = { status: "ready", openTime: () => null };
+  });
+
+  it("shows each market's real open time from the automation index (P1-4)", async () => {
+    const opened = utc("2026-10-08T12:07:00Z"); // 08:07 ET
+    mockOpenTimes.state = {
+      status: "ready",
+      openTime: (market) => (market === addr(1) ? opened : null),
+    };
+    renderView([m(1), m(2)]);
     const row = await rowFor("$180");
-    await vi.waitFor(() => expect(row).toHaveTextContent("Opened — · closes 16:00 ET"));
+    await vi.waitFor(() => expect(row).toHaveTextContent("Opened 08:07 ET · closes 16:00 ET"));
     // Open status shows no countdown (only badge shows "closes HH:MM ET")
     expect(row.textContent).not.toMatch(/Closing soon in/);
   });
 
-  it("an unreadable creation time shows a dash, not a made-up time", async () => {
+  it("a market the index has no record of shows a dash, not a made-up time", async () => {
     renderView([m(1)]);
     expect(await rowFor("$180")).toHaveTextContent("Opened — · closes 16:00 ET");
+  });
+
+  it("an unreachable index shows 'Open time unavailable', never a time (P1-4)", async () => {
+    mockOpenTimes.state = { status: "unavailable", openTime: () => "unavailable" };
+    renderView([m(1)]);
+    const row = await rowFor("$180");
+    expect(row).toHaveTextContent("Open time unavailable · closes 16:00 ET");
+    expect(row.textContent).not.toMatch(/Opened \d/);
   });
 
   it("the ticker header says how many strikes and when they close", async () => {

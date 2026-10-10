@@ -18,6 +18,7 @@ import { PythPrice, PythPricePlaceholder, PythPriceUnavailable } from "@/compone
 import type { AppConfig } from "@/lib/chain";
 import type { MarketData } from "@/lib/market-data";
 import type { MarketRow } from "@/lib/markets";
+import { OPEN_TIMES_REFRESH_MS } from "@/lib/open-times-core";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
 
 type Props = {
@@ -66,7 +67,8 @@ export function TradeView(props: Props) {
     2_000,
     `${market.address}:${walletKey}`,
   );
-  const openTime = usePolled(() => reader.getOpenTime(), 3_600_000, market.address);
+  // P1-4: re-read every minute until known (a just-created market reaches the index within one).
+  const openTime = usePolled(() => reader.getOpenTime(), OPEN_TIMES_REFRESH_MS, market.address);
 
   const panel = panelState(market, config, nowSecs);
   const transition = nextTransition(market, config, nowSecs);
@@ -111,7 +113,14 @@ export function TradeView(props: Props) {
         <p className="text-mer-sm text-mer-ink-muted">{settlementRule(market)}</p>
         <p className="text-mer-sm text-mer-ink-muted">{timeline(market)}</p>
         <p className="text-mer-sm" data-testid="open-close">
-          {openClose(market, openTime.state.status === "ready" ? openTime.state.value : null)}
+          {openClose(
+            market,
+            openTime.state.status === "ready"
+              ? openTime.state.value
+              : openTime.state.status === "error"
+                ? "unavailable"
+                : null,
+          )}
         </p>
         <div className="flex flex-wrap items-center gap-mer-3">
           <StateBadge {...badgeProps(market, config, nowSecs)} />
