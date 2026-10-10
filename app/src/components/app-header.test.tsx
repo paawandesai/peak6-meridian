@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { AppHeader, NAV_ITEMS, PAUSE_BANNER_TEXT } from "./app-header";
+import { TestMarketProvider } from "./test-market-context";
 import HomePage from "@/app/page";
 import { market, reader, withReader } from "@/test-utils";
 
@@ -38,7 +39,11 @@ describe("clock (AC4)", () => {
   });
 
   it("the prerendered shell contains the placeholder, so there is no hydration mismatch", () => {
-    const html = renderToStaticMarkup(<HomePage />);
+    const html = renderToStaticMarkup(
+      <TestMarketProvider>
+        <HomePage />
+      </TestMarketProvider>,
+    );
     expect(html).toContain("--:--:-- ET");
     expect(html).toContain("Loading markets");
   });

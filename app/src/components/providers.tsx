@@ -10,6 +10,7 @@ import { type ReactNode, useEffect, useMemo } from "react";
 import { BrowserMarketSources } from "./markets/data-context";
 import { DemoWalletBanner } from "./DemoWalletBanner";
 import { ReaderProvider } from "./reader-context";
+import { TestMarketProvider } from "./test-market-context";
 import { createReader } from "@/lib/chain";
 import { loadPublicConfig } from "@/lib/config";
 import { registerDemoWallet, setDemoWalletRpcUrl } from "@/lib/demo-wallet";
@@ -39,7 +40,9 @@ export function Providers({ children }: { readonly children: ReactNode }) {
         <WalletModalProvider>
           <DemoWalletBanner />
           <ReaderProvider reader={reader}>
-            <BrowserMarketSources>{children}</BrowserMarketSources>
+            <TestMarketProvider>
+              <BrowserMarketSources>{children}</BrowserMarketSources>
+            </TestMarketProvider>
           </ReaderProvider>
         </WalletModalProvider>
       </WalletProvider>
