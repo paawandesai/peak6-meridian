@@ -31,11 +31,9 @@ export function VaultInvariantChip({
 }: VaultInvariantProps) {
   const vaultCents = vaultBalanceBaseUnits / 10_000n;
   const expectedBaseUnits = pairsOutstanding * 1_000_000n;
-  const expectedCents = expectedBaseUnits / 10_000n;
   const pass = vaultBalanceBaseUnits === expectedBaseUnits;
 
   const vaultText = formatUsdCents(vaultCents);
-  const expectedText = formatUsdCents(expectedCents);
   const symbol = pass ? "✓" : "✗";
   const color = pass ? "text-mer-gain" : "text-mer-loss";
   const asOf = formatEtHms(asOfSecs);
