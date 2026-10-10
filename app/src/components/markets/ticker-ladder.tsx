@@ -19,11 +19,60 @@ export function soonestOpenClose(markets: readonly MarketRow[], nowSecs: number)
   return min(markets.filter((m) => !m.settled && m.closeTs > now)) ?? min(markets) ?? 0n;
 }
 
+type MarketGroup = {
+  readonly closeTs: bigint;
+  readonly markets: readonly MarketRow[];
+};
+
 /**
- * One ticker's strike ladder. The `h2` holds only the symbol; the live price, as-of time and the
- * strike count and close time are siblings in the header line, so the ticker list stays a clean
- * heading list and the table keeps exactly one header row and one row per strike. Closed markets
- * appear in a collapsed section below the open markets.
+ * Group markets by close time, find at-the-money set (strikes bracket live price).
+ * Returns groups sorted by close time (soonest first), with ATM flag.
+ */
+function groupByCloseTime(
+  markets: readonly MarketRow[],
+  livePrice: bigint | null,
+): Array<MarketGroup & { readonly isAtm: boolean }> {
+  const byClose = new Map<string, MarketRow[]>();
+  for (const market of markets) {
+    const key = market.closeTs.toString();
+    byClose.set(key, [...(byClose.get(key) ?? []), market]);
+  }
+  const groups = Array.from(byClose.entries())
+    .map(([, markets]) => {
+      const first = markets[0];
+      if (!first) return null;
+      return {
+        closeTs: first.closeTs,
+        markets: [...markets].sort((a, b) =>
+          a.strikeCents < b.strikeCents ? -1 : a.strikeCents > b.strikeCents ? 1 : 0,
+        ),
+      };
+    })
+    .filter((g): g is NonNullable<typeof g> => g !== null)
+    .sort((a, b) => (a.closeTs < b.closeTs ? -1 : a.closeTs > b.closeTs ? 1 : 0));
+
+  // Find ATM group: strikes bracket live price among soonest groups
+  let atmIndex = 0;
+  if (livePrice !== null) {
+    for (let i = 0; i < groups.length; i++) {
+      const group = groups[i];
+      if (!group) continue;
+      const strikes = group.markets.map((m) => m.strikeCents);
+      const brackets =
+        strikes.some((s) => s <= livePrice) && strikes.some((s) => s >= livePrice);
+      if (brackets) {
+        atmIndex = i;
+        break;
+      }
+    }
+  }
+
+  return groups.map((g, i) => ({ ...g, isAtm: i === atmIndex }));
+}
+
+/**
+ * One ticker's strike ladder grouped by close time. The soonest at-the-money set (strikes
+ * bracket live price) is shown first and expanded; other sets are in collapsed sections.
  */
 export function TickerLadder({
   ticker,
@@ -47,47 +96,66 @@ export function TickerLadder({
 }) {
   // Use Pyth quote for the live price marker (D-055: Pyth Pro is primary demo price source)
   const live = pythQuote === undefined ? null : BigInt(pythQuote.price_cents);
-  const openStrikes = openMarkets.map((market) => market.strikeCents);
-  // The live price falls between the strike at or below it and the next one up (only for open markets)
-  const belowIndex =
-    live === null ? -1 : openStrikes.reduce((found, strike, i) => (strike <= live ? i : found), -1);
+  const openGroups = groupByCloseTime(openMarkets, live);
+  const closedGroups = groupByCloseTime(closedMarkets, null);
   const earliestClose = openMarkets.length > 0 ? soonestOpenClose(openMarkets, ctx.nowSecs) : 0n;
   const totalMarkets = openMarkets.length + closedMarkets.length;
 
-  const renderMarketRow = (market: MarketRow, i: number, showPriceMarker: boolean) => {
-    // Insert Pyth price row between strikes when live price falls between them (only for open markets)
-    const showPriceRowBefore = showPriceMarker && i === 0 && live !== null && belowIndex === -1;
-    const showPriceRowAfter = showPriceMarker && i === belowIndex && live !== null;
-    return (
-      <React.Fragment key={market.address}>
-        {showPriceRowBefore && pythQuote !== undefined ? (
-          <tr key={`pyth-above-${market.address}`} className="border-t-2 border-dashed border-mer-warn">
-            <td colSpan={8} className="py-mer-1 text-mer-xs text-mer-ink-muted">
-              <PythPrice quote={pythQuote} nowMs={ctx.nowSecs * 1000} showLabel />
-            </td>
-          </tr>
-        ) : null}
-        <StrikeRow
-          market={market}
-          data={data(market)}
-          ctx={ctx}
-          tradeHref={tradeHref}
-          markerBelow={false}
-          markerAbove={false}
-        />
-        {showPriceRowAfter && pythQuote !== undefined ? (
-          <tr key={`pyth-below-${market.address}`} className="border-t-2 border-dashed border-mer-warn">
-            <td colSpan={8} className="py-mer-1 text-mer-xs text-mer-ink-muted">
-              <PythPrice quote={pythQuote} nowMs={ctx.nowSecs * 1000} showLabel />
-            </td>
-          </tr>
-        ) : null}
-      </React.Fragment>
-    );
+  // Check if all markets have no quotes (show "No quotes yet" note instead of empty bars)
+  const allMarketsNoQuotes = [...openMarkets, ...closedMarkets].every((m) => {
+    const strikeData = data(m);
+    return strikeData.quotes === null || strikeData.quotes === undefined;
+  });
+
+  const renderGroup = (group: MarketGroup, showPriceMarker: boolean) => {
+    const groupStrikes = group.markets.map((m) => m.strikeCents);
+    const belowIndex =
+      live === null
+        ? -1
+        : groupStrikes.reduce((found, strike, i) => (strike <= live ? i : found), -1);
+
+    return group.markets.map((market, i) => {
+      const showPriceRowBefore = showPriceMarker && i === 0 && live !== null && belowIndex === -1;
+      const showPriceRowAfter = showPriceMarker && i === belowIndex && live !== null;
+      return (
+        <React.Fragment key={market.address}>
+          {showPriceRowBefore && pythQuote !== undefined ? (
+            <tr
+              key={`pyth-above-${market.address}`}
+              className="border-t-2 border-dashed border-mer-warn"
+            >
+              <td colSpan={8} className="py-mer-1 text-mer-xs text-mer-ink-muted">
+                <PythPrice quote={pythQuote} nowMs={ctx.nowSecs * 1000} showLabel />
+              </td>
+            </tr>
+          ) : null}
+          <StrikeRow
+            market={market}
+            data={data(market)}
+            ctx={ctx}
+            tradeHref={tradeHref}
+            markerBelow={false}
+            markerAbove={false}
+          />
+          {showPriceRowAfter && pythQuote !== undefined ? (
+            <tr
+              key={`pyth-below-${market.address}`}
+              className="border-t-2 border-dashed border-mer-warn"
+            >
+              <td colSpan={8} className="py-mer-1 text-mer-xs text-mer-ink-muted">
+                <PythPrice quote={pythQuote} nowMs={ctx.nowSecs * 1000} showLabel />
+              </td>
+            </tr>
+          ) : null}
+        </React.Fragment>
+      );
+    });
   };
 
   const allMarkets = [...openMarkets, ...closedMarkets];
   const strikes = allMarkets.map((m) => m.strikeCents);
+  const atmGroup = openGroups.find((g) => g.isAtm);
+  const otherOpenGroups = openGroups.filter((g) => !g.isAtm);
 
   return (
     <section aria-label={ticker}>
@@ -109,6 +177,11 @@ export function TickerLadder({
       <div className="mb-mer-4">
         <PriceHistoryChart ticker={ticker} nowSecs={ctx.nowSecs} strikes={strikes} />
       </div>
+      {allMarketsNoQuotes && (
+        <p className="mb-mer-4 text-mer-sm text-mer-ink-muted">
+          No quotes yet; odds appear when the market maker posts.
+        </p>
+      )}
       <table className="w-full text-mer-sm">
         <thead>
           <tr className="text-left text-mer-ink-muted">
@@ -123,8 +196,42 @@ export function TickerLadder({
           </tr>
         </thead>
         <tbody>
-          {openMarkets.map((m, i) => renderMarketRow(m, i, true))}
-          {closedMarkets.map((m, i) => renderMarketRow(m, i, false))}
+          {/* ATM group first (expanded) */}
+          {atmGroup && renderGroup(atmGroup, true)}
+          {/* Other open groups in collapsed sections */}
+          {otherOpenGroups.map((group) => (
+            <React.Fragment key={group.closeTs.toString()}>
+              <tr>
+                <td colSpan={8} className="py-mer-2">
+                  <details className="group">
+                    <summary className="cursor-pointer text-mer-sm text-mer-ink-muted hover:text-mer-ink">
+                      Closes {formatEtHm(group.closeTs)} ET ({group.markets.length} strikes)
+                    </summary>
+                    <table className="mt-mer-2 w-full text-mer-sm">
+                      <tbody>{renderGroup(group, true)}</tbody>
+                    </table>
+                  </details>
+                </td>
+              </tr>
+            </React.Fragment>
+          ))}
+          {/* Closed markets in collapsed section */}
+          {closedGroups.length > 0 && (
+            <tr>
+              <td colSpan={8} className="py-mer-2">
+                <details className="group">
+                  <summary className="cursor-pointer text-mer-sm text-mer-ink-muted hover:text-mer-ink">
+                    Closed markets ({closedMarkets.length} strikes)
+                  </summary>
+                  <table className="mt-mer-2 w-full text-mer-sm">
+                    <tbody>
+                      {closedGroups.flatMap((group) => renderGroup(group, false))}
+                    </tbody>
+                  </table>
+                </details>
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </section>
