@@ -312,6 +312,12 @@ describe("displayed price (AC7, AC4)", () => {
 });
 
 describe("page notes and landing (AC7)", () => {
+  it("hides the 'trading has stopped' help while any market is still open", async () => {
+    renderView([m(1, { closeTs: BigInt(NOW - 60) }), m(2, { closeTs: CLOSE + 7_200n })]);
+    await screen.findAllByRole("row");
+    expect(screen.queryByText(SETTLE_NOTE)).toBeNull();
+  });
+
   it("the midpoint warning is always-visible text in the document, with no hover or focus", async () => {
     renderView([m(1)]);
     expect(await screen.findByText(MIDPOINT_NOTE)).toBeVisible();
