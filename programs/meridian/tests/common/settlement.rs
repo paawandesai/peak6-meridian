@@ -175,7 +175,8 @@ impl SettlementHarness {
             addresses,
             payer,
         };
-        this.h().set_unix_timestamp(args.close_ts + SETTLE_DELAY_SECS);
+        this.h()
+            .set_unix_timestamp(args.close_ts + SETTLE_DELAY_SECS);
         this.h().set_slot(START_SLOT);
         this
     }

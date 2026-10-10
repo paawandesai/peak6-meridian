@@ -25,7 +25,8 @@ use solana_sdk::instruction::InstructionError;
 use solana_sdk::transaction::TransactionError;
 
 /// Pyth Lazer's production Ed25519 signer (trusted by the Pyth Lazer program on mainnet and devnet).
-const PYTH_LAZER_SIGNER: Pubkey = anchor_lang::pubkey!("9gKEEcFzSd1PDYBKWAKZi4Sq4ZCUaVX5oTr8kEjdwsfR");
+const PYTH_LAZER_SIGNER: Pubkey =
+    anchor_lang::pubkey!("9gKEEcFzSd1PDYBKWAKZi4Sq4ZCUaVX5oTr8kEjdwsfR");
 /// 2026-10-09 16:00 ET.
 const FRIDAY_CLOSE_TS: i64 = 1_791_576_000;
 const FRIDAY: u32 = 20_261_009;
@@ -93,7 +94,11 @@ fn every_recorded_friday_close_is_signed_by_pyth_and_parses() {
         let r = recorded(ticker);
         let (signer, reading) = parse_pyth_lazer_message(&r.message).unwrap();
         assert_eq!(signer, PYTH_LAZER_SIGNER, "{ticker}");
-        assert_eq!(reading.timestamp_us, FRIDAY_CLOSE_TS * 1_000_000, "{ticker}");
+        assert_eq!(
+            reading.timestamp_us,
+            FRIDAY_CLOSE_TS * 1_000_000,
+            "{ticker}"
+        );
         assert!(reading.confidence.is_some(), "{ticker}");
     }
 }

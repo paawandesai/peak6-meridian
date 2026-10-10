@@ -90,7 +90,15 @@ pub fn ed25519_ix_raw(solana_message: &[u8]) -> Instruction {
     let public_key = &solana_message[68..100];
     let payload = &solana_message[102..];
     let mut data = vec![1u8, 0];
-    for value in [48u16, u16::MAX, 16, u16::MAX, 112, u16::try_from(payload.len()).unwrap(), u16::MAX] {
+    for value in [
+        48u16,
+        u16::MAX,
+        16,
+        u16::MAX,
+        112,
+        u16::try_from(payload.len()).unwrap(),
+        u16::MAX,
+    ] {
         data.extend_from_slice(&value.to_le_bytes());
     }
     data.extend_from_slice(public_key);

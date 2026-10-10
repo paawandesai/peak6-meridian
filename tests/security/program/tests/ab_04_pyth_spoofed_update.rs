@@ -34,6 +34,8 @@ fn pinned_to(signer: Pubkey, mut sh: SettlementHarness) -> SettlementHarness {
     sh
 }
 
+// LiteSVM's TransactionResult carries the failed transaction's metadata by value.
+#[allow(clippy::result_large_err)]
 fn send(sh: &mut SettlementHarness, instructions: &[Instruction]) -> TransactionResult {
     let payer = sh.payer.insecure_clone();
     let h = sh.h();
@@ -58,7 +60,12 @@ fn assert_error_at(result: &TransactionResult, index: u8, expected: MeridianErro
 }
 
 fn at_close() -> Vec<u8> {
-    pyth_payload(META_FEED_ID, PRICE, PYTH_EXPONENT, BASE_CLOSE_TS * 1_000_000)
+    pyth_payload(
+        META_FEED_ID,
+        PRICE,
+        PYTH_EXPONENT,
+        BASE_CLOSE_TS * 1_000_000,
+    )
 }
 
 #[test]
@@ -108,7 +115,12 @@ fn ab_04_pyths_real_signed_close_is_rejected_when_another_signer_is_pinned() {
 fn ab_04_a_validly_signed_update_for_another_feed_is_rejected() {
     let signer = Keypair::new();
     let mut sh = pinned_to(signer.pubkey(), SettlementHarness::new());
-    let tsla = pyth_payload(feed_ids::TSLA, PRICE, PYTH_EXPONENT, BASE_CLOSE_TS * 1_000_000);
+    let tsla = pyth_payload(
+        feed_ids::TSLA,
+        PRICE,
+        PYTH_EXPONENT,
+        BASE_CLOSE_TS * 1_000_000,
+    );
     assert_error_at(
         &sh.settle_pyth_signed(&signer, &tsla),
         1,

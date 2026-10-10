@@ -157,7 +157,8 @@ fn pyth_rejects_a_confidence_wider_than_max_conf_bps() {
     let signer = Keypair::new();
     let mut sh = pyth_harness(&signer);
     let at = BASE_CLOSE_TS * 1_000_000;
-    let wide = pyth_payload_with_confidence(META_FEED_ID, PRICE_ABOVE, PYTH_EXPONENT, 34_062_501, at);
+    let wide =
+        pyth_payload_with_confidence(META_FEED_ID, PRICE_ABOVE, PYTH_EXPONENT, 34_062_501, at);
     assert_settle_error(
         &sh.settle_pyth_signed(&signer, &wide),
         MeridianError::PythConfidenceTooWide,
@@ -168,7 +169,8 @@ fn pyth_rejects_a_confidence_wider_than_max_conf_bps() {
         MeridianError::PythConfidenceTooWide,
     );
     assert_eq!(sh.market().status, MarketStatus::Open);
-    let edge = pyth_payload_with_confidence(META_FEED_ID, PRICE_ABOVE, PYTH_EXPONENT, 34_062_500, at);
+    let edge =
+        pyth_payload_with_confidence(META_FEED_ID, PRICE_ABOVE, PYTH_EXPONENT, 34_062_500, at);
     expect_success(&sh.settle_pyth_signed(&signer, &edge));
 }
 

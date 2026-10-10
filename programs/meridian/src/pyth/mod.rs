@@ -183,7 +183,10 @@ pub fn parse_pyth_lazer_payload(payload: &[u8]) -> Result<PythReading> {
             _ => return Err(MeridianError::OracleInvalidValue.into()),
         }
     }
-    require!(reader.pos == payload.len(), MeridianError::OracleInvalidValue);
+    require!(
+        reader.pos == payload.len(),
+        MeridianError::OracleInvalidValue
+    );
 
     // Price 0 is the wire encoding of "no price"; a missing exponent is malformed.
     let price = price
@@ -561,7 +564,14 @@ mod tests {
         );
         let future = reading((CLOSE + 30) * 1_000_000, 25_412_000_000, Some(1));
         assert_eq!(
-            code(check_pyth_reading(&future, 922, &clock(9, CLOSE + 10), CLOSE, 60, 5)),
+            code(check_pyth_reading(
+                &future,
+                922,
+                &clock(9, CLOSE + 10),
+                CLOSE,
+                60,
+                5
+            )),
             u32::from(MeridianError::OracleInvalidValue)
         );
         // 5 bps of $254.12 is 12_706_000 in 1e-8 units: one more is too wide.
