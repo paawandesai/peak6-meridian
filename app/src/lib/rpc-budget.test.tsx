@@ -167,6 +167,15 @@ async function measureMarkets(mode: Mode) {
 
 const report = (line: string) => process.stderr.write(`[rpc-budget] ${line}\n`);
 
+/**
+ * Wall-clock budget for the RPC-budget harnesses: each simulates a full minute of fake time, three
+ * times over (before, push, fallback), for up to 77 markets. That is ~3 s of CPU locally but runs
+ * past vitest's 5 s default on the shared CI runners, and a timed-out harness leaves its timers
+ * running into the next tests. Only wall-clock time changes: every RPC count and the fake-time
+ * latency limits are asserted exactly as before.
+ */
+const HARNESS_TIMEOUT_MS = 60_000;
+
 beforeEach(() => {
   vi.stubGlobal("Uint8Array", NodeUint8Array);
   vi.useFakeTimers();
@@ -189,39 +198,51 @@ afterEach(() => {
 });
 
 describe("RPC budget (P1-2, issue #62)", () => {
-  it("Trade (11-strike ladder, wallet connected): push at least halves RPC/min; the fallback never adds", async () => {
-    const before = await measureTrade("before", WALLET_OWNER);
-    const push = await measureTrade("push", WALLET_OWNER);
-    const fallback = await measureTrade("fallback", WALLET_OWNER);
-    report(`trade+wallet before=${before.total}/min ${JSON.stringify(before.byMethod)}`);
-    report(`trade+wallet push=${push.total}/min ${JSON.stringify(push.byMethod)}`);
-    report(`trade+wallet fallback=${fallback.total}/min ${JSON.stringify(fallback.byMethod)}`);
-    expect(before.total).toBeGreaterThanOrEqual(120); // 61 snapshot + 31 wallet + 31 ladder (+ open time)
-    expect(push.total).toBeLessThanOrEqual(before.total / 2);
-    expect(fallback.total).toBeLessThanOrEqual(before.total / 2 + 5); // one batched read per second
-  });
+  it(
+    "Trade (11-strike ladder, wallet connected): push at least halves RPC/min; the fallback never adds",
+    async () => {
+      const before = await measureTrade("before", WALLET_OWNER);
+      const push = await measureTrade("push", WALLET_OWNER);
+      const fallback = await measureTrade("fallback", WALLET_OWNER);
+      report(`trade+wallet before=${before.total}/min ${JSON.stringify(before.byMethod)}`);
+      report(`trade+wallet push=${push.total}/min ${JSON.stringify(push.byMethod)}`);
+      report(`trade+wallet fallback=${fallback.total}/min ${JSON.stringify(fallback.byMethod)}`);
+      expect(before.total).toBeGreaterThanOrEqual(120); // 61 snapshot + 31 wallet + 31 ladder (+ open time)
+      expect(push.total).toBeLessThanOrEqual(before.total / 2);
+      expect(fallback.total).toBeLessThanOrEqual(before.total / 2 + 5); // one batched read per second
+    },
+    HARNESS_TIMEOUT_MS,
+  );
 
-  it("Trade (no wallet): push at least halves RPC/min; the fallback never adds", async () => {
-    const before = await measureTrade("before", null);
-    const push = await measureTrade("push", null);
-    const fallback = await measureTrade("fallback", null);
-    report(
-      `trade before=${before.total}/min push=${push.total}/min fallback=${fallback.total}/min`,
-    );
-    expect(push.total).toBeLessThanOrEqual(before.total / 2);
-    expect(fallback.total).toBeLessThanOrEqual(before.total);
-  });
+  it(
+    "Trade (no wallet): push at least halves RPC/min; the fallback never adds",
+    async () => {
+      const before = await measureTrade("before", null);
+      const push = await measureTrade("push", null);
+      const fallback = await measureTrade("fallback", null);
+      report(
+        `trade before=${before.total}/min push=${push.total}/min fallback=${fallback.total}/min`,
+      );
+      expect(push.total).toBeLessThanOrEqual(before.total / 2);
+      expect(fallback.total).toBeLessThanOrEqual(before.total);
+    },
+    HARNESS_TIMEOUT_MS,
+  );
 
-  it("Markets (7 tickers × 11 strikes): push at least halves RPC/min; the fallback never adds", async () => {
-    const before = await measureMarkets("before");
-    const push = await measureMarkets("push");
-    const fallback = await measureMarkets("fallback");
-    report(
-      `markets before=${before.total}/min push=${push.total}/min fallback=${fallback.total}/min`,
-    );
-    expect(push.total).toBeLessThanOrEqual(before.total / 2);
-    expect(fallback.total).toBeLessThanOrEqual(before.total);
-  });
+  it(
+    "Markets (7 tickers × 11 strikes): push at least halves RPC/min; the fallback never adds",
+    async () => {
+      const before = await measureMarkets("before");
+      const push = await measureMarkets("push");
+      const fallback = await measureMarkets("fallback");
+      report(
+        `markets before=${before.total}/min push=${push.total}/min fallback=${fallback.total}/min`,
+      );
+      expect(push.total).toBeLessThanOrEqual(before.total / 2);
+      expect(fallback.total).toBeLessThanOrEqual(before.total);
+    },
+    HARNESS_TIMEOUT_MS,
+  );
 });
 
 describe("update latency (P1-2: <= 1 s)", () => {
