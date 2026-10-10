@@ -11,7 +11,8 @@ import {
 } from "@meridian/client";
 import { type Connection, PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddress } from "@solana/spl-token";
-import { sharedConnection } from "@/lib/rpc";
+import { type AccountFeed, type LiveSource, liveSource } from "@/lib/account-feed";
+import { sharedAccountFeed, sharedConnection } from "@/lib/rpc";
 
 import type { BookOrder, FullBook } from "./book-view";
 import type { PublicConfig } from "@/lib/config";
@@ -49,6 +50,13 @@ export type TradeReader = {
   getWallet(owner: PublicKey): Promise<WalletView>;
   /** Unix seconds the market was created, or `null` when it cannot be read. */
   getOpenTime(): Promise<number | null>;
+  /**
+   * P1-2: the snapshot pushed by account subscriptions on the shared feed, polled every
+   * `fastMs` only while push is unavailable. Absent on test fakes, which are polled.
+   */
+  snapshotSource?(fastMs: number): LiveSource<TradeSnapshot>;
+  /** P1-2: the wallet view (3 ATAs + open orders) on the shared feed. */
+  walletSource?(owner: PublicKey, fastMs: number): LiveSource<WalletView>;
 };
 
 type RawOrder = {
@@ -115,6 +123,52 @@ export function decodeSnapshot(
   return { book, vault: { pairs, balance: splAmount(vaultInfo?.data), asOfSecs } };
 }
 
+/** SPL token `amount` of a wallet token account; missing is 0, a short account is an error. */
+function tokenBalance(data: AccountData): bigint {
+  if (data === null || data === undefined) return 0n;
+  const amount = splAmount(data.data);
+  if (amount === null) throw new Error("SPL token account data too short");
+  return amount;
+}
+
+/**
+ * Decodes `[yesAta, noAta, usdcAta, openOrders]` into the wallet view. Missing accounts are zero;
+ * a short token account or an undecodable open-orders account throws, so Trade fails closed
+ * (holdings unknown) instead of trading on a guessed balance.
+ */
+export function decodeWallet(
+  [yesInfo, noInfo, usdcInfo, ooInfo]: readonly [
+    AccountData,
+    AccountData,
+    AccountData,
+    AccountData,
+  ],
+  decodeOpenOrders: (data: Buffer) => {
+    freeUsdc: { toString(): string };
+    freeYes: { toString(): string };
+  },
+): WalletView {
+  let freeUsdc = 0n;
+  let freeYes = 0n;
+  if (ooInfo !== null && ooInfo !== undefined) {
+    const data = Buffer.isBuffer(ooInfo.data) ? ooInfo.data : Buffer.from(ooInfo.data);
+    const decoded = decodeOpenOrders(data);
+    freeUsdc = BigInt(decoded.freeUsdc.toString());
+    freeYes = BigInt(decoded.freeYes.toString());
+  }
+  return {
+    yes: tokenBalance(yesInfo),
+    no: tokenBalance(noInfo),
+    usdc: tokenBalance(usdcInfo),
+    freeUsdc,
+    freeYes,
+  };
+}
+
+/** Raw bytes from the feed as the `{ data }` shape the decoders take (`null` stays missing). */
+const asInfos = (data: readonly (Uint8Array | null)[]): AccountData[] =>
+  data.map((bytes) => (bytes === null ? null : { data: bytes }));
+
 const SIGNATURE_PAGE = 1_000;
 const MAX_PAGES = 5;
 
@@ -148,8 +202,19 @@ const readOnlyWallet = {
   signAllTransactions: () => Promise.reject(new Error("read-only client cannot sign")),
 };
 
-export function createTradeReader(config: PublicConfig, row: MarketRow): TradeReader {
-  const connection = sharedConnection(config.rpcUrl);
+/** Test seams: the connection and the account feed default to the app-wide shared ones. */
+export type TradeReaderDeps = {
+  readonly connection?: Connection;
+  readonly feed?: AccountFeed;
+};
+
+export function createTradeReader(
+  config: PublicConfig,
+  row: MarketRow,
+  deps: TradeReaderDeps = {},
+): TradeReader {
+  const connection = deps.connection ?? sharedConnection(config.rpcUrl);
+  const feed = (): AccountFeed => deps.feed ?? sharedAccountFeed(config.rpcUrl);
   const provider = new AnchorProvider(connection, readOnlyWallet, { commitment: "confirmed" });
   const program = createMeridianProgram(provider, config.programId);
   const addresses = marketAddresses(
@@ -166,64 +231,60 @@ export function createTradeReader(config: PublicConfig, row: MarketRow): TradeRe
           .then((c) => c.usdcMint);
     return usdcMint;
   };
+  const snapshotKeys = [addresses.book, market, addresses.vault];
+  const decodeAccount: DecodeAccount = (name, data) => program.coder.accounts.decode(name, data);
+  const decodeOpenOrders = (data: Buffer) => program.coder.accounts.decode("openOrders", data);
+  // One getMultipleAccounts for the 3 ATAs + OpenOrders (P0-4); the same keys feed walletSource.
+  const walletKeys = async (owner: PublicKey): Promise<PublicKey[]> => {
+    const oo = findOpenOrdersPda(market, owner, config.programId).address;
+    const usdc = await mint();
+    const [yesAta, noAta, usdcAta] = await Promise.all([
+      getAssociatedTokenAddress(addresses.yesMint, owner),
+      getAssociatedTokenAddress(addresses.noMint, owner),
+      getAssociatedTokenAddress(usdc, owner),
+    ]);
+    return [yesAta, noAta, usdcAta, oo];
+  };
   return {
     async getBook() {
       return decodeBook(await program.account.book.fetch(addresses.book));
     },
     async getSnapshot() {
-      const infos = await connection.getMultipleAccountsInfo(
-        [addresses.book, market, addresses.vault],
-        "confirmed",
-      );
+      const infos = await connection.getMultipleAccountsInfo(snapshotKeys, "confirmed");
       return decodeSnapshot(
         [infos[0], infos[1], infos[2]],
-        (name, data) => program.coder.accounts.decode(name, data),
+        decodeAccount,
         Math.floor(Date.now() / 1000),
       );
     },
     async getWallet(owner) {
-      // P0-4: fetch 3 ATAs + OpenOrders in one getMultipleAccounts call
-      const oo = findOpenOrdersPda(market, owner, config.programId).address;
-      const usdcMint = await mint();
-      const [yesAta, noAta, usdcAta] = await Promise.all([
-        getAssociatedTokenAddress(addresses.yesMint, owner),
-        getAssociatedTokenAddress(addresses.noMint, owner),
-        getAssociatedTokenAddress(usdcMint, owner),
-      ]);
-
-      const accounts = await connection.getMultipleAccountsInfo([yesAta, noAta, usdcAta, oo]);
-
-      // Parse token accounts (accounts 0-2). SPL token layout: amount at offset 64 (u64 LE).
-      // Throw on decode failures so Trade's fail-closed logic (holdings = null) triggers.
-      const parseTokenBalance = (accountInfo: (typeof accounts)[0]): bigint => {
-        if (!accountInfo) return 0n;
-        const data = accountInfo.data;
-        if (data.length < 72) {
-          throw new Error("SPL token account data too short");
-        }
-        // data might be Uint8Array (no readBigUInt64LE), convert to Buffer
-        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-        return buf.readBigUInt64LE(64);
-      };
-
-      const yes = parseTokenBalance(accounts[0] ?? null);
-      const no = parseTokenBalance(accounts[1] ?? null);
-      const usdc = parseTokenBalance(accounts[2] ?? null);
-
-      // Parse OpenOrders account (account 3). Let decode failures throw.
-      const ooAccount = accounts[3];
-      let freeUsdc = 0n;
-      let freeYes = 0n;
-      if (ooAccount) {
-        // Program camelCases IDL account names: "openOrders" not "OpenOrders"
-        const data = Buffer.isBuffer(ooAccount.data) ? ooAccount.data : Buffer.from(ooAccount.data);
-        const decoded = program.coder.accounts.decode("openOrders", data);
-        freeUsdc = BigInt(decoded.freeUsdc.toString());
-        freeYes = BigInt(decoded.freeYes.toString());
-      }
-
-      return { yes, no, usdc, freeUsdc, freeYes };
+      const accounts = await connection.getMultipleAccountsInfo(await walletKeys(owner));
+      return decodeWallet([accounts[0], accounts[1], accounts[2], accounts[3]], decodeOpenOrders);
     },
     getOpenTime: () => fetchOpenTime(connection, market),
+    snapshotSource: (fastMs) =>
+      liveSource(
+        feed(),
+        snapshotKeys.map((key) => key.toBase58()),
+        fastMs,
+        (data, checkedAt) => {
+          const [book, marketInfo, vault] = asInfos(data);
+          return decodeSnapshot(
+            [book, marketInfo, vault],
+            decodeAccount,
+            Math.floor(checkedAt / 1000),
+          );
+        },
+      ),
+    walletSource: (owner, fastMs) =>
+      liveSource(
+        feed(),
+        async () => (await walletKeys(owner)).map((key) => key.toBase58()),
+        fastMs,
+        (data) => {
+          const [yes, no, usdc, oo] = asInfos(data);
+          return decodeWallet([yes, no, usdc, oo], decodeOpenOrders);
+        },
+      ),
   };
 }

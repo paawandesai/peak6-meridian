@@ -5,11 +5,17 @@
  * read. It never fabricates a number. Presentation is UI-03's: this module has no JSX.
  */
 import type { BookQuotes } from "@meridian/client";
-import { PublicKey } from "@solana/web3.js";
+import { type Connection, PublicKey } from "@solana/web3.js";
 import { useEffect, useRef, useState } from "react";
 
-import { type BookSource, createBookSource } from "./book";
-import { loadPublicConfig } from "./config";
+import {
+  type BookSource,
+  createBookSource,
+  createLiveBookSource,
+  type LiveBookSource,
+} from "./book";
+import type { AccountFeed } from "./account-feed";
+import { loadPublicConfig, type PublicConfig } from "./config";
 import type { MarketRow } from "./markets";
 import {
   type LivePrice,
@@ -18,6 +24,8 @@ import {
   MAG7,
   marketDataResponseSchema,
 } from "./market-data-shared";
+import { sharedAccountFeed, sharedConnection } from "./rpc";
+import { isDocumentVisible } from "./visibility";
 
 export type { BookQuotes, LivePrice };
 
@@ -46,12 +54,31 @@ export const INITIAL_MARKET_DATA: MarketData = {
 export type MarketDataSources = {
   fetchPrices(): Promise<MarketDataResponse>;
   fetchBooks: BookSource;
+  /**
+   * P1-2: books of open markets pushed by account subscriptions (polled by the shared feed only
+   * while push is unavailable). Without it every book is polled with `fetchBooks`.
+   */
+  liveBooks?: LiveBookSource;
 };
 
-/** Browser sources: the server route for prices, the chain for books. */
-export function createMarketDataSources(): MarketDataSources {
-  const fetchBooks = createBookSource(loadPublicConfig());
+/** Test seams; each defaults to the app-wide config, connection and account feed. */
+export type MarketDataSourceDeps = {
+  readonly config?: PublicConfig;
+  readonly connection?: Connection;
+  readonly feed?: AccountFeed;
+};
+
+/** Browser sources: the server route for prices, the chain (pushed, polled as fallback) for books. */
+export function createMarketDataSources(deps: MarketDataSourceDeps = {}): MarketDataSources {
+  const config = deps.config ?? loadPublicConfig();
+  const connection = deps.connection ?? sharedConnection(config.rpcUrl);
+  const fetchBooks = createBookSource(config, connection);
   return {
+    liveBooks: createLiveBookSource(
+      config,
+      deps.feed ?? sharedAccountFeed(config.rpcUrl),
+      connection,
+    ),
     fetchPrices: async () => {
       const response = await fetch("/api/market-data", { cache: "no-store" });
       if (!response.ok) throw new Error(`market-data route returned ${response.status}`);
@@ -82,6 +109,11 @@ export async function pollPrices(
   }
 }
 
+/** Closed or settled: its book no longer changes, so it is read once (P0-4). */
+function isClosed(row: MarketRow, nowSecs: bigint): boolean {
+  return row.settled || nowSecs >= row.closeTs;
+}
+
 /**
  * One book poll for `markets`; a market that cannot be read is `unavailable`, not guessed.
  * P0-4: accepts `cached` books for closed/settled markets to skip re-fetching them. fetchBooks
@@ -100,8 +132,7 @@ export async function pollBooks(
     // Retry failures (unavailable cached values). A market is closed when closeTs is in the past;
     // settled is a stronger signal that covers Closed/Settling/SettlementDelayed/Settled.
     const cachedValue = cached[row.address];
-    const isClosed = row.settled || BigInt(Math.floor(Date.now() / 1000)) >= row.closeTs;
-    if (isClosed && cachedValue?.state === "ready") {
+    if (isClosed(row, BigInt(Math.floor(Date.now() / 1000))) && cachedValue?.state === "ready") {
       continue;
     }
     try {
@@ -150,9 +181,7 @@ export function useMarketData(
   const [data, setData] = useState<MarketData>(INITIAL_MARKET_DATA);
   const priceIntervalMs = options.priceIntervalMs ?? 5_000;
   const bookIntervalMs = options.bookIntervalMs ?? 2_000; // P0-4: 2s reduces RPC, still meets NFR-01's 3s
-  const shouldPoll =
-    options.shouldPoll ??
-    (() => typeof document === "undefined" || document.visibilityState === "visible");
+  const shouldPoll = options.shouldPoll ?? isDocumentVisible;
   const marketKey = markets.map((market) => market.address).join(",");
   // Keyed by address list so a new array with the same markets does not restart polling.
   const marketsRef = useRef(markets);
@@ -192,6 +221,28 @@ export function useMarketData(
     // A tick is skipped while the previous poll of the same kind is still in flight, so responses
     // can never be applied out of order (an older read overwriting a newer one). Also skip ticks
     // when the document is hidden (P0-4 visibility pause).
+    // P1-2: open markets' books come from account subscriptions when the sources offer them;
+    // closed ones (and every book without them) keep the polled, read-once-when-closed path.
+    const nowSecs = BigInt(Math.floor(Date.now() / 1000));
+    const liveRows: { readonly row: MarketRow; readonly key: PublicKey }[] = [];
+    const polledRows: MarketRow[] = [];
+    for (const row of marketsRef.current) {
+      if (active.liveBooks === undefined || isClosed(row, nowSecs)) {
+        polledRows.push(row);
+        continue;
+      }
+      try {
+        liveRows.push({ row, key: new PublicKey(row.address) });
+      } catch {
+        polledRows.push(row); // pollBooks marks an unparsable address unavailable
+      }
+    }
+    let polledDone = state.booksDone || polledRows.length === 0;
+    let liveDone = state.booksDone || liveRows.length === 0;
+    const markBooks = (): void => {
+      if (polledDone && liveDone) state.booksDone = true;
+    };
+    markBooks();
     let pricesInFlight = false;
     let booksInFlight = false;
     const runPrices = async (): Promise<void> => {
@@ -210,21 +261,61 @@ export function useMarketData(
       booksInFlight = true;
       try {
         // Pass cached books so closed/settled markets are fetched once (P0-4)
-        const books = await pollBooks(active, marketsRef.current, latest.books);
-        state.booksDone = true;
+        const polled = await pollBooks(active, polledRows, latest.books);
+        // Only the polled markets are taken from this read: a pushed book may be newer.
+        const books = { ...latest.books };
+        for (const row of polledRows) {
+          const book = polled[row.address];
+          if (book !== undefined) books[row.address] = book;
+        }
+        polledDone = true;
+        markBooks();
         publish({ ...latest, books });
       } finally {
         booksInFlight = false;
       }
     };
+    let stopLive = (): void => undefined;
+    if (active.liveBooks !== undefined && liveRows.length > 0) {
+      const source = active.liveBooks(
+        liveRows.map(({ key }) => key),
+        bookIntervalMs,
+      );
+      const onLive = (): void => {
+        if (cancelled) return;
+        const read = source.read();
+        if (read.status === "loading") return;
+        const books = { ...latest.books };
+        for (const { row } of liveRows) {
+          if (read.status === "ready") {
+            const quotes = read.value[row.address];
+            books[row.address] =
+              quotes === undefined || quotes === null
+                ? { state: "unavailable" }
+                : { state: "ready", quotes };
+          } else if (books[row.address] === undefined) {
+            books[row.address] = { state: "unavailable" };
+          }
+        }
+        liveDone = true;
+        markBooks();
+        publish({ ...latest, books });
+      };
+      stopLive = source.subscribe(onLive);
+      onLive();
+    }
     void runPrices();
-    void runBooks();
     const priceTimer = setInterval(() => void runPrices(), priceIntervalMs);
-    const bookTimer = setInterval(() => void runBooks(), bookIntervalMs);
+    let bookTimer: ReturnType<typeof setInterval> | null = null;
+    if (polledRows.length > 0) {
+      void runBooks();
+      bookTimer = setInterval(() => void runBooks(), bookIntervalMs);
+    }
     return () => {
       cancelled = true;
       clearInterval(priceTimer);
-      clearInterval(bookTimer);
+      if (bookTimer !== null) clearInterval(bookTimer);
+      stopLive();
     };
   }, [marketKey, priceIntervalMs, bookIntervalMs]);
 

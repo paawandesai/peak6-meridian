@@ -5,6 +5,9 @@
  */
 import { Connection, PublicKey } from "@solana/web3.js";
 
+import { type AccountFeed, createAccountFeed, type FetchedAccounts } from "./account-feed";
+import { type AccountSocket, browserConnect, createAccountSocket } from "./account-socket";
+
 export type RetryOptions = {
   readonly retries?: number;
   readonly baseMs?: number;
@@ -87,7 +90,9 @@ export function dedupe<T>(load: () => Promise<T>, ttlMs: number, now = Date.now)
  * in the same order as `keys`. Each chunk is fetched serially to avoid bursts.
  */
 export async function getMultipleChunked<T>(
-  connection: { getMultipleParsedAccounts(keys: PublicKey[], opts?: unknown): Promise<{ value: T[] }> },
+  connection: {
+    getMultipleParsedAccounts(keys: PublicKey[], opts?: unknown): Promise<{ value: T[] }>;
+  },
   keys: PublicKey[],
   opts?: unknown,
 ): Promise<T[]> {
@@ -99,4 +104,66 @@ export async function getMultipleChunked<T>(
     results.push(...value);
   }
   return results;
+}
+
+/**
+ * The pubsub endpoint of an HTTP RPC URL, derived the way web3.js does: http→ws, https→wss, an
+ * explicit port + 1 (local validator 8899 → 8900); path and query are kept (provider API keys
+ * live in the query). `null` for anything that is not an absolute http(s) URL, such as a
+ * same-origin proxy path, which cannot carry a socket.
+ */
+export function wsUrlFor(rpcUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(rpcUrl);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  if (url.port !== "") url.port = String(Number(url.port) + 1);
+  return url.toString();
+}
+
+/** Batched account reads for the feed: ≤99 keys per call, the oldest slot of the chunks. */
+export function connectionFetcher(
+  connection: Pick<Connection, "getMultipleAccountsInfoAndContext">,
+): (keys: readonly string[]) => Promise<FetchedAccounts> {
+  return async (keys) => {
+    const CHUNK_SIZE = 99;
+    const values: (Uint8Array | null)[] = [];
+    let slot = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < keys.length; i += CHUNK_SIZE) {
+      const chunk = keys.slice(i, i + CHUNK_SIZE).map((key) => new PublicKey(key));
+      const { context, value } = await connection.getMultipleAccountsInfoAndContext(
+        chunk,
+        "confirmed",
+      );
+      slot = Math.min(slot, context.slot);
+      for (const info of value) values.push(info === null ? null : info.data);
+    }
+    return { slot: Number.isFinite(slot) ? slot : 0, values };
+  };
+}
+
+/** A pubsub socket for `rpcUrl` in a browser, `null` on the server or without a ws endpoint. */
+export function browserAccountSocket(rpcUrl: string): AccountSocket | null {
+  if (typeof window === "undefined" || typeof WebSocket !== "function") return null;
+  const wsUrl = wsUrlFor(rpcUrl);
+  return wsUrl === null ? null : createAccountSocket(wsUrl, { connect: browserConnect });
+}
+
+const feeds = new Map<string, AccountFeed>();
+
+/** The app-wide account feed for `rpcUrl` (P1-2): one socket and one poll loop per endpoint. */
+export function sharedAccountFeed(rpcUrl: string): AccountFeed {
+  let feed = feeds.get(rpcUrl);
+  if (feed === undefined) {
+    feed = createAccountFeed({
+      fetchMany: connectionFetcher(sharedConnection(rpcUrl)),
+      socket: browserAccountSocket(rpcUrl),
+    });
+    feeds.set(rpcUrl, feed);
+  }
+  return feed;
 }

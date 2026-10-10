@@ -10,7 +10,7 @@ import { WalletActions } from "./wallet-actions";
 import { displayedYesOfLevels, levelsOf, ownOrders } from "../_lib/book-view";
 import type { Holdings } from "../_lib/constraint";
 import { MIDPOINT_NOTE, openClose, question, settlementRule, timeline } from "../_lib/copy";
-import type { TradeReader } from "../_lib/reader";
+import type { TradeReader, WalletView } from "../_lib/reader";
 import { badgeProps, nextTransition, panelState } from "../_lib/state";
 import type { TradeActions } from "../_lib/tx";
 import { usePolled } from "../_lib/use-polled";
@@ -103,12 +103,19 @@ function ladderPoints(
 export function TradeView(props: Props) {
   const { market, config, nowSecs, reader, actions, wallet, explorerUrl } = props;
   const walletKey = wallet?.toBase58() ?? "";
-  // One read per tick carries the book AND the vault invariant inputs (P0-7: no extra request).
-  const snapshot = usePolled(() => reader.getSnapshot(), 1_000, market.address);
-  const walletView = usePolled(
+  // One read carries the book AND the vault invariant inputs (P0-7: no extra request). P1-2: on a
+  // reader with account subscriptions both are pushed; polling (1 s / 2 s) is the fallback.
+  const snapshotSource = useMemo(() => reader.snapshotSource?.(1_000) ?? null, [reader]);
+  const snapshot = usePolled(() => reader.getSnapshot(), 1_000, market.address, snapshotSource);
+  const walletSource = useMemo(
+    () => (wallet === null ? null : (reader.walletSource?.(wallet, 2_000) ?? null)),
+    [reader, wallet],
+  );
+  const walletView = usePolled<WalletView | null>(
     () => (wallet === null ? Promise.resolve(null) : reader.getWallet(wallet)),
     2_000,
     `${market.address}:${walletKey}`,
+    walletSource,
   );
   const openTime = usePolled(() => reader.getOpenTime(), 3_600_000, market.address);
 
@@ -181,7 +188,8 @@ export function TradeView(props: Props) {
           <VaultInvariantChip
             pairs={vault?.pairs ?? null}
             balance={vault?.balance ?? null}
-            asOfSecs={vault?.asOfSecs ?? null}
+            // While the subscriptions are live any change is pushed, so the reading is current now.
+            asOfSecs={vault === null ? null : snapshot.live ? nowSecs : vault.asOfSecs}
           />
         </div>
         <p className="text-mer-xs text-mer-ink-muted">{MIDPOINT_NOTE}</p>
