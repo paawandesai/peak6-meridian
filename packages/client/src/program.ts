@@ -6,7 +6,7 @@ import { type Idl, Program, type Provider } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 
 import type { Meridian } from "./idl/meridian";
-import idl from "./idl/meridian.json";
+import idl from "./idl/meridian.json" with { type: "json" };
 
 /** The program IDL as `anchor build` wrote it (snake_case names; `Program` camel-cases them). */
 export const MERIDIAN_IDL: Idl = idl as Idl;
