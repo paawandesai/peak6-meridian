@@ -1,7 +1,8 @@
 //! `settle_market` on the Pyth Lazer path (M3-10b, D-055): an Ed25519Program instruction
 //! carrying a Pyth `PayloadData` signed by the Config-pinned signer, read through the
 //! instructions sysvar. Success and failure paths, plus Pyth settlement on a Config that was
-//! migrated from v1 by `migrate_config`.
+//! migrated from v1 by `migrate_config`. Payloads use the real pyth-lazer-protocol v0.46.0
+//! encoding; `pyth_recorded` settles from updates signed by Pyth itself.
 
 // Test code: the program rules on unwrap/panic/arithmetic do not apply here.
 #![allow(
@@ -14,7 +15,7 @@
 mod common;
 
 use common::migration::pyth_params;
-use common::pyth::{pyth_payload, META_FEED_ID, PYTH_EXPONENT};
+use common::pyth::{pyth_payload, pyth_payload_with_confidence, META_FEED_ID, PYTH_EXPONENT};
 use common::settlement::SettlementHarness;
 use common::{
     default_params, error_code, expect_failure, expect_success, find_event, BASE_CLOSE_TS,
@@ -90,7 +91,7 @@ fn pyth_rejects_a_signer_that_is_not_pinned() {
     let impostor = Keypair::new();
     assert_settle_error(
         &sh.settle_pyth(&impostor, PRICE_ABOVE),
-        MeridianError::OracleFeedHashMismatch,
+        MeridianError::PythWrongSigner,
     );
     assert_eq!(sh.market().status, MarketStatus::Open);
 }
@@ -99,41 +100,113 @@ fn pyth_rejects_a_signer_that_is_not_pinned() {
 fn pyth_rejects_another_tickers_feed() {
     let signer = Keypair::new();
     let mut sh = pyth_harness(&signer);
-    let now = sh.h().clock().unix_timestamp;
     let tsla = meridian::pyth::feed_ids::TSLA;
-    let message = pyth_payload(tsla, PRICE_ABOVE, PYTH_EXPONENT, now * 1_000_000);
+    let message = pyth_payload(tsla, PRICE_ABOVE, PYTH_EXPONENT, BASE_CLOSE_TS * 1_000_000);
     assert_settle_error(
         &sh.settle_pyth_signed(&signer, &message),
         MeridianError::OracleFeedHashMismatch,
     );
+    assert_eq!(sh.market().status, MarketStatus::Open);
 }
 
 #[test]
-fn pyth_rejects_a_price_from_before_close_and_a_stale_price() {
+fn pyth_rejects_a_price_from_before_close() {
     let signer = Keypair::new();
     let mut sh = pyth_harness(&signer);
+    // One microsecond before the close is still the previous second.
     let before_close = pyth_payload(
         META_FEED_ID,
         PRICE_ABOVE,
         PYTH_EXPONENT,
-        (BASE_CLOSE_TS - 1) * 1_000_000,
+        BASE_CLOSE_TS * 1_000_000 - 1,
     );
     assert_settle_error(
         &sh.settle_pyth_signed(&signer, &before_close),
         MeridianError::OracleBeforeClose,
     );
-    let now = sh.h().clock().unix_timestamp;
-    let stale = pyth_payload(
+    assert_eq!(sh.market().status, MarketStatus::Open);
+}
+
+#[test]
+fn pyth_rejects_a_price_from_after_the_close_window() {
+    // pyth_max_age_secs = 30 in the fixture Config: close + 30 s is the last accepted second.
+    let signer = Keypair::new();
+    let mut sh = pyth_harness(&signer);
+    let late = pyth_payload(
         META_FEED_ID,
         PRICE_ABOVE,
         PYTH_EXPONENT,
-        (now - 31) * 1_000_000,
+        (BASE_CLOSE_TS + 31) * 1_000_000,
     );
     assert_settle_error(
-        &sh.settle_pyth_signed(&signer, &stale),
-        MeridianError::OracleStale,
+        &sh.settle_pyth_signed(&signer, &late),
+        MeridianError::PythAfterCloseWindow,
+    );
+    let last = pyth_payload(
+        META_FEED_ID,
+        PRICE_ABOVE,
+        PYTH_EXPONENT,
+        (BASE_CLOSE_TS + 30) * 1_000_000,
+    );
+    expect_success(&sh.settle_pyth_signed(&signer, &last));
+}
+
+#[test]
+fn pyth_rejects_a_confidence_wider_than_max_conf_bps() {
+    // max_conf_bps = 5 (default): 5 bps of $681.25 is 34_062_500 in 1e-8 units.
+    let signer = Keypair::new();
+    let mut sh = pyth_harness(&signer);
+    let at = BASE_CLOSE_TS * 1_000_000;
+    let wide = pyth_payload_with_confidence(META_FEED_ID, PRICE_ABOVE, PYTH_EXPONENT, 34_062_501, at);
+    assert_settle_error(
+        &sh.settle_pyth_signed(&signer, &wide),
+        MeridianError::PythConfidenceTooWide,
+    );
+    let absent = pyth_payload_with_confidence(META_FEED_ID, PRICE_ABOVE, PYTH_EXPONENT, 0, at);
+    assert_settle_error(
+        &sh.settle_pyth_signed(&signer, &absent),
+        MeridianError::PythConfidenceTooWide,
     );
     assert_eq!(sh.market().status, MarketStatus::Open);
+    let edge = pyth_payload_with_confidence(META_FEED_ID, PRICE_ABOVE, PYTH_EXPONENT, 34_062_500, at);
+    expect_success(&sh.settle_pyth_signed(&signer, &edge));
+}
+
+#[test]
+fn admin_override_still_settles_a_market_pyth_could_not() {
+    // Pyth rejected (confidence too wide); after close + override_delay_secs the admin settles.
+    let signer = Keypair::new();
+    let mut sh = pyth_harness(&signer);
+    let wide = pyth_payload_with_confidence(
+        META_FEED_ID,
+        PRICE_ABOVE,
+        PYTH_EXPONENT,
+        i64::MAX / 20_000,
+        BASE_CLOSE_TS * 1_000_000,
+    );
+    assert_settle_error(
+        &sh.settle_pyth_signed(&signer, &wide),
+        MeridianError::PythConfidenceTooWide,
+    );
+    let override_error = expect_failure(&sh.admin_override(68_125)).err.clone();
+    assert_eq!(
+        override_error,
+        TransactionError::InstructionError(
+            0,
+            InstructionError::Custom(error_code(MeridianError::OverrideTooEarly))
+        )
+    );
+    sh.h().set_unix_timestamp(BASE_CLOSE_TS + 3_600);
+    let result = sh.admin_override(68_125);
+    let event = find_event::<MarketSettled>(expect_success(&result)).expect("MarketSettled");
+    assert_eq!(event.source, SettleSource::Override);
+    assert_eq!(event.outcome, Outcome::Yes);
+    assert_eq!(sh.market().settle_source, SettleSource::Override);
+    // Once overridden, a valid Pyth update can no longer change the outcome.
+    assert_settle_error(
+        &sh.settle_pyth(&signer, PRICE_BELOW),
+        MeridianError::AlreadySettled,
+    );
 }
 
 #[test]

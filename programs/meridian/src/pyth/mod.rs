@@ -3,21 +3,24 @@
 //! the two-source spread check from D-033.
 //!
 //! Pyth Pro (formerly Pyth Lazer) delivers signed price updates via REST API (PYTH_API_TOKEN);
-//! automation fetches signed updates and submits them with an Ed25519Program signature verification
-//! instruction. This program validates the signature against the pinned Pyth Lazer signer pubkey
-//! stored in Config (operator-controlled, never hard-trusted from payload), then parses the price.
+//! automation fetches the signed update at the market's close and submits it with an
+//! Ed25519Program signature verification instruction. This program validates the signature
+//! against the pinned Pyth Lazer signer pubkey stored in Config (operator-controlled, never
+//! hard-trusted from payload), then parses the price.
 //!
-//! Message format: Pyth Lazer SolanaMessage (pyth-lazer-protocol v0.46.0):
-//! - magic (4 bytes LE): 0x8221A329 (SOLANA_FORMAT_MAGIC = 2182742457)
-//! - signature (64 bytes): Ed25519 signature
-//! - public_key (32 bytes): Ed25519 signer pubkey
-//! - payload_len (2 bytes LE): length of payload
-//! - payload (variable): PAYLOAD_FORMAT_MAGIC + timestamp_us + channel_id + feeds
+//! Wire format (pyth-lazer-protocol v0.46.0, `message.rs` and `payload.rs`, little-endian):
+//! - SolanaMessage: magic u32 (`SOLANA_FORMAT_MAGIC`), signature [u8; 64], public key [u8; 32],
+//!   payload length u16, payload. The Ed25519 signature covers the payload bytes only.
+//! - PayloadData: magic u32 (`PAYLOAD_FORMAT_MAGIC`), timestamp_us u64, channel u8, feed count
+//!   u8, then per feed: feed id u32, property count u8, and per property its id u8 followed by
+//!   its value. Price (0) and Confidence (5) are a bare i64 mantissa where 0 means "absent";
+//!   Exponent (4) is an i16.
 //!
 //! The transaction MUST include a native Ed25519Program verify instruction with the signed message.
 //! The program validates: (a) ed25519 ix program id, (b) signer pubkey equals pinned config value,
 //! (c) signed message bytes are EXACTLY the payload being parsed (offsets into that ix's data, not
-//! attacker-controlled other ixs), (d) feed id maps to market's ticker, plus timestamp/staleness.
+//! attacker-controlled other ixs), (d) feed id maps to market's ticker, (e) the update was taken
+//! in the window `[close_ts, close_ts + pyth_max_age_secs]`, (f) confidence ≤ `max_conf_bps`.
 //!
 //! Alternative: Pyth Lazer verifier program pytd2yyk641x7ak7mkaasSJVXh6YYZnC7wTmtgAyxPt exists on
 //! devnet/mainnet as a future integration option (noted in D-055).
@@ -29,16 +32,13 @@ use anchor_lang::solana_program::sysvar::instructions::{
 
 use crate::errors::MeridianError;
 use crate::oracle::CloseReading;
+use crate::state::BPS_DENOMINATOR;
 
 /// Ed25519 signature verification program ID (native Solana program).
 pub const ED25519_PROGRAM_ID: Pubkey = pubkey!("Ed25519SigVerify111111111111111111111111111");
 
-/// Pyth feed IDs for MAG7 tickers (Pyth Pro numeric IDs from issue #49).
-/// These numeric IDs from the Pyth Pro API need to be converted to 32-byte feed IDs.
-/// The numeric values are: AAPL 922, AMZN 954, GOOGL 1163, META 1272, MSFT 1292, NVDA 1314, TSLA 1435.
-///
-/// TODO: Verify mapping from numeric Pyth Pro IDs to 32-byte feed IDs used in signed payloads.
-/// The payload uses 4-byte LE feed IDs (PriceFeedId(u32) per pyth-lazer-protocol).
+/// Pyth Pro numeric feed ids of the MAG7 regular-session equity feeds (issue #49). The signed
+/// payload carries them as a u32 (`PriceFeedId(u32)` in pyth-lazer-protocol).
 pub mod feed_ids {
     /// AAPL Pyth Pro feed ID: 922
     pub const AAPL: u32 = 922;
@@ -60,9 +60,19 @@ pub mod feed_ids {
 /// First 4 bytes (LE) of a Solana-targeted price update.
 pub const SOLANA_FORMAT_MAGIC: u32 = 2182742457; // 0x8221A329
 
-/// Pyth Lazer PayloadData format magic (pyth-lazer-protocol v0.46.0).
-/// First 4 bytes (LE/BE depending on format) of the payload.
+/// Pyth Lazer PayloadData format magic (pyth-lazer-protocol v0.46.0), first 4 bytes (LE).
 pub const PAYLOAD_FORMAT_MAGIC: u32 = 2479346549; // 0x93D3D865
+
+/// `PriceFeedProperty` ids (pyth-lazer-protocol v0.46.0 `lib.rs`, `#[repr(u8)]` order). Only the
+/// three settlement needs are accepted; any other property fails the parse (fail closed).
+pub mod property {
+    pub const PRICE: u8 = 0;
+    pub const EXPONENT: u8 = 4;
+    pub const CONFIDENCE: u8 = 5;
+}
+
+/// SolanaMessage envelope: magic (4) + signature (64) + public key (32) + payload length (2).
+const ENVELOPE_LEN: usize = 102;
 
 /// One Pyth feed's reading, before settlement checks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,7 +83,9 @@ pub struct PythReading {
     pub value_scaled: i128,
     /// Unix timestamp of the price update (microseconds).
     pub timestamp_us: i64,
-    /// Confidence interval (if present).
+    /// Price mantissa as signed (same exponent as `confidence`).
+    pub price: i64,
+    /// Confidence mantissa, if present.
     pub confidence: Option<i64>,
     /// Exponent for price scaling.
     pub exponent: i16,
@@ -86,241 +98,176 @@ fn read_array<const N: usize>(data: &[u8], offset: usize) -> Result<[u8; N]> {
         .ok_or_else(|| MeridianError::OracleInvalidValue.into())
 }
 
-/// Vendored minimal parser for Pyth Lazer SolanaMessage format.
-/// Based on pyth-lazer-protocol v0.46.0 src/message.rs and src/payload.rs.
-///
-/// SolanaMessage layout (LE-encoded):
-/// - magic (4 bytes): SOLANA_FORMAT_MAGIC = 2182742457
-/// - signature (64 bytes): Ed25519 signature
-/// - public_key (32 bytes): Ed25519 signer pubkey
-/// - payload_len (2 bytes LE): length of payload
-/// - payload (variable): PayloadData
-///
-/// PayloadData layout (LE-encoded):
-/// - magic (4 bytes): PAYLOAD_FORMAT_MAGIC = 2479346549
-/// - timestamp_us (8 bytes): microseconds since epoch
-/// - channel_id (1 byte)
-/// - num_feeds (1 byte)
-/// - feeds: array of PayloadFeedData
-///
-/// For simplicity, we parse only the first feed and extract Price and Exponent properties.
-pub fn parse_pyth_lazer_message(data: &[u8]) -> Result<(Pubkey, PythReading)> {
-    // Minimum length: 4 (magic) + 64 (sig) + 32 (pubkey) + 2 (len) = 102
-    require!(data.len() >= 102, MeridianError::OracleInvalidValue);
-
-    // Parse SolanaMessage header
-    let magic = u32::from_le_bytes(read_array(data, 0)?);
-    require!(
-        magic == SOLANA_FORMAT_MAGIC,
-        MeridianError::OracleInvalidValue
-    );
-
-    // Skip signature (64 bytes) for now - verification happens via Ed25519Program ix
-    let public_key_bytes = read_array::<32>(data, 68)?;
-    let public_key = Pubkey::new_from_array(public_key_bytes);
-
-    let payload_len = u16::from_le_bytes(read_array(data, 100)?) as usize;
-    let payload_start: usize = 102;
-    let payload_end = payload_start
-        .checked_add(payload_len)
-        .ok_or(MeridianError::MathOverflow)?;
-    require!(data.len() >= payload_end, MeridianError::OracleInvalidValue);
-
-    let payload = data
-        .get(payload_start..payload_end)
-        .ok_or(MeridianError::OracleInvalidValue)?;
-
-    // Parse PayloadData header
-    require!(
-        payload.len() >= 14, // 4 (magic) + 8 (timestamp) + 1 (channel) + 1 (num_feeds)
-        MeridianError::OracleInvalidValue
-    );
-
-    let payload_magic = u32::from_le_bytes(read_array(payload, 0)?);
-    require!(
-        payload_magic == PAYLOAD_FORMAT_MAGIC,
-        MeridianError::OracleInvalidValue
-    );
-
-    let timestamp_us = i64::from_le_bytes(read_array(payload, 4)?);
-    // channel_id at offset 12 (1 byte) - skip
-    let num_feeds = *payload.get(13).ok_or(MeridianError::OracleInvalidValue)?;
-
-    // We only parse the first feed for now (settlement uses one feed per market)
-    require!(num_feeds >= 1, MeridianError::OracleInvalidValue);
-
-    // Feed data starts at offset 14
-    let feed_offset = 14;
-    require!(
-        payload.len() >= feed_offset + 5, // feed_id(4) + num_properties(1)
-        MeridianError::OracleInvalidValue
-    );
-
-    let feed_id = u32::from_le_bytes(read_array(payload, feed_offset)?);
-    let num_properties = *payload
-        .get(feed_offset + 4)
-        .ok_or(MeridianError::OracleInvalidValue)?;
-
-    // Parse properties to extract Price and Exponent
-    let mut property_offset = feed_offset + 5;
-    let mut price_value: Option<i64> = None;
-    let mut exponent: Option<i16> = None;
-    let mut confidence: Option<i64> = None;
-
-    for _ in 0..num_properties {
-        require!(
-            payload.len() > property_offset,
-            MeridianError::OracleInvalidValue
-        );
-        let property_type = *payload
-            .get(property_offset)
-            .ok_or(MeridianError::OracleInvalidValue)?;
-        property_offset = property_offset
-            .checked_add(1)
-            .ok_or(MeridianError::MathOverflow)?;
-
-        match property_type {
-            0 => {
-                // Price property (Option<i64>)
-                require!(
-                    payload.len() >= property_offset.saturating_add(9),
-                    MeridianError::OracleInvalidValue
-                );
-                let has_value = *payload
-                    .get(property_offset)
-                    .ok_or(MeridianError::OracleInvalidValue)?;
-                property_offset = property_offset
-                    .checked_add(1)
-                    .ok_or(MeridianError::MathOverflow)?;
-
-                if has_value != 0 {
-                    price_value = Some(i64::from_le_bytes(read_array(payload, property_offset)?));
-                }
-                property_offset = property_offset
-                    .checked_add(8)
-                    .ok_or(MeridianError::MathOverflow)?;
-            }
-            4 => {
-                // Exponent property (i16)
-                require!(
-                    payload.len() >= property_offset.saturating_add(2),
-                    MeridianError::OracleInvalidValue
-                );
-                exponent = Some(i16::from_le_bytes(read_array(payload, property_offset)?));
-                property_offset = property_offset
-                    .checked_add(2)
-                    .ok_or(MeridianError::MathOverflow)?;
-            }
-            5 => {
-                // Confidence property (Option<i64>)
-                require!(
-                    payload.len() >= property_offset.saturating_add(9),
-                    MeridianError::OracleInvalidValue
-                );
-                let has_value = *payload
-                    .get(property_offset)
-                    .ok_or(MeridianError::OracleInvalidValue)?;
-                property_offset = property_offset
-                    .checked_add(1)
-                    .ok_or(MeridianError::MathOverflow)?;
-
-                if has_value != 0 {
-                    confidence = Some(i64::from_le_bytes(read_array(payload, property_offset)?));
-                }
-                property_offset = property_offset
-                    .checked_add(8)
-                    .ok_or(MeridianError::MathOverflow)?;
-            }
-            _ => {
-                // Skip unknown property types - this is a fail-open risk
-                // For production, enumerate all known types and fail on unknown
-                return Err(MeridianError::OracleInvalidValue.into());
-            }
-        }
-    }
-
-    // Both Price and Exponent are required
-    let price = price_value.ok_or(MeridianError::OracleInvalidValue)?;
-    let expo = exponent.ok_or(MeridianError::OracleInvalidValue)?;
-
-    // Scale to 18 decimals: Pyth price = price * 10^expo, target = price * 10^18
-    // So: value_scaled = price * 10^(18 + expo)
-    let price_128 = i128::from(price);
-    let scale_power = 18i32
-        .checked_add(i32::from(expo))
-        .ok_or(MeridianError::MathOverflow)?;
-    let value_scaled = if scale_power >= 0 {
-        price_128
-            .checked_mul(
-                10i128
-                    .checked_pow(scale_power as u32)
-                    .ok_or(MeridianError::MathOverflow)?,
-            )
-            .ok_or(MeridianError::MathOverflow)?
-    } else {
-        price_128
-            .checked_div(
-                10i128
-                    .checked_pow(scale_power.unsigned_abs())
-                    .ok_or(MeridianError::MathOverflow)?,
-            )
-            .ok_or(MeridianError::MathOverflow)?
-    };
-
-    Ok((
-        public_key,
-        PythReading {
-            feed_id,
-            value_scaled,
-            timestamp_us,
-            confidence,
-            exponent: expo,
-        },
-    ))
+/// A forward-only reader over the payload; every read is bounds-checked.
+struct Reader<'a> {
+    data: &'a [u8],
+    pos: usize,
 }
 
-/// Validates a Pyth reading: correct feed ID, positive value, timestamp >= close, freshness.
+impl<'a> Reader<'a> {
+    fn take<const N: usize>(&mut self) -> Result<[u8; N]> {
+        let bytes = read_array::<N>(self.data, self.pos)?;
+        self.pos = self.pos.checked_add(N).ok_or(MeridianError::MathOverflow)?;
+        Ok(bytes)
+    }
+    fn u8(&mut self) -> Result<u8> {
+        Ok(u8::from_le_bytes(self.take()?))
+    }
+    fn u32(&mut self) -> Result<u32> {
+        Ok(u32::from_le_bytes(self.take()?))
+    }
+    fn u64(&mut self) -> Result<u64> {
+        Ok(u64::from_le_bytes(self.take()?))
+    }
+    fn i64(&mut self) -> Result<i64> {
+        Ok(i64::from_le_bytes(self.take()?))
+    }
+    fn i16(&mut self) -> Result<i16> {
+        Ok(i16::from_le_bytes(self.take()?))
+    }
+}
+
+/// Parses a full SolanaMessage (envelope + payload) and returns the envelope's public key with
+/// the payload's reading. Does NOT verify the signature; on-chain that is the Ed25519Program's
+/// job (see [`read_pyth_lazer_close`]).
+pub fn parse_pyth_lazer_message(data: &[u8]) -> Result<(Pubkey, PythReading)> {
+    let mut reader = Reader { data, pos: 0 };
+    require!(
+        reader.u32()? == SOLANA_FORMAT_MAGIC,
+        MeridianError::OracleInvalidValue
+    );
+    let _signature = reader.take::<64>()?;
+    let public_key = Pubkey::new_from_array(reader.take::<32>()?);
+    let payload_len = usize::from(u16::from_le_bytes(reader.take()?));
+    let payload_end = ENVELOPE_LEN
+        .checked_add(payload_len)
+        .ok_or(MeridianError::MathOverflow)?;
+    require!(data.len() == payload_end, MeridianError::OracleInvalidValue);
+    let payload = data
+        .get(ENVELOPE_LEN..payload_end)
+        .ok_or(MeridianError::OracleInvalidValue)?;
+    Ok((public_key, parse_pyth_lazer_payload(payload)?))
+}
+
+/// Parses a signed `PayloadData`. Settlement requests exactly one feed with Price, Exponent and
+/// Confidence, so anything else (more feeds, other or repeated properties, trailing bytes) is
+/// rejected rather than skipped.
+pub fn parse_pyth_lazer_payload(payload: &[u8]) -> Result<PythReading> {
+    let mut reader = Reader {
+        data: payload,
+        pos: 0,
+    };
+    require!(
+        reader.u32()? == PAYLOAD_FORMAT_MAGIC,
+        MeridianError::OracleInvalidValue
+    );
+    let timestamp_us =
+        i64::try_from(reader.u64()?).map_err(|_| MeridianError::OracleInvalidValue)?;
+    let _channel = reader.u8()?;
+    require!(reader.u8()? == 1, MeridianError::OracleInvalidValue);
+    let feed_id = reader.u32()?;
+    let num_properties = reader.u8()?;
+
+    let mut price: Option<i64> = None;
+    let mut exponent: Option<i16> = None;
+    let mut confidence: Option<Option<i64>> = None;
+    for _ in 0..num_properties {
+        match reader.u8()? {
+            property::PRICE if price.is_none() => price = Some(reader.i64()?),
+            property::EXPONENT if exponent.is_none() => exponent = Some(reader.i16()?),
+            property::CONFIDENCE if confidence.is_none() => {
+                // 0 is the wire encoding of "no confidence".
+                let value = reader.i64()?;
+                confidence = Some((value != 0).then_some(value));
+            }
+            _ => return Err(MeridianError::OracleInvalidValue.into()),
+        }
+    }
+    require!(reader.pos == payload.len(), MeridianError::OracleInvalidValue);
+
+    // Price 0 is the wire encoding of "no price"; a missing exponent is malformed.
+    let price = price
+        .filter(|value| *value != 0)
+        .ok_or(MeridianError::OracleInvalidValue)?;
+    let exponent = exponent.ok_or(MeridianError::OracleInvalidValue)?;
+    Ok(PythReading {
+        feed_id,
+        value_scaled: scale_to_18(price, exponent)?,
+        timestamp_us,
+        price,
+        confidence: confidence.flatten(),
+        exponent,
+    })
+}
+
+/// `price × 10^exponent` expressed with 18 fractional digits.
+fn scale_to_18(price: i64, exponent: i16) -> Result<i128> {
+    let price = i128::from(price);
+    let power = 18i32
+        .checked_add(i32::from(exponent))
+        .ok_or(MeridianError::MathOverflow)?;
+    let factor = 10i128
+        .checked_pow(power.unsigned_abs())
+        .ok_or(MeridianError::MathOverflow)?;
+    let scaled = if power >= 0 {
+        price.checked_mul(factor)
+    } else {
+        price.checked_div(factor)
+    };
+    scaled.ok_or_else(|| MeridianError::MathOverflow.into())
+}
+
+/// Validates a Pyth reading for a market closing at `close_ts`: the pinned feed, a positive
+/// price, an update taken in `[close_ts, close_ts + close_window_secs]` and not in the future,
+/// and a confidence no wider than `max_conf_bps` of the price.
+///
+/// The window is anchored on the close, not on the current time: `settle_market` is
+/// permissionless, so a bound relative to "now" would let anyone wait for the after-hours price
+/// to move and settle with a later, equally well-signed update.
 pub fn check_pyth_reading(
     reading: &PythReading,
     expected_feed_id: u32,
     clock: &Clock,
     close_ts: i64,
-    max_staleness_seconds: i64,
+    close_window_secs: i64,
+    max_conf_bps: u16,
 ) -> Result<CloseReading> {
-    // Check 1: Feed ID must match expected
     require!(
         reading.feed_id == expected_feed_id,
         MeridianError::OracleFeedHashMismatch
     );
+    require!(
+        reading.price > 0 && reading.value_scaled > 0,
+        MeridianError::OracleInvalidValue
+    );
+    require!(reading.timestamp_us > 0, MeridianError::OracleInvalidValue);
 
-    // Check 2: Value must be strictly positive
-    require!(reading.value_scaled > 0, MeridianError::OracleInvalidValue);
-
-    // Check 3: Timestamp must be at or after close_ts (convert to seconds for comparison)
-    let timestamp_seconds = reading
+    let timestamp = reading
         .timestamp_us
         .checked_div(1_000_000)
         .ok_or(MeridianError::MathOverflow)?;
+    require!(timestamp >= close_ts, MeridianError::OracleBeforeClose);
+    let window_end = close_ts
+        .checked_add(close_window_secs)
+        .ok_or(MeridianError::MathOverflow)?;
+    require!(timestamp <= window_end, MeridianError::PythAfterCloseWindow);
     require!(
-        timestamp_seconds >= close_ts,
-        MeridianError::OracleBeforeClose
-    );
-
-    // Check 4: Timestamp must not be in future
-    let current_time = clock.unix_timestamp;
-    require!(
-        timestamp_seconds <= current_time,
+        timestamp <= clock.unix_timestamp,
         MeridianError::OracleInvalidValue
     );
 
-    // Check 5: Staleness check (timestamp-based, not slot-based like Core)
-    let age = current_time
-        .checked_sub(timestamp_seconds)
-        .ok_or(MeridianError::OracleInvalidValue)?;
-    require!(age <= max_staleness_seconds, MeridianError::OracleStale);
-
-    // Reject zero timestamp (like oracle::check_reading rejects slot == 0)
-    require!(reading.timestamp_us > 0, MeridianError::OracleInvalidValue);
+    // confidence / price ≤ max_conf_bps / 10_000, cross-multiplied (same exponent on both).
+    let confidence = reading
+        .confidence
+        .filter(|value| *value > 0)
+        .ok_or(MeridianError::PythConfidenceTooWide)?;
+    let lhs = i128::from(confidence)
+        .checked_mul(i128::from(BPS_DENOMINATOR))
+        .ok_or(MeridianError::MathOverflow)?;
+    let rhs = i128::from(reading.price)
+        .checked_mul(i128::from(max_conf_bps))
+        .ok_or(MeridianError::MathOverflow)?;
+    require!(lhs <= rhs, MeridianError::PythConfidenceTooWide);
 
     Ok(CloseReading {
         value_scaled: reading.value_scaled,
@@ -336,14 +283,14 @@ pub fn check_pyth_reading(
 /// 2. Verifies the program ID is Ed25519Program
 /// 3. Extracts and validates the signer pubkey matches `pinned_signer` from Config
 /// 4. Parses the signed message data (EXACTLY the payload, not attacker-controlled)
-/// 5. Validates the price reading (feed ID, timestamp, staleness)
+/// 5. Validates the price reading ([`check_pyth_reading`])
 ///
 /// Security invariants (AB-03, AB-04, AB-13):
 /// - Signer pubkey is pinned in Config, admin-controlled, never trusted from payload
 /// - Message bytes are from the ed25519 ix data, not attacker-controlled other ixs
 /// - All offsets use checked arithmetic
 /// - Feed ID mapping is enforced
-/// - Timestamp and staleness rules prevent stale or future prices
+/// - The update must come from the close window and carry a tight confidence
 #[allow(clippy::too_many_arguments)]
 pub fn read_pyth_lazer_close(
     instructions_sysvar: &AccountInfo,
@@ -352,7 +299,8 @@ pub fn read_pyth_lazer_close(
     expected_feed_id: u32,
     clock: &Clock,
     close_ts: i64,
-    max_staleness_seconds: i64,
+    close_window_secs: i64,
+    max_conf_bps: u16,
 ) -> Result<CloseReading> {
     // Load the Ed25519Program instruction at the specified index
     let ed25519_ix = load_instruction_at_checked(ed25519_ix_index as usize, instructions_sysvar)?;
@@ -386,13 +334,12 @@ pub fn read_pyth_lazer_close(
     // Then: signature (64 bytes), pubkey (32 bytes), message (variable)
 
     let ix_data = &ed25519_ix.data;
-    require!(ix_data.len() >= 14, MeridianError::OracleInvalidValue);
+    require!(ix_data.len() >= 16, MeridianError::OracleInvalidValue);
 
     // Parse Ed25519 instruction header
     let num_signatures = *ix_data.first().ok_or(MeridianError::OracleInvalidValue)?;
     require!(num_signatures == 1, MeridianError::OracleInvalidValue);
 
-    let _signature_offset = u16::from_le_bytes(read_array(ix_data, 2)?) as usize;
     let signature_ix_index = u16::from_le_bytes(read_array(ix_data, 4)?);
     let public_key_offset = u16::from_le_bytes(read_array(ix_data, 6)?) as usize;
     let public_key_ix_index = u16::from_le_bytes(read_array(ix_data, 8)?);
@@ -429,163 +376,27 @@ pub fn read_pyth_lazer_close(
     require_keys_eq!(
         signer_pubkey,
         *pinned_signer,
-        MeridianError::OracleFeedHashMismatch
+        MeridianError::PythWrongSigner
     );
 
-    // Check 5: Extract message data (EXACTLY the signed payload, not attacker-controlled)
+    // Check 5: Extract message data (EXACTLY the signed payload, not attacker-controlled).
+    // Pyth signs the PayloadData bytes alone (no SolanaMessage envelope).
     let message_end = message_data_offset
         .checked_add(message_data_size)
         .ok_or(MeridianError::MathOverflow)?;
     let message_data = ix_data
         .get(message_data_offset..message_end)
         .ok_or(MeridianError::OracleInvalidValue)?;
+    let reading = parse_pyth_lazer_payload(message_data)?;
 
-    // The message data should be the Pyth Lazer PayloadData (without the SolanaMessage envelope)
-    // For Pyth Lazer, the Ed25519 signature covers the payload bytes directly
-    // Parse the payload as PayloadData
-    let (_parsed_signer, reading) = parse_pyth_lazer_payload(message_data)?;
-
-    // Validate the reading
     check_pyth_reading(
         &reading,
         expected_feed_id,
         clock,
         close_ts,
-        max_staleness_seconds,
+        close_window_secs,
+        max_conf_bps,
     )
-}
-
-/// Parses Pyth Lazer PayloadData from signed message bytes.
-/// This is the payload portion that was signed (without SolanaMessage envelope).
-fn parse_pyth_lazer_payload(payload: &[u8]) -> Result<(Pubkey, PythReading)> {
-    // Minimum: 4 (magic) + 8 (timestamp) + 1 (channel) + 1 (num_feeds) + 5 (feed header)
-    require!(payload.len() >= 19, MeridianError::OracleInvalidValue);
-
-    let payload_magic = u32::from_le_bytes(read_array(payload, 0)?);
-    require!(
-        payload_magic == PAYLOAD_FORMAT_MAGIC,
-        MeridianError::OracleInvalidValue
-    );
-
-    let timestamp_us = i64::from_le_bytes(read_array(payload, 4)?);
-    // channel_id at offset 12 (1 byte) - skip
-    let num_feeds = *payload.get(13).ok_or(MeridianError::OracleInvalidValue)?;
-    require!(num_feeds >= 1, MeridianError::OracleInvalidValue);
-
-    // Feed data starts at offset 14
-    let feed_offset = 14;
-    let feed_id = u32::from_le_bytes(read_array(payload, feed_offset)?);
-    let num_properties = *payload
-        .get(feed_offset + 4)
-        .ok_or(MeridianError::OracleInvalidValue)?;
-
-    // Parse properties
-    let mut property_offset = feed_offset + 5;
-    let mut price_value: Option<i64> = None;
-    let mut exponent: Option<i16> = None;
-    let mut confidence: Option<i64> = None;
-
-    for _ in 0..num_properties {
-        require!(
-            payload.len() > property_offset,
-            MeridianError::OracleInvalidValue
-        );
-        let property_type = *payload
-            .get(property_offset)
-            .ok_or(MeridianError::OracleInvalidValue)?;
-        property_offset = property_offset
-            .checked_add(1)
-            .ok_or(MeridianError::MathOverflow)?;
-
-        match property_type {
-            0 => {
-                // Price
-                require!(
-                    payload.len() >= property_offset.saturating_add(9),
-                    MeridianError::OracleInvalidValue
-                );
-                let has_value = *payload
-                    .get(property_offset)
-                    .ok_or(MeridianError::OracleInvalidValue)?;
-                property_offset = property_offset
-                    .checked_add(1)
-                    .ok_or(MeridianError::MathOverflow)?;
-                if has_value != 0 {
-                    price_value = Some(i64::from_le_bytes(read_array(payload, property_offset)?));
-                }
-                property_offset = property_offset
-                    .checked_add(8)
-                    .ok_or(MeridianError::MathOverflow)?;
-            }
-            4 => {
-                // Exponent
-                exponent = Some(i16::from_le_bytes(read_array(payload, property_offset)?));
-                property_offset = property_offset
-                    .checked_add(2)
-                    .ok_or(MeridianError::MathOverflow)?;
-            }
-            5 => {
-                // Confidence
-                require!(
-                    payload.len() >= property_offset.saturating_add(9),
-                    MeridianError::OracleInvalidValue
-                );
-                let has_value = *payload
-                    .get(property_offset)
-                    .ok_or(MeridianError::OracleInvalidValue)?;
-                property_offset = property_offset
-                    .checked_add(1)
-                    .ok_or(MeridianError::MathOverflow)?;
-                if has_value != 0 {
-                    confidence = Some(i64::from_le_bytes(read_array(payload, property_offset)?));
-                }
-                property_offset = property_offset
-                    .checked_add(8)
-                    .ok_or(MeridianError::MathOverflow)?;
-            }
-            _ => {
-                return Err(MeridianError::OracleInvalidValue.into());
-            }
-        }
-    }
-
-    let price = price_value.ok_or(MeridianError::OracleInvalidValue)?;
-    let expo = exponent.ok_or(MeridianError::OracleInvalidValue)?;
-
-    // Scale to 18 decimals
-    let price_128 = i128::from(price);
-    let scale_power = 18i32
-        .checked_add(i32::from(expo))
-        .ok_or(MeridianError::MathOverflow)?;
-    let value_scaled = if scale_power >= 0 {
-        price_128
-            .checked_mul(
-                10i128
-                    .checked_pow(scale_power as u32)
-                    .ok_or(MeridianError::MathOverflow)?,
-            )
-            .ok_or(MeridianError::MathOverflow)?
-    } else {
-        price_128
-            .checked_div(
-                10i128
-                    .checked_pow(scale_power.unsigned_abs())
-                    .ok_or(MeridianError::MathOverflow)?,
-            )
-            .ok_or(MeridianError::MathOverflow)?
-    };
-
-    // Return placeholder pubkey (we already verified signer via ed25519 ix)
-    Ok((
-        Pubkey::default(),
-        PythReading {
-            feed_id,
-            value_scaled,
-            timestamp_us,
-            confidence,
-            exponent: expo,
-        },
-    ))
 }
 
 #[cfg(test)]
@@ -598,6 +409,8 @@ fn parse_pyth_lazer_payload(payload: &[u8]) -> Result<(Pubkey, PythReading)> {
 mod tests {
     use super::*;
 
+    const CLOSE: i64 = 1_791_316_800;
+
     fn clock(slot: u64, unix_timestamp: i64) -> Clock {
         Clock {
             slot,
@@ -606,177 +419,181 @@ mod tests {
         }
     }
 
-    #[test]
-    fn check_pyth_reading_validates_feed_id() {
-        let reading = PythReading {
-            feed_id: 922, // AAPL
-            value_scaled: 150_000_000_000_000_000_000,
-            timestamp_us: 1_791_316_800_000_000,
-            confidence: Some(5),
-            exponent: -2,
-        };
-
-        // Correct feed ID passes
-        let result =
-            check_pyth_reading(&reading, 922, &clock(100, 1_791_316_812), 1_791_316_800, 30);
-        assert!(result.is_ok());
-
-        // Wrong feed ID fails
-        let result = check_pyth_reading(
-            &reading,
-            954, // AMZN
-            &clock(100, 1_791_316_812),
-            1_791_316_800,
-            30,
-        );
-        assert!(result.is_err());
+    /// A payload in the real wire encoding with the given properties, in order.
+    fn payload(feed_id: u32, timestamp_us: u64, properties: &[(u8, Vec<u8>)]) -> Vec<u8> {
+        let mut out = PAYLOAD_FORMAT_MAGIC.to_le_bytes().to_vec();
+        out.extend_from_slice(&timestamp_us.to_le_bytes());
+        out.push(2); // channel fixed_rate@200ms
+        out.push(1);
+        out.extend_from_slice(&feed_id.to_le_bytes());
+        out.push(properties.len() as u8);
+        for (id, value) in properties {
+            out.push(*id);
+            out.extend_from_slice(value);
+        }
+        out
     }
 
-    #[test]
-    fn check_pyth_reading_rejects_zero_timestamp() {
-        let reading = PythReading {
+    fn standard(price: i64, confidence: i64) -> Vec<(u8, Vec<u8>)> {
+        vec![
+            (property::PRICE, price.to_le_bytes().to_vec()),
+            (property::EXPONENT, (-8i16).to_le_bytes().to_vec()),
+            (property::CONFIDENCE, confidence.to_le_bytes().to_vec()),
+        ]
+    }
+
+    fn reading(timestamp_us: i64, price: i64, confidence: Option<i64>) -> PythReading {
+        PythReading {
             feed_id: 922,
-            value_scaled: 150_000_000_000_000_000_000,
-            timestamp_us: 0, // Zero timestamp
-            confidence: Some(5),
-            exponent: -2,
-        };
-
-        let result = check_pyth_reading(&reading, 922, &clock(100, 1_791_316_812), 0, 30);
-        assert!(result.is_err());
+            value_scaled: i128::from(price) * 10i128.pow(10),
+            timestamp_us,
+            price,
+            confidence,
+            exponent: -8,
+        }
     }
 
     #[test]
-    fn parse_pyth_lazer_message_rejects_wrong_magic() {
-        let mut data = vec![0u8; 120];
-        // Wrong magic
-        data[0..4].copy_from_slice(&0xDEADBEEFu32.to_le_bytes());
-
-        assert!(parse_pyth_lazer_message(&data).is_err());
-    }
-
-    #[test]
-    fn parse_pyth_lazer_message_rejects_too_short() {
-        let data = vec![0u8; 50]; // Too short
-        assert!(parse_pyth_lazer_message(&data).is_err());
-    }
-
-    // Security tests (AB-03, AB-04, AB-13 coverage at unit level)
-
-    #[test]
-    fn check_pyth_reading_rejects_stale_timestamp() {
-        let reading = PythReading {
-            feed_id: 922,
-            value_scaled: 150_000_000_000_000_000_000,
-            timestamp_us: 1_791_316_800_000_000, // 1791316800 in seconds
-            confidence: Some(5),
-            exponent: -2,
-        };
-
-        // Stale: timestamp is 100 seconds old, max_staleness is 30
-        let result = check_pyth_reading(
-            &reading,
+    fn parses_the_real_wire_encoding() {
+        let bytes = payload(
             922,
-            &clock(100, 1_791_316_900), // 100 seconds later
-            1_791_316_800,
-            30, // max 30 seconds
+            (CLOSE as u64) * 1_000_000,
+            &standard(25_412_000_000, 1_500_000),
         );
-        assert!(result.is_err());
+        let parsed = parse_pyth_lazer_payload(&bytes).unwrap();
+        assert_eq!(parsed.feed_id, 922);
+        assert_eq!(parsed.price, 25_412_000_000);
+        assert_eq!(parsed.confidence, Some(1_500_000));
+        assert_eq!(parsed.exponent, -8);
+        assert_eq!(parsed.value_scaled, 25_412_000_000 * 10i128.pow(10));
+        assert_eq!(parsed.timestamp_us, CLOSE * 1_000_000);
     }
 
     #[test]
-    fn check_pyth_reading_rejects_negative_price() {
-        let reading = PythReading {
-            feed_id: 922,
-            value_scaled: -100_000_000_000_000_000_000,
-            timestamp_us: 1_791_316_800_000_000,
-            confidence: Some(5),
-            exponent: -2,
-        };
-
-        let result =
-            check_pyth_reading(&reading, 922, &clock(100, 1_791_316_812), 1_791_316_800, 30);
-        assert!(result.is_err());
+    fn parses_the_envelope_and_returns_its_signer() {
+        let body = payload(922, 1, &standard(1, 0));
+        let mut message = SOLANA_FORMAT_MAGIC.to_le_bytes().to_vec();
+        message.extend_from_slice(&[7u8; 64]);
+        message.extend_from_slice(&[9u8; 32]);
+        message.extend_from_slice(&(body.len() as u16).to_le_bytes());
+        message.extend_from_slice(&body);
+        let (signer, parsed) = parse_pyth_lazer_message(&message).unwrap();
+        assert_eq!(signer, Pubkey::new_from_array([9u8; 32]));
+        assert_eq!(parsed.confidence, None);
+        message.push(0);
+        assert!(parse_pyth_lazer_message(&message).is_err(), "trailing byte");
     }
 
     #[test]
-    fn check_pyth_reading_rejects_future_timestamp() {
-        let reading = PythReading {
-            feed_id: 922,
-            value_scaled: 150_000_000_000_000_000_000,
-            timestamp_us: 1_791_316_900_000_000, // Future
-            confidence: Some(5),
-            exponent: -2,
-        };
-
-        // Current time is 1_791_316_800, price is from future
-        let result =
-            check_pyth_reading(&reading, 922, &clock(100, 1_791_316_800), 1_791_316_800, 30);
-        assert!(result.is_err());
+    fn rejects_wrong_magics_and_short_input() {
+        assert!(parse_pyth_lazer_message(&[0u8; 50]).is_err());
+        let mut message = vec![0u8; 120];
+        message[0..4].copy_from_slice(&0xDEADBEEFu32.to_le_bytes());
+        assert!(parse_pyth_lazer_message(&message).is_err());
+        let mut body = payload(922, 1, &standard(1, 1));
+        body[0] ^= 0xff;
+        assert!(parse_pyth_lazer_payload(&body).is_err());
     }
 
     #[test]
-    fn parse_pyth_lazer_payload_rejects_wrong_payload_magic() {
-        let mut payload = vec![0u8; 50];
-        // Wrong payload magic
-        payload[0..4].copy_from_slice(&0xDEADBEEFu32.to_le_bytes());
-
-        assert!(parse_pyth_lazer_payload(&payload).is_err());
+    fn rejects_a_missing_or_zero_price_and_a_missing_exponent() {
+        let no_price = payload(922, 1, &standard(1, 1)[1..]);
+        assert!(parse_pyth_lazer_payload(&no_price).is_err());
+        let zero_price = payload(922, 1, &standard(0, 1));
+        assert!(parse_pyth_lazer_payload(&zero_price).is_err());
+        let props = standard(1, 1);
+        let no_exponent = payload(922, 1, &[props[0].clone(), props[2].clone()]);
+        assert!(parse_pyth_lazer_payload(&no_exponent).is_err());
     }
 
     #[test]
-    fn parse_pyth_lazer_payload_rejects_missing_price() {
-        // Payload with only Exponent property, missing Price (property 0)
-        let mut payload = [0u8; 100];
-        payload[0..4].copy_from_slice(&PAYLOAD_FORMAT_MAGIC.to_le_bytes());
-        payload[4..12].copy_from_slice(&1_791_316_800_000_000i64.to_le_bytes());
-        payload[12] = 1; // channel_id
-        payload[13] = 1; // num_feeds
-        payload[14..18].copy_from_slice(&922u32.to_le_bytes()); // feed_id
-        payload[18] = 1; // num_properties
-        payload[19] = 4; // property_type = Exponent
-        payload[20..22].copy_from_slice(&(-2i16).to_le_bytes());
-
-        // Should fail because Price is required
-        assert!(parse_pyth_lazer_payload(&payload[..22]).is_err());
+    fn rejects_unknown_repeated_properties_extra_feeds_and_trailing_bytes() {
+        let mut unknown = standard(1, 1);
+        unknown.push((3, 5u16.to_le_bytes().to_vec())); // PublisherCount: not requested
+        assert!(parse_pyth_lazer_payload(&payload(922, 1, &unknown)).is_err());
+        let mut repeated = standard(1, 1);
+        repeated.push((property::PRICE, 2i64.to_le_bytes().to_vec()));
+        assert!(parse_pyth_lazer_payload(&payload(922, 1, &repeated)).is_err());
+        let mut two_feeds = payload(922, 1, &standard(1, 1));
+        two_feeds[13] = 2;
+        assert!(parse_pyth_lazer_payload(&two_feeds).is_err());
+        let mut trailing = payload(922, 1, &standard(1, 1));
+        trailing.push(0);
+        assert!(parse_pyth_lazer_payload(&trailing).is_err());
     }
 
     #[test]
-    fn parse_pyth_lazer_payload_rejects_missing_exponent() {
-        // Payload with only Price property, missing Exponent (property 4)
-        let mut payload = [0u8; 100];
-        payload[0..4].copy_from_slice(&PAYLOAD_FORMAT_MAGIC.to_le_bytes());
-        payload[4..12].copy_from_slice(&1_791_316_800_000_000i64.to_le_bytes());
-        payload[12] = 1; // channel_id
-        payload[13] = 1; // num_feeds
-        payload[14..18].copy_from_slice(&922u32.to_le_bytes()); // feed_id
-        payload[18] = 1; // num_properties
-        payload[19] = 0; // property_type = Price
-        payload[20] = 1; // has_value
-        payload[21..29].copy_from_slice(&15000i64.to_le_bytes());
+    fn accepts_an_update_inside_the_close_window_with_tight_confidence() {
+        // $254.12, confidence $0.10 ≈ 3.9 bps ≤ 5 bps.
+        let r = reading(CLOSE * 1_000_000, 25_412_000_000, Some(10_000_000));
+        let out = check_pyth_reading(&r, 922, &clock(9, CLOSE + 300), CLOSE, 60, 5).unwrap();
+        assert_eq!(out.value_scaled, r.value_scaled);
+        assert_eq!(out.slot, 9);
+        // The window is anchored on the close: settling hours later with the close update works.
+        assert!(check_pyth_reading(&r, 922, &clock(9, CLOSE + 86_400), CLOSE, 60, 5).is_ok());
+    }
 
-        // Should fail because Exponent is required
-        assert!(parse_pyth_lazer_payload(&payload[..29]).is_err());
+    /// The Anchor error code number of a failed check.
+    fn code(result: Result<CloseReading>) -> u32 {
+        match result.unwrap_err() {
+            anchor_lang::error::Error::AnchorError(error) => error.error_code_number,
+            other => panic!("not an Anchor error: {other:?}"),
+        }
     }
 
     #[test]
-    fn parse_pyth_lazer_payload_rejects_unknown_property() {
-        let mut payload = [0u8; 100];
-        payload[0..4].copy_from_slice(&PAYLOAD_FORMAT_MAGIC.to_le_bytes());
-        payload[4..12].copy_from_slice(&1_791_316_800_000_000i64.to_le_bytes());
-        payload[12] = 1; // channel_id
-        payload[13] = 1; // num_feeds
-        payload[14..18].copy_from_slice(&922u32.to_le_bytes()); // feed_id
-        payload[18] = 1; // num_properties
-        payload[19] = 99; // property_type = UNKNOWN (not 0, 4, or 5)
-
-        // Should fail on unknown property type (fail-closed)
-        assert!(parse_pyth_lazer_payload(&payload[..20]).is_err());
+    fn each_rule_has_its_own_error() {
+        let now = clock(9, CLOSE + 300);
+        let good = reading(CLOSE * 1_000_000, 25_412_000_000, Some(10_000_000));
+        assert_eq!(
+            code(check_pyth_reading(&good, 954, &now, CLOSE, 60, 5)),
+            u32::from(MeridianError::OracleFeedHashMismatch)
+        );
+        let early = reading((CLOSE - 1) * 1_000_000, 25_412_000_000, Some(1));
+        assert_eq!(
+            code(check_pyth_reading(&early, 922, &now, CLOSE, 60, 5)),
+            u32::from(MeridianError::OracleBeforeClose)
+        );
+        let late = reading((CLOSE + 61) * 1_000_000, 25_412_000_000, Some(1));
+        assert_eq!(
+            code(check_pyth_reading(&late, 922, &now, CLOSE, 60, 5)),
+            u32::from(MeridianError::PythAfterCloseWindow)
+        );
+        let future = reading((CLOSE + 30) * 1_000_000, 25_412_000_000, Some(1));
+        assert_eq!(
+            code(check_pyth_reading(&future, 922, &clock(9, CLOSE + 10), CLOSE, 60, 5)),
+            u32::from(MeridianError::OracleInvalidValue)
+        );
+        // 5 bps of $254.12 is 12_706_000 in 1e-8 units: one more is too wide.
+        let wide = reading(CLOSE * 1_000_000, 25_412_000_000, Some(12_706_001));
+        assert_eq!(
+            code(check_pyth_reading(&wide, 922, &now, CLOSE, 60, 5)),
+            u32::from(MeridianError::PythConfidenceTooWide)
+        );
+        let edge = reading(CLOSE * 1_000_000, 25_412_000_000, Some(12_706_000));
+        assert!(check_pyth_reading(&edge, 922, &now, CLOSE, 60, 5).is_ok());
+        let missing = reading(CLOSE * 1_000_000, 25_412_000_000, None);
+        assert_eq!(
+            code(check_pyth_reading(&missing, 922, &now, CLOSE, 60, 5)),
+            u32::from(MeridianError::PythConfidenceTooWide)
+        );
+        let zero_ts = reading(0, 25_412_000_000, Some(1));
+        assert_eq!(
+            code(check_pyth_reading(&zero_ts, 922, &now, 0, 60, 5)),
+            u32::from(MeridianError::OracleInvalidValue)
+        );
+        let negative = reading(CLOSE * 1_000_000, -1, Some(1));
+        assert_eq!(
+            code(check_pyth_reading(&negative, 922, &now, CLOSE, 60, 5)),
+            u32::from(MeridianError::OracleInvalidValue)
+        );
     }
 
-    // Note: Ed25519 sysvar bypass test (ed25519_ix_index >= current_index)
-    // requires integration test infrastructure with Instructions sysvar.
-    // Security invariant: read_pyth_lazer_close requires ed25519_ix_index < current_index
-    // to prevent attacker from supplying later unverified instruction with forged payload.
-    // Unit-level coverage: check_pyth_reading validates all payload fields once parsed.
+    #[test]
+    fn scales_both_ways() {
+        assert_eq!(scale_to_18(123, -2).unwrap(), 123 * 10i128.pow(16));
+        assert_eq!(scale_to_18(5, 0).unwrap(), 5 * 10i128.pow(18));
+        assert_eq!(scale_to_18(1_000, -20).unwrap(), 10);
+        assert!(scale_to_18(i64::MAX, 30).is_err());
+    }
 }
