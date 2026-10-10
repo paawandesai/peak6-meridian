@@ -14,6 +14,7 @@ import {
   BN,
   configParamsArg,
   configParamsBatches,
+  PYTH_DISABLED,
   findConfigPda,
   marketAddresses,
   type Meridian,
@@ -285,6 +286,7 @@ describe("guards run before any transaction (validator 1)", () => {
           maxStalenessSlots: 30n,
           maxConfBps: 5,
           overrideDelaySecs: 3_600n,
+          pyth: PYTH_DISABLED,
         },
         [],
       );
@@ -676,7 +678,7 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
       }
       const settle = (tiingo: PublicKey, twelve: PublicKey) =>
         program.methods
-          .settleMarket()
+          .settleMarket(null)
           .accountsStrict({
             config: findConfigPda(programId).address,
             market: addresses.market,
@@ -684,6 +686,7 @@ describe("deploy, idempotency, feeds and fail-closed settlement (validator 2)", 
             feedTwelveData: twelve,
             redstonePrice: null,
             oracleConfig: null,
+            instructionsSysvar: null,
             payer: admin.keypair.publicKey,
           })
           .rpc({ commitment: "confirmed" });

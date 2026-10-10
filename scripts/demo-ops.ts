@@ -23,6 +23,7 @@ import {
   type Meridian,
   configParamsArg,
   createMeridianProgram,
+  pythConfigFromAccount,
   findConfigPda,
   marketAddresses,
   symbolBytes,
@@ -271,6 +272,7 @@ async function pinLocalFeeds(ctx: DemoContext, symbol: string): Promise<void> {
         maxConfBps: configAccount.maxConfBps,
         overrideDelaySecs: BigInt(configAccount.overrideDelaySecs.toString()),
         tickers: [{ index: tickerIndex, ticker: { symbol, feeds, feedHashes } }],
+        pyth: pythConfigFromAccount(configAccount),
       }),
     )
     .accountsStrict({
@@ -571,6 +573,7 @@ async function setShortOverrideDelay(ctx: DemoContext): Promise<void> {
         maxConfBps: configAccount.maxConfBps,
         overrideDelaySecs: shortDelaySecs,
         tickers: [], // Empty array preserves existing ticker slots
+        pyth: pythConfigFromAccount(configAccount),
       }),
     )
     .accountsStrict({

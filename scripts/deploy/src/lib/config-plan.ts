@@ -3,7 +3,9 @@ import {
   DEFAULT_MAX_STALENESS_SLOTS,
   DEFAULT_OVERRIDE_DELAY_SECS,
   MAX_TICKER_SLOTS_PER_CALL,
+  PYTH_DISABLED,
   type ConfigParamsInput,
+  type PythConfigInput,
   type TickerSlotInput,
 } from "@meridian/client";
 import { PublicKey } from "@solana/web3.js";
@@ -26,6 +28,8 @@ export type OnChainConfig = {
   readonly maxConfBps: number;
   readonly overrideDelaySecs: bigint;
   readonly tickers: readonly OnChainTicker[];
+  /** Pyth fields (M3-10b), already mapped for pass-through (`pythConfigFromAccount`). */
+  readonly pyth: PythConfigInput;
 };
 
 export type Desired = {
@@ -113,7 +117,8 @@ function sameFeeds(onChain: OnChainTicker, slot: TickerSlotInput): boolean {
  * - Config exists: its admin, automation authority and mint must equal `desired` (otherwise
  *   `ConfigMismatchError`; nothing is sent). Empty slots get placeholders (or the given feeds);
  *   with `desired.feeds`, slots whose feeds or hashes differ are replaced; at most six slots per
- *   call. Scalar fields are always resent from chain, because `update_config` overwrites them.
+ *   call. Scalar and Pyth fields are always resent from chain, because `update_config`
+ *   overwrites them.
  *   Feeds already set are never replaced by placeholders.
  */
 export function planConfig(onChain: OnChainConfig | null, desired: Desired): ConfigStep[] {
@@ -123,6 +128,7 @@ export function planConfig(onChain: OnChainConfig | null, desired: Desired): Con
       maxStalenessSlots: DEFAULT_MAX_STALENESS_SLOTS,
       maxConfBps: DEFAULT_MAX_CONF_BPS,
       overrideDelaySecs: DEFAULT_OVERRIDE_DELAY_SECS,
+      pyth: PYTH_DISABLED,
     };
     const slots = TICKER_ORDER.map((_, index) => slotFor(index, desired.feeds));
     return chunk(slots, MAX_TICKER_SLOTS_PER_CALL).map((tickers, i) => ({
@@ -155,6 +161,7 @@ export function planConfig(onChain: OnChainConfig | null, desired: Desired): Con
     maxStalenessSlots: onChain.maxStalenessSlots,
     maxConfBps: onChain.maxConfBps,
     overrideDelaySecs: onChain.overrideDelaySecs,
+    pyth: onChain.pyth,
   };
   return chunk(changed, MAX_TICKER_SLOTS_PER_CALL).map((tickers) => ({
     kind: "update_config" as const,

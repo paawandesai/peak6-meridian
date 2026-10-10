@@ -19,6 +19,20 @@ pub struct ConfigUpdated {
     pub usdc_mint: Pubkey,
 }
 
+/// `migrate_config` grew the v1 Config account to the current layout (M3-10b).
+#[event]
+pub struct ConfigMigrated {
+    pub admin: Pubkey,
+    pub old_len: u32,
+    pub new_len: u32,
+    /// Lamports the admin paid to keep the grown account rent-exempt (0 if none were needed).
+    pub rent_top_up: u64,
+    /// True when the Pyth fields were set from the instruction arguments; false leaves them zero.
+    pub pyth_set: bool,
+    pub pyth_lazer_signer: Pubkey,
+    pub pyth_max_age_secs: i64,
+}
+
 #[event]
 pub struct MarketCreated {
     pub market: Pubkey,

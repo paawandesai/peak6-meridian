@@ -171,6 +171,14 @@ function configBytes(paused: boolean, overrideDelaySecs: bigint, admin = key()):
     parts.push(Buffer.from(symbolBytes("AAPL")), Buffer.alloc(64), Buffer.alloc(64)); // ticker slot
   }
   parts.push(Buffer.from([253])); // bump
+  // v2 (M3-10b): the Pyth fields are appended after `bump`.
+  parts.push(key().toBuffer()); // pyth_lazer_signer
+  for (let i = 0; i < 7; i += 1) {
+    const feedId = Buffer.alloc(4);
+    feedId.writeUInt32LE(0); // pyth_feed_ids[i]
+    parts.push(feedId);
+  }
+  parts.push(u64(600n)); // pyth_max_age_secs
   return Buffer.concat(parts);
 }
 

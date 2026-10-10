@@ -1,12 +1,15 @@
-//! `settle_market` (FR-08, D-030): permissionless settlement from the two oracle feeds pinned
-//! in the config for the market's ticker (domain.md § Settlement rules) or from RedStone
-//! (M2-15, D-054). Writes the outcome once; a settled market never changes (invariant 4, AB-08).
+//! `settle_market` (FR-08, D-030, M3-10b): permissionless settlement from Pyth (primary, D-055),
+//! RedStone (fallback), or the legacy Switchboard feeds. When both Pyth and RedStone are present,
+//! the two-source spread check (D-033) is restored: both must be valid and within max_conf_bps.
+//! Writes the outcome once; a settled market never changes (invariant 4, AB-08).
 
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::sysvar;
 
 use crate::errors::MeridianError;
 use crate::events::MarketSettled;
 use crate::oracle::{combine, read_close, read_redstone_price, yes_wins};
+use crate::pyth;
 use crate::state::{
     Config, Market, MarketStatus, OracleConfig, Outcome, RedstonePrice, SettleSource, CONFIG_SEED,
     FEEDS_PER_TICKER, MARKET_SEED,
@@ -34,8 +37,8 @@ pub struct SettleMarket<'info> {
     /// Feed for source slot 1 (Twelve Data). Checked like `feed_tiingo`. Switchboard path.
     /// CHECK: validated in `oracle::read_close`.
     pub feed_twelve_data: UncheckedAccount<'info>,
-    /// RedStone verified price for this ticker (M2-15, D-054). Optional: if present, use
-    /// RedStone path instead of Switchboard.
+    /// RedStone verified price for this ticker (M2-15, D-054). Optional: used as fallback when
+    /// Pyth is not present, or for two-source spread check when both Pyth and RedStone are present.
     /// AB-04: PDA seeds constraint ensures this is the price account for market.ticker.
     #[account(
         seeds = [RedstonePrice::SEED_PREFIX, &market.ticker],
@@ -49,11 +52,19 @@ pub struct SettleMarket<'info> {
         bump,
     )]
     pub oracle_config: Option<Account<'info, OracleConfig>>,
+    /// Instructions sysvar (M3-10b, D-055). Required for Pyth Lazer path to validate the
+    /// Ed25519Program signature verification instruction.
+    /// CHECK: address checked against sysvar::instructions::ID.
+    #[account(address = sysvar::instructions::ID)]
+    pub instructions_sysvar: Option<UncheckedAccount<'info>>,
     /// Anyone: settlement is permissionless (D-030).
     pub payer: Signer<'info>,
 }
 
-pub fn handle_settle_market(ctx: Context<SettleMarket>) -> Result<()> {
+pub fn handle_settle_market(
+    ctx: Context<SettleMarket>,
+    ed25519_ix_index: Option<u16>,
+) -> Result<()> {
     let clock = Clock::get()?;
     let config = &ctx.accounts.config;
     let market = &ctx.accounts.market;
@@ -66,25 +77,73 @@ pub fn handle_settle_market(ctx: Context<SettleMarket>) -> Result<()> {
         MeridianError::NotClosed
     );
 
-    // Detect oracle path: RedStone (D-054) if redstone_price is present, else Switchboard
-    let (price, oracle_slot) = if let Some(redstone_price) = &ctx.accounts.redstone_price {
-        // RedStone path (M2-15): single verified price, no combine
+    // Determine ticker index for Pyth feed lookup
+    let ticker_index = config
+        .tickers
+        .iter()
+        .position(|t| !t.is_empty() && t.symbol == market.ticker)
+        .ok_or(MeridianError::UnknownTicker)?;
+    let pyth_feed_id = *config
+        .pyth_feed_ids
+        .get(ticker_index)
+        .ok_or(MeridianError::UnknownTicker)?;
+
+    // Oracle path priority (D-055): Pyth PRIMARY, RedStone fallback, Switchboard legacy. Pyth
+    // needs the instructions sysvar, the Ed25519 instruction index and a configured feed id.
+    let pyth_input = match (ctx.accounts.instructions_sysvar.as_ref(), ed25519_ix_index) {
+        (Some(sysvar), Some(index)) if pyth_feed_id != 0 => Some((sysvar, index)),
+        _ => None,
+    };
+    let read_pyth = |sysvar: &UncheckedAccount, index: u16| {
+        read_pyth_price(
+            sysvar,
+            index,
+            &config.pyth_lazer_signer,
+            pyth_feed_id,
+            &clock,
+            market.close_ts,
+            config.pyth_max_age_secs,
+        )
+    };
+    let read_redstone = |redstone_price: &Account<RedstonePrice>| {
         let oracle_config = ctx
             .accounts
             .oracle_config
             .as_ref()
             .ok_or(MeridianError::RedStoneWrongPricePda)?;
-        let reading = read_redstone_price(
+        read_redstone_price(
             redstone_price,
             &market.ticker,
             &clock,
             market.close_ts,
             oracle_config.max_package_delay_secs,
             config.max_staleness_slots,
+        )
+    };
+
+    let (price, oracle_slot) = if let (Some((sysvar, index)), Some(redstone_price)) =
+        (pyth_input, ctx.accounts.redstone_price.as_ref())
+    {
+        // Both Pyth and RedStone present: two-source spread check (D-033, D-055)
+        let pyth_reading = read_pyth(sysvar, index)?;
+        let redstone_reading = read_redstone(redstone_price)?;
+        let price = combine(
+            pyth_reading.value_scaled,
+            redstone_reading.value_scaled,
+            config.max_conf_bps,
         )?;
+        let oracle_slot = pyth_reading.slot.min(redstone_reading.slot);
+        (price, oracle_slot)
+    } else if let Some((sysvar, index)) = pyth_input {
+        // Pyth only (PRIMARY path, D-055)
+        let reading = read_pyth(sysvar, index)?;
+        (reading.value_scaled, reading.slot)
+    } else if let Some(redstone_price) = ctx.accounts.redstone_price.as_ref() {
+        // RedStone only (fallback, D-055)
+        let reading = read_redstone(redstone_price)?;
         (reading.value_scaled, reading.slot)
     } else {
-        // Switchboard path (until M2-18 removes): dual feeds + combine
+        // Switchboard path (legacy, until M2-18 removes): dual feeds + combine
         let ticker = config
             .ticker(&market.ticker)
             .ok_or(MeridianError::UnknownTicker)?;
@@ -116,7 +175,6 @@ pub fn handle_settle_market(ctx: Context<SettleMarket>) -> Result<()> {
             _ => return Err(MeridianError::InvalidTickerSlot.into()),
         };
         let price = combine(first.value_scaled, second.value_scaled, config.max_conf_bps)?;
-        // The older of the two slots is the conservative "oracle slot".
         let oracle_slot = first.slot.min(second.slot);
         (price, oracle_slot)
     };
@@ -133,6 +191,27 @@ pub fn handle_settle_market(ctx: Context<SettleMarket>) -> Result<()> {
         oracle_slot,
         SettleSource::Oracle,
         clock.unix_timestamp,
+    )
+}
+
+/// Reads a Pyth Lazer price from the Ed25519 sysvar instruction and validates it.
+fn read_pyth_price(
+    instructions_sysvar: &UncheckedAccount,
+    ed25519_ix_index: u16,
+    pinned_signer: &Pubkey,
+    expected_feed_id: u32,
+    clock: &Clock,
+    close_ts: i64,
+    max_age_secs: i64,
+) -> Result<crate::oracle::CloseReading> {
+    pyth::read_pyth_lazer_close(
+        &instructions_sysvar.to_account_info(),
+        ed25519_ix_index,
+        pinned_signer,
+        expected_feed_id,
+        clock,
+        close_ts,
+        max_age_secs,
     )
 }
 

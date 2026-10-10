@@ -2,6 +2,7 @@ import { AnchorProvider, type Program, Wallet } from "@coral-xyz/anchor";
 import {
   type ConfigParamsInput,
   configParamsArg,
+  pythConfigFromAccount,
   createMeridianProgram,
   findConfigPda,
   type Meridian,
@@ -71,6 +72,7 @@ export async function readOnChainConfig(program: Program<Meridian>): Promise<OnC
         feedHashes: [hash(0), hash(1)] as [Uint8Array, Uint8Array],
       };
     }),
+    pyth: pythConfigFromAccount(account),
   };
 }
 

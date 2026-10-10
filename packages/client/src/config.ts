@@ -20,6 +20,12 @@ export const DEFAULT_MAX_STALENESS_SLOTS = 30n;
 export const DEFAULT_MAX_CONF_BPS = 5;
 /** Default `override_delay_secs`. */
 export const DEFAULT_OVERRIDE_DELAY_SECS = 3_600n;
+/** Default `pyth_max_age_secs` (D-055, M3-10b): the on-chain rule requires it to be positive. */
+export const DEFAULT_PYTH_MAX_AGE_SECS = 30n;
+/** Largest Pyth Pro numeric feed id (`u32`). */
+const MAX_U32 = 0xffff_ffff;
+/** Largest `i64`. */
+const MAX_I64 = (1n << 63n) - 1n;
 
 /** One ticker with its two feeds and pinned feed hashes. */
 export type TickerInput = {
@@ -31,6 +37,25 @@ export type TickerInput = {
 /** A ticker and the config slot (0–6) it occupies. */
 export type TickerSlotInput = { readonly index: number; readonly ticker: TickerInput };
 
+/**
+ * The Pyth Lazer settlement fields of the Config (D-055, M3-10b): the pinned Ed25519 signer, the
+ * numeric Pyth Pro feed id per ticker slot (0 = no Pyth feed for that slot) and the maximum age
+ * of a Pyth price at settlement. `update_config` overwrites them on every call, so callers that
+ * only change other fields pass the on-chain values through (`pythConfigFromAccount`).
+ */
+export type PythConfigInput = {
+  readonly lazerSigner: PublicKey;
+  readonly feedIds: readonly number[];
+  readonly maxAgeSecs: bigint;
+};
+
+/** No Pyth signer and no feeds: the Pyth settlement path stays off until the admin sets them. */
+export const PYTH_DISABLED: PythConfigInput = Object.freeze({
+  lazerSigner: PublicKey.default,
+  feedIds: Object.freeze(new Array<number>(TICKER_COUNT).fill(0)),
+  maxAgeSecs: DEFAULT_PYTH_MAX_AGE_SECS,
+});
+
 /** Scalar config fields plus the ticker slots of one call. */
 export type ConfigParamsInput = {
   readonly automationAuthority: PublicKey;
@@ -38,10 +63,18 @@ export type ConfigParamsInput = {
   readonly maxConfBps: number;
   readonly overrideDelaySecs: bigint;
   readonly tickers: readonly TickerSlotInput[];
+  readonly pyth: PythConfigInput;
+};
+
+/** The Pyth fields as Anchor's TS client encodes them (`PythConfigParams` / `ConfigParams`). */
+export type PythConfigArg = {
+  pythLazerSigner: PublicKey;
+  pythFeedIds: number[];
+  pythMaxAgeSecs: BN;
 };
 
 /** The `ConfigParams` argument as Anchor's TS client encodes it. */
-export type ConfigParamsArg = {
+export type ConfigParamsArg = PythConfigArg & {
   automationAuthority: PublicKey;
   maxStalenessSlots: BN;
   maxConfBps: number;
@@ -51,6 +84,51 @@ export type ConfigParamsArg = {
     ticker: { symbol: number[]; feeds: PublicKey[]; feedHashes: number[][] };
   }[];
 };
+
+/**
+ * Encodes the Pyth fields for `initialize_config` / `update_config` (inside `ConfigParams`) or
+ * `migrate_config` (`PythConfigParams`); throws on a wrong feed-id count, a feed id outside u32
+ * or a max age that is not a positive i64 (MeridianError::InvalidPythMaxAge on chain).
+ */
+export function pythConfigArg(input: PythConfigInput): PythConfigArg {
+  if (input.feedIds.length !== TICKER_COUNT) {
+    throw new Error(`pyth feed ids must list ${TICKER_COUNT} slots, got ${input.feedIds.length}`);
+  }
+  for (const id of input.feedIds) {
+    if (!Number.isInteger(id) || id < 0 || id > MAX_U32) {
+      throw new Error(`pyth feed id must be a u32: ${id}`);
+    }
+  }
+  if (input.maxAgeSecs <= 0n || input.maxAgeSecs > MAX_I64) {
+    throw new Error(`pyth_max_age_secs must be a positive i64: ${input.maxAgeSecs}`);
+  }
+  return {
+    pythLazerSigner: input.lazerSigner,
+    pythFeedIds: [...input.feedIds],
+    pythMaxAgeSecs: new BN(input.maxAgeSecs.toString()),
+  };
+}
+
+/** The Pyth fields of a decoded Config account, as Anchor's TS client returns them. */
+export type PythConfigAccount = {
+  readonly pythLazerSigner: PublicKey;
+  readonly pythFeedIds: readonly number[];
+  readonly pythMaxAgeSecs: { toString(): string };
+};
+
+/**
+ * The on-chain Pyth fields, to pass through an `update_config` that changes something else.
+ * A zero max age (a Config migrated without Pyth parameters) becomes the default, because
+ * `update_config` rejects zero; signer and feed ids are kept as they are.
+ */
+export function pythConfigFromAccount(account: PythConfigAccount): PythConfigInput {
+  const maxAgeSecs = BigInt(account.pythMaxAgeSecs.toString());
+  return {
+    lazerSigner: account.pythLazerSigner,
+    feedIds: [...account.pythFeedIds],
+    maxAgeSecs: maxAgeSecs > 0n ? maxAgeSecs : DEFAULT_PYTH_MAX_AGE_SECS,
+  };
+}
 
 function feedHash(bytes: Uint8Array): number[] {
   if (bytes.length !== 32) {
@@ -104,6 +182,7 @@ export function configParamsArg(input: ConfigParamsInput): ConfigParamsArg {
     maxConfBps: input.maxConfBps,
     overrideDelaySecs: new BN(input.overrideDelaySecs.toString()),
     tickers: input.tickers.map(tickerSlotArg),
+    ...pythConfigArg(input.pyth),
   };
 }
 

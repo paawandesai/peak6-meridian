@@ -1,4 +1,4 @@
-import { MAX_TICKER_SLOTS_PER_CALL } from "@meridian/client";
+import { MAX_TICKER_SLOTS_PER_CALL, PYTH_DISABLED } from "@meridian/client";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -37,6 +37,7 @@ function onChain(tickers: OnChainTicker[], overrides: Partial<OnChainConfig> = {
     maxConfBps: 5,
     overrideDelaySecs: 3_600n,
     tickers,
+    pyth: PYTH_DISABLED,
     ...overrides,
   };
 }
@@ -67,6 +68,8 @@ describe("planConfig without a Config", () => {
     expect(first?.maxConfBps).toBe(5);
     expect(first?.overrideDelaySecs).toBe(3_600n);
     expect(first?.automationAuthority.equals(automation)).toBe(true);
+    // A new Config starts with the Pyth path off (M3-10b).
+    expect(steps.every((step) => step.params.pyth === PYTH_DISABLED)).toBe(true);
   });
 
   it("uses placeholder feeds when no feeds file is given", () => {
@@ -148,6 +151,19 @@ describe("planConfig with a Config", () => {
       expect(step.params.maxConfBps).toBe(9);
       expect(step.params.overrideDelaySecs).toBe(1_234n);
       expect(step.params.automationAuthority.equals(automation)).toBe(true);
+    }
+  });
+
+  it("resends the on-chain Pyth fields, so a redeploy never clears a pinned signer (M3-10b)", () => {
+    const pyth = {
+      lazerSigner: Keypair.generate().publicKey,
+      feedIds: [922, 1292, 1163, 954, 1314, 1272, 1435],
+      maxAgeSecs: 45n,
+    };
+    const steps = planConfig(onChain(allPlaceholders(), { pyth }), { ...desired, feeds });
+    expect(steps.length).toBeGreaterThan(0);
+    for (const step of steps) {
+      expect(step.params.pyth).toEqual(pyth);
     }
   });
 

@@ -120,4 +120,13 @@ pub enum MeridianError {
     // ---- arithmetic (AB-12) -------------------------------------------------------------------
     #[msg("Arithmetic overflow")]
     MathOverflow,
+
+    // ---- Config v2 + migration (M3-10b). Appended after every earlier variant so existing
+    // error codes keep their numbers across the devnet upgrade. -------------------------------
+    #[msg("pyth_max_age_secs must be greater than zero")]
+    InvalidPythMaxAge,
+    #[msg("Config account is already migrated to the current layout")]
+    ConfigAlreadyMigrated,
+    #[msg("Config account is not a v1 Config (discriminator, size or bump mismatch)")]
+    ConfigLayoutMismatch,
 }

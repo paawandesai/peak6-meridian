@@ -8,7 +8,11 @@ import {
   DEFAULT_MAX_CONF_BPS,
   DEFAULT_MAX_STALENESS_SLOTS,
   DEFAULT_OVERRIDE_DELAY_SECS,
+  DEFAULT_PYTH_MAX_AGE_SECS,
   MAX_TICKER_SLOTS_PER_CALL,
+  PYTH_DISABLED,
+  pythConfigArg,
+  pythConfigFromAccount,
   TICKER_COUNT,
   tickerSlotArg,
   type TickerInput,
@@ -29,6 +33,7 @@ const scalars = {
   maxStalenessSlots: DEFAULT_MAX_STALENESS_SLOTS,
   maxConfBps: DEFAULT_MAX_CONF_BPS,
   overrideDelaySecs: DEFAULT_OVERRIDE_DELAY_SECS,
+  pyth: PYTH_DISABLED,
 };
 
 describe("ticker slots", () => {
@@ -85,6 +90,80 @@ describe("configParamsArg", () => {
     expect(configParamsArg({ ...scalars, maxConfBps: 10_000, tickers: [] }).maxConfBps).toBe(
       10_000,
     );
+  });
+});
+
+describe("Pyth config fields (M3-10b)", () => {
+  const signer = PublicKey.unique();
+  const feedIds = [922, 1292, 1163, 954, 1314, 1272, 1435];
+
+  it("encodes signer, feed ids and max age, and rides along in configParamsArg", () => {
+    const arg = pythConfigArg({ lazerSigner: signer, feedIds, maxAgeSecs: 45n });
+    expect(arg.pythLazerSigner.equals(signer)).toBe(true);
+    expect(arg.pythFeedIds).toEqual(feedIds);
+    expect(arg.pythMaxAgeSecs.toString()).toBe("45");
+    const params = configParamsArg({
+      ...scalars,
+      tickers: [],
+      pyth: { lazerSigner: signer, feedIds, maxAgeSecs: 45n },
+    });
+    expect(params.pythFeedIds).toEqual(feedIds);
+    expect(params.pythMaxAgeSecs.toString()).toBe("45");
+  });
+
+  it("defaults to no signer, no feeds and a positive max age", () => {
+    const arg = pythConfigArg(PYTH_DISABLED);
+    expect(arg.pythLazerSigner.equals(PublicKey.default)).toBe(true);
+    expect(arg.pythFeedIds).toEqual(new Array(TICKER_COUNT).fill(0));
+    expect(arg.pythMaxAgeSecs.toString()).toBe(DEFAULT_PYTH_MAX_AGE_SECS.toString());
+  });
+
+  it("rejects a wrong feed-id count, non-u32 ids and a non-positive or oversized max age", () => {
+    const base = { lazerSigner: signer, feedIds, maxAgeSecs: 30n };
+    expect(() => pythConfigArg({ ...base, feedIds: feedIds.slice(1) })).toThrow(/7 slots/);
+    for (const bad of [-1, 1.5, 2 ** 32]) {
+      expect(() => pythConfigArg({ ...base, feedIds: [bad, ...feedIds.slice(1)] })).toThrow(/u32/);
+    }
+    for (const maxAgeSecs of [0n, -1n, 1n << 63n]) {
+      expect(() => pythConfigArg({ ...base, maxAgeSecs })).toThrow(/positive i64/);
+    }
+  });
+
+  it("accepts every u32 feed id and positive i64 max age (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.array(fc.integer({ min: 0, max: 0xffff_ffff }), {
+          minLength: TICKER_COUNT,
+          maxLength: TICKER_COUNT,
+        }),
+        fc.bigInt({ min: 1n, max: (1n << 63n) - 1n }),
+        (ids, maxAgeSecs) => {
+          const arg = pythConfigArg({ lazerSigner: signer, feedIds: ids, maxAgeSecs });
+          return (
+            JSON.stringify(arg.pythFeedIds) === JSON.stringify(ids) &&
+            arg.pythMaxAgeSecs.toString() === maxAgeSecs.toString()
+          );
+        },
+      ),
+    );
+  });
+
+  it("passes on-chain values through, replacing a zero max age with the default", () => {
+    const kept = pythConfigFromAccount({
+      pythLazerSigner: signer,
+      pythFeedIds: feedIds,
+      pythMaxAgeSecs: { toString: () => "90" },
+    });
+    expect(kept.lazerSigner.equals(signer)).toBe(true);
+    expect(kept.feedIds).toEqual(feedIds);
+    expect(kept.maxAgeSecs).toBe(90n);
+    const zeroed = pythConfigFromAccount({
+      pythLazerSigner: PublicKey.default,
+      pythFeedIds: new Array(TICKER_COUNT).fill(0),
+      pythMaxAgeSecs: { toString: () => "0" },
+    });
+    expect(zeroed.maxAgeSecs).toBe(DEFAULT_PYTH_MAX_AGE_SECS);
+    expect(() => pythConfigArg(zeroed)).not.toThrow();
   });
 });
 

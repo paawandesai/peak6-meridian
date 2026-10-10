@@ -34,6 +34,7 @@ import {
   type MarketAddresses,
   type Meridian,
   type OrderKindName,
+  PYTH_DISABLED,
   symbolBytes,
   symbolFromBytes,
   type TickerInput,
@@ -318,6 +319,7 @@ async function main(): Promise<void> {
           maxStalenessSlots: 30n,
           maxConfBps: 5,
           overrideDelaySecs: 3_600n,
+          pyth: PYTH_DISABLED,
         },
         tickers,
       );
@@ -690,7 +692,7 @@ async function main(): Promise<void> {
     }
     sigs.push(
       await program.methods
-        .settleMarket()
+        .settleMarket(null)
         .accountsStrict({
           config: findConfigPda(programId).address,
           market: addresses.market,
@@ -698,6 +700,7 @@ async function main(): Promise<void> {
           feedTwelveData: localFeedPda(TRADED.symbol, 1),
           redstonePrice: null, // Local oracle path (Switchboard)
           oracleConfig: null, // Local oracle path
+          instructionsSysvar: null,
           payer: admin.publicKey,
         })
         .rpc({ commitment: "confirmed" }),

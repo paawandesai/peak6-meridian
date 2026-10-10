@@ -82,6 +82,42 @@ pub struct Config {
     pub tickers: [Ticker; TICKER_COUNT],
     /// PDA bump.
     pub bump: u8,
+    // ---- v2 (M3-10b): appended after `bump` so a v1 account is a byte-for-byte prefix of a
+    // v2 one; `migrate_config` grows the v1 devnet account in place and zero-fills these. ----
+    /// Pyth Lazer Ed25519 signer pubkey (D-055, M3-10b). Operator-controlled, never
+    /// hard-trusted from payload. Used to verify Pyth signed price updates.
+    pub pyth_lazer_signer: Pubkey,
+    /// Pyth feed IDs for MAG7 tickers, in the same order as `tickers`. Each u32 is the
+    /// numeric Pyth Pro feed ID. Zero means no Pyth feed configured for that ticker slot.
+    pub pyth_feed_ids: [u32; TICKER_COUNT],
+    /// Maximum age of Pyth timestamp in seconds (D-055). Pyth timestamps are in microseconds
+    /// and checked against clock.unix_timestamp (not slot-based like Core feeds).
+    pub pyth_max_age_secs: i64,
+}
+
+/// Bytes of the Pyth fields appended in v2: signer (32) + feed ids (7 × 4) + max age (8).
+pub const CONFIG_PYTH_FIELDS_LEN: usize = 32 + 4 * TICKER_COUNT + 8;
+/// Size of the current (v2) Config account, discriminator included.
+pub const CONFIG_LEN: usize = 8 + Config::INIT_SPACE;
+/// Size of the v1 Config account (before M3-10b), discriminator included: the devnet account
+/// created by M2-01 (1,076 bytes).
+pub const CONFIG_V1_LEN: usize = CONFIG_LEN - CONFIG_PYTH_FIELDS_LEN;
+/// Offset of `admin` in both layouts (right after the discriminator).
+pub const CONFIG_ADMIN_OFFSET: usize = 8;
+/// Offset of `bump`: the last byte of a v1 account, unchanged in v2.
+pub const CONFIG_BUMP_OFFSET: usize = CONFIG_V1_LEN - 1;
+
+// The migration relies on these exact sizes; a layout change must fail the build, not devnet.
+const _: () = assert!(CONFIG_V1_LEN == 1_076);
+const _: () = assert!(CONFIG_LEN == 1_144);
+
+/// The Pyth fields `migrate_config` may set while it grows a v1 account (M3-10b). `None`
+/// leaves them zeroed for a later `update_config`.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PythConfigParams {
+    pub pyth_lazer_signer: Pubkey,
+    pub pyth_feed_ids: [u32; TICKER_COUNT],
+    pub pyth_max_age_secs: i64,
 }
 
 impl Config {
@@ -115,6 +151,9 @@ pub struct ConfigParams {
     pub max_conf_bps: u16,
     pub override_delay_secs: u64,
     pub tickers: Vec<TickerSlot>,
+    pub pyth_lazer_signer: Pubkey,
+    pub pyth_feed_ids: [u32; TICKER_COUNT],
+    pub pyth_max_age_secs: i64,
 }
 
 impl ConfigParams {
@@ -171,13 +210,19 @@ impl ConfigParams {
     /// Validates against the current config and writes every field; `admin`, `paused` and
     /// `bump` are untouched. Nothing is written when validation fails.
     pub fn apply(&self, config: &mut Config, usdc_mint: Pubkey) -> Result<()> {
+        use crate::errors::MeridianError;
+
         let tickers = self.merged_tickers(&config.tickers)?;
+        require!(self.pyth_max_age_secs > 0, MeridianError::InvalidPythMaxAge);
         config.automation_authority = self.automation_authority;
         config.usdc_mint = usdc_mint;
         config.max_staleness_slots = self.max_staleness_slots;
         config.max_conf_bps = self.max_conf_bps;
         config.override_delay_secs = self.override_delay_secs;
         config.tickers = tickers;
+        config.pyth_lazer_signer = self.pyth_lazer_signer;
+        config.pyth_feed_ids = self.pyth_feed_ids;
+        config.pyth_max_age_secs = self.pyth_max_age_secs;
         Ok(())
     }
 }
