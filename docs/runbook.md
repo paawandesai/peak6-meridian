@@ -161,6 +161,39 @@ The script validates that `FAULT_INJECT_SOURCE` is only set on localnet (securit
 
 **Live LLM (optional):** Set `ENABLE_LIVE_LLM=1` to call the Anthropic API for the agent's investigation narrative. Default: uses the deterministic fallback (source table + median, no Claude call) per M3-07 AC3.
 
+## Pyth settlement on devnet (D-055, D-056): turning it on
+
+Off by default (`PYTH_SETTLEMENT_ENABLED` unset). Never do any step while a demo is being recorded on the live deployment. Each step is reversible; the order matters.
+
+**What it does.** From close + 5 min, for each ticker and trading date, automation asks Pyth Lazer for the update it signed at the market's `close_ts` (`POST /v1/price`, solana format, `fixed_rate@200ms`), checks it off-chain, then sends `[Ed25519 verify, settle_market × n]`. On chain, `settle_market` accepts it only if: signed by `pyth_lazer_signer`, the feed is the ticker's `pyth_feed_ids` slot, taken in `[close_ts, close_ts + pyth_max_age_secs]` and not in the future, and confidence ≤ `max_conf_bps` of the price. The Tiingo/Twelve Data date check still runs first; `pythVsOfficialBps` in the log compares Pyth's 16:00:00 price with the official close.
+
+**1. Upgrade the program** (the devnet binary from !151 cannot parse a real Pyth update). No account layout changes, only new error codes appended (6050–6052), so it is a plain upgrade: `make deploy-devnet DEPLOY_ARGS="--allow-upgrade"` with the usual deploy env. Check: `solana program show <program id> --url devnet` shows the new last-deploy slot. Rollback: redeploy the previous `.so` the same way.
+
+**2. Pin the Pyth fields** with the admin key (the Config is already v2 with zeroed Pyth fields, so `migrate-config` sends a pass-through `update_config` and re-reads the account):
+
+```bash
+SOLANA_RPC_URL=<devnet rpc> SOLANA_CLUSTER=devnet ADMIN_KEYPAIR_PATH=<admin keypair file> \
+PYTH_LAZER_SIGNER=9gKEEcFzSd1PDYBKWAKZi4Sq4ZCUaVX5oTr8kEjdwsfR PYTH_MAX_AGE_SECS=30 \
+DRY_RUN=1 make migrate-config    # read the "resending ..." line, then repeat without DRY_RUN
+```
+
+| Config field | Value | Why |
+|---|---|---|
+| `pyth_lazer_signer` | `9gKEEcFzSd1PDYBKWAKZi4Sq4ZCUaVX5oTr8kEjdwsfR` | Pyth Lazer production signer (D-056) |
+| `pyth_feed_ids` (slot order AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA) | `922,1292,1163,954,1314,1272,1435` (the default; pass `PYTH_FEED_IDS` only if the devnet slot order differs; check `tickers` with `solana account` or the app's status page first) | Pyth Pro feed ids |
+| `pyth_max_age_secs` | `30` | close window: the update at exactly `close_ts` is requested, 30 s is slack |
+| `max_conf_bps` | unchanged (`5`) | the 2026-10-09 closes had 1.16–2.89 bps |
+
+The command prints `verified: Pyth fields set; every other field unchanged` or fails without leaving a half-applied state. Rollback: `PYTH_LAZER_SIGNER=11111111111111111111111111111111` makes every Pyth settle fail with `PythWrongSigner`.
+
+**3. Flip the flag** on the Railway automation service: `PYTH_SETTLEMENT_ENABLED=true` and `PYTH_API_TOKEN` (the same Pyth Pro token the app uses on Vercel; add it on Railway if it is not there) as service variables, then redeploy. The startup log line `settlement_source` must say `pyth`. `settle-now` reads the same two variables. Rollback: `PYTH_SETTLEMENT_ENABLED=false` (or unset) and redeploy; `settlement_source` says `default`.
+
+**4. Watch the first market.** Groups are tried alphabetically, so the first Pyth settlement is **AAPL** for the first trading day after the flip (e.g. Mon 2026-10-12, 16:05 ET). In the Railway logs expect `event: "settled"`, `group: "AAPL:<date>"`, `source: "pyth"`, `confidenceBps` < 5 and `pythVsOfficialBps` in single digits, and on chain every AAPL market of that date `settled` with `settle_source = Oracle`. Then the other six tickers within a few minutes.
+
+**When it fails.** The job retries every minute for 15 min, then alerts and posts an incident, as on the default path. Causes by message: `pyth_lazer_signer is not set` (step 2 missing), `HTTP 403` (token not entitled to that feed), `HTTP 404` (no update at that close; retry), `wider than 5 bps` (unusually wide close: the admin override is the fallback), `not signed by the pinned pyth_lazer_signer` (Pyth rotated its key: re-read the storage account in D-056 and repeat step 2). Any market Pyth cannot settle is settled by `admin_settle_override` after `close_ts + override_delay_secs`, unchanged.
+
+**Local rehearsal (no devnet):** `scripts/e2e.sh --pyth` runs steps 2–4 against a throwaway validator with a live Pyth update (needs `PYTH_API_TOKEN` in the environment or `.env`).
+
 ## Friday
 
 Friday's recorded run (M3-09, plan M3 exit): the morning job creates the day's markets unattended, the market-maker quotes, **book coverage is measured over a 30-minute window (target ≥ 95% of open strikes two-sided)**, and the **16:05 ET settlement from Switchboard plus a redeem are recorded** in `docs/log.md` with signatures, explorer links and screen-capture paths. All times ET (`America/New_York`). Tools (both read-only, no key needed, `tests/e2e/src`, unit-tested on recorded streams):
