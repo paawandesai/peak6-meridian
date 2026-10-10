@@ -30,12 +30,9 @@ test.describe("Demo wallet (M4-07 AC9)", () => {
     // - Assert transaction confirmed
   });
 
-  test("demo wallet not offered on mainnet", async ({ page }) => {
+  test("demo wallet not offered on non-devnet", async ({ page }) => {
     const cluster = process.env.NEXT_PUBLIC_CLUSTER;
-    test.skip(
-      cluster === "devnet" || cluster === "localnet",
-      "This test requires mainnet-beta or unset cluster",
-    );
+    test.skip(cluster === "devnet", "Demo wallet is offered on devnet");
     await page.goto("/");
     await page.getByRole("button", { name: /connect wallet/i }).click();
     await expect(page.getByRole("button", { name: /try the demo/i })).not.toBeVisible();
