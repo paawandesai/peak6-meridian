@@ -25,6 +25,10 @@
  *   failure; then one alert and one incident (`POST /incidents`) are sent. After that it is retried
  *   quietly every 15 minutes, at most 8 times (two hours), then left to the `settle-now` CLI.
  *
+ * With `PYTH_SETTLEMENT_ENABLED=true` (off by default) a group is settled from Pyth's signed close
+ * instead (`pythSettle.ts`, D-055): same date check, pacing and retries, but no oracle update is
+ * built; failures follow the same alert path, and the admin override stays the fallback.
+ *
  * `settle_market` is permissionless: the payer only pays fees. The job never reads or needs the
  * automation key beyond using it as that payer (AB-19).
  */
@@ -36,6 +40,7 @@ import { type IsoDate } from "../calendar";
 import type { IncidentClient } from "../incidents";
 import { describeError, type Logger } from "../log";
 import type { PrevCloseResult } from "../prevCloses";
+import type { PythSettler } from "../pythSettle";
 import type { JobSpec } from "../scheduler";
 import type { OracleUpdateAdapter } from "../switchboard";
 import { type RunState } from "../state";
@@ -121,6 +126,8 @@ export interface SettleDeps {
   ) => Promise<TransactionInstruction[]>;
   readonly payer: PublicKey;
   readonly executor: TxExecutor;
+  /** Set only when Pyth settlement is enabled; replaces the oracle update + settle path. */
+  readonly pyth?: PythSettler | undefined;
   readonly alerter: Alerter;
   readonly incidents: IncidentClient;
   readonly state: RunState;
@@ -536,6 +543,11 @@ async function settleGroup(
     deps.log("warn", "balance_check_failed", { error: describeError(error) });
   });
 
+  if (deps.pyth !== undefined) {
+    await settleGroupFromPyth(deps, deps.pyth, key, markets, feeds, close.value.closeCents);
+    return;
+  }
+
   const slot = await deps.executor.currentSlot();
   const update = await deps.adapter.build({
     ticker: first.ticker,
@@ -575,6 +587,37 @@ async function settleGroup(
     reUpdates: report.reUpdates,
     signatures: report.signatures,
   });
+}
+
+/** The Pyth path of [`settleGroup`]; logs Pyth's close next to the official one. */
+async function settleGroupFromPyth(
+  deps: SettleDeps,
+  pyth: PythSettler,
+  key: string,
+  markets: readonly OpenMarket[],
+  feeds: readonly [PublicKey, PublicKey],
+  officialCents: number,
+): Promise<void> {
+  const reports = await pyth.settle(markets, feeds);
+  for (const report of reports) {
+    deps.log("info", "settled", {
+      group: key,
+      source: "pyth",
+      closeTs: report.closeTs,
+      markets: report.markets,
+      transactions: report.signatures.length,
+      signatures: report.signatures,
+      pythCents: Number(report.priceCents),
+      officialCents,
+      pythVsOfficialBps: bpsDiff(report.priceCents, officialCents),
+      confidenceBps: report.confidenceBps,
+    });
+  }
+}
+
+/** (pyth − official) / official in basis points, two decimals (logs only). */
+function bpsDiff(pythCents: bigint, officialCents: number): number {
+  return Math.round(((Number(pythCents) - officialCents) / officialCents) * 1_000_000) / 100;
 }
 
 /** The scheduled job; `signer` is the public key of the payer. */

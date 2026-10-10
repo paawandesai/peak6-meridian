@@ -9,7 +9,7 @@ import { Connection, PublicKey, SystemProgram } from "@solana/web3.js";
 import { createAlerter } from "./alerts";
 import { chainMarketOps } from "./cli/createMarkets";
 import { assertCluster } from "./cluster";
-import { loadAutomationKey, parseEnv } from "./config";
+import { loadAutomationKey, parseEnv, parsePythSettlementEnv } from "./config";
 import { checkBalance, createSettlementJob, JOB_OPTIONS, SettleMemory } from "./jobs/settle";
 import { consoleLogger, describeError } from "./log";
 import { connectionOpenTimeRpc, createOpenTimeIndex } from "./openTimes";
@@ -22,7 +22,9 @@ const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ
 
 async function main(): Promise<void> {
   const env = parseEnv(process.env);
+  const pyth = parsePythSettlementEnv(process.env);
   const log = consoleLogger;
+  log("info", "settlement_source", { source: pyth === null ? "default" : "pyth" });
   // Refuse to run against anything but localnet or devnet, decided before any key is used.
   const cluster = await assertCluster({
     cluster: env.SOLANA_CLUSTER,
@@ -87,6 +89,7 @@ async function main(): Promise<void> {
             cluster === "localnet" && env.ADMIN_KEYPAIR_PATH !== undefined
               ? readKeypairFile(env.ADMIN_KEYPAIR_PATH)
               : undefined,
+          pyth,
         },
         cluster,
         signer,
@@ -120,6 +123,7 @@ async function main(): Promise<void> {
           buildSettleIxs: runtime.buildSettleIxs,
           payer: signer.publicKey,
           executor: runtime.executor,
+          pyth: runtime.pyth,
           alerter,
           incidents: runtime.incidents,
           state,
