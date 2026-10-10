@@ -32,9 +32,10 @@ import contextlib
 import json
 import logging
 import os
+import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -61,8 +62,11 @@ from .loop import MarketMakerLoop
 from .session import session_trading_date
 from .types import MarketState
 
+# stdout, not stderr: Railway tags every stderr line as an error.
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    stream=sys.stdout,
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 # httpx/httpcore log every request URL at INFO; a dedicated RPC URL carries its API key in the
 # query string, so keep them at WARNING (CLAUDE.md: never log keys).
@@ -208,6 +212,31 @@ async def update_market_cache(
         await asyncio.sleep(interval_secs)
 
 
+FIRST_FAIR_VALUES_TIMEOUT_SECS = 60.0
+
+
+async def wait_for_first_fair_values(
+    snapshot: Callable[[], Sequence[object]],
+    timeout_secs: float = FIRST_FAIR_VALUES_TIMEOUT_SECS,
+    poll_secs: float = 0.5,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> int:
+    """Waits until the fair-value cache holds at least one value, so the MM's first tick does
+    not pull every quote for want of a value that is a refresh away. Returns how many values
+    were ready; 0 after `timeout_secs` (the MM then starts anyway and pulls as usual)."""
+    deadline = clock() + timeout_secs
+    while True:
+        ready = len(snapshot())
+        if ready > 0:
+            logger.info("First fair values ready: %d markets", ready)
+            return ready
+        if clock() >= deadline:
+            logger.warning("No fair values after %.0fs; starting the MM anyway", timeout_secs)
+            return 0
+        await sleep(poll_secs)
+
+
 async def main() -> None:
     """Start the quant service with MM loop and HTTP endpoints."""
     # Load config from environment
@@ -279,6 +308,7 @@ async def main() -> None:
         update_market_cache(market_source, market_cache, interval_secs=30.0)
     )
     refresher_task = asyncio.create_task(run_refresher(fair_value_cache))
+    await wait_for_first_fair_values(fair_value_cache.snapshot)
 
     # Start MM loop (blocks until stopped)
     logger.info("Starting market maker loop (interval: %.1fs)", config.loop_interval_secs)
