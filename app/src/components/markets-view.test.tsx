@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { MarketsView } from "./markets-view";
-import { tradeHref } from "@/app/trade/_lib/href";
 import { market, reader, withReader } from "@/test-utils";
 
 const NOW = 1_800_000_000;
@@ -94,7 +93,7 @@ describe("MarketsView", () => {
     render(
       withReader(
         reader({ listMarkets: () => Promise.resolve(markets) }),
-        <MarketsView nowSecs={NOW} tradeHref={tradeHref} />,
+        <MarketsView nowSecs={NOW} />,
       ),
     );
 
