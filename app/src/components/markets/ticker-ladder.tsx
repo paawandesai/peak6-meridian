@@ -1,10 +1,20 @@
-import { AsOf } from "../ui";
+import { PythPrice, PythPricePlaceholder } from "../pyth-price";
 import { StrikeRow, type StrikeData } from "./strike-row";
-import type { LivePrice } from "@/lib/market-data";
-import { formatUsdCents } from "@/lib/display";
+import type { PythQuote } from "@/lib/pyth-quotes";
 import type { BadgeContext } from "@/lib/market-view";
 import { type MarketRow } from "@/lib/markets";
-import { formatEtHm, formatEtHms } from "@/lib/time";
+import { formatEtHm } from "@/lib/time";
+
+/**
+ * The header close time: the soonest close among markets still trading (close in the future);
+ * when none are open, the earliest close overall.
+ */
+export function soonestOpenClose(markets: readonly MarketRow[], nowSecs: number): bigint {
+  const now = BigInt(Math.floor(nowSecs));
+  const min = (list: readonly MarketRow[]) =>
+    list.reduce<bigint | null>((m, row) => (m === null || row.closeTs < m ? row.closeTs : m), null);
+  return min(markets.filter((m) => !m.settled && m.closeTs > now)) ?? min(markets) ?? 0n;
+}
 
 /**
  * One ticker's strike ladder. The `h2` holds only the symbol; the live price, as-of time and the
@@ -14,7 +24,7 @@ import { formatEtHm, formatEtHms } from "@/lib/time";
 export function TickerLadder({
   ticker,
   markets,
-  price,
+  pythQuote,
   data,
   ctx,
   tradeHref,
@@ -22,37 +32,27 @@ export function TickerLadder({
   readonly ticker: string;
   /** Ascending strike. */
   readonly markets: readonly MarketRow[];
-  readonly price: LivePrice | undefined;
+  /** Pyth live quote (M3-10, D-055: Pyth Pro is primary demo price source). */
+  readonly pythQuote: PythQuote | undefined;
   readonly data: (market: MarketRow) => StrikeData;
   readonly ctx: BadgeContext;
   readonly tradeHref?: ((market: MarketRow) => string) | undefined;
 }) {
-  const live = price === undefined ? null : BigInt(price.price_cents);
+  // Use Pyth quote for the live price marker (D-055: Pyth Pro is primary demo price source)
+  const live = pythQuote === undefined ? null : BigInt(pythQuote.price_cents);
   const strikes = markets.map((market) => market.strikeCents);
   // The live price falls between the strike at or below it and the next one up.
   const belowIndex =
     live === null ? -1 : strikes.reduce((found, strike, i) => (strike <= live ? i : found), -1);
-  const earliestClose = markets.reduce(
-    (min, m) => (m.closeTs < min ? m.closeTs : min),
-    markets[0]?.closeTs ?? 0n,
-  );
-  const asOfSecs = price === undefined ? null : Math.floor(Date.parse(price.as_of) / 1000);
+  const earliestClose = soonestOpenClose(markets, ctx.nowSecs);
   return (
     <section aria-label={ticker}>
       <div className="mb-mer-2 flex flex-wrap items-baseline gap-x-mer-4 gap-y-mer-1">
         <h2 className="text-mer-lg font-semibold">{ticker}</h2>
-        {price === undefined || asOfSecs === null ? (
-          <span className="text-mer-sm text-mer-ink-muted">— price not live yet</span>
+        {pythQuote === undefined ? (
+          <PythPricePlaceholder />
         ) : (
-          <span className="flex flex-wrap items-baseline gap-x-mer-2">
-            <span className="mer-num text-mer-md font-medium">
-              {formatUsdCents(BigInt(price.price_cents))}
-            </span>
-            <AsOf
-              time={formatEtHms(asOfSecs)}
-              ageSecs={Math.max(0, ctx.nowSecs - asOfSecs) + (price.stale ? 11 : 0)}
-            />
-          </span>
+          <PythPrice quote={pythQuote} nowMs={ctx.nowSecs * 1000} />
         )}
         <span className="text-mer-sm text-mer-ink-muted">
           {markets.length} strikes · closes {formatEtHm(earliestClose)} ET

@@ -30,11 +30,10 @@
 | `MERIDIAN_DEVNET_IDL` | tests | Path to the `make build-devnet` IDL (`target/idl/meridian.json`) for the AB-22 check; the M2-01 test sets it itself and fails if the file is missing | tests only | `target/idl/meridian.json` |
 | `SWITCHBOARD_QUEUE` | automation, scripts | Switchboard devnet queue pubkey | devnet | `<queue pubkey>` |
 | `SWITCHBOARD_FEEDS_JSON` | automation, scripts | Feed pubkeys per ticker and source | devnet | `{"AAPL":["<tiingo feed>","<twelvedata feed>"],...}` |
-| `TIINGO_API_KEY` | automation, app server, quant, ops-agent, feed jobs, demo replay | Tiingo API (live + historical) | devnet | `test-tiingo-key` |
+| `TIINGO_API_KEY` | automation, app server, quant, ops-agent, feed jobs | Tiingo API | devnet | `test-tiingo-key` |
 | `TWELVEDATA_API_KEY` | same | Twelve Data API | devnet | `test-twelvedata-key` |
 | `FINNHUB_API_KEY` | app server, quant, ops-agent | Finnhub live quotes | no | `test-finnhub-key` |
-| `DEMO_MODE` | automation, services | `live` (default) or `replay` - historical price replay for demo | no | `live` |
-| `DEMO_REPLAY_DATE` | automation, services | YYYY-MM-DD to replay (required when DEMO_MODE=replay) | no | `2024-10-08` |
+| `PYTH_API_TOKEN` | automation, quant | Pyth Pro (Lazer) API for signed price updates (server-only secret, never in tests/logs/commits) | M3 | `test-pyth-token` |
 | `ANTHROPIC_API_KEY` | ops-agent | Claude API | M3 | `sk-ant-test-placeholder` |
 | `OPS_AGENT_MODEL` | ops-agent | Model ID | no | `claude-sonnet-5-5` |
 | `OPS_AGENT_BUDGET_USD` | ops-agent | Hard spend cap; agent refuses calls once reached | no (default 20) | `20` |
@@ -44,10 +43,7 @@
 | `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | CI deploy job only | Deploy the app with the Vercel CLI (IDs come from `vercel link`) | M2 | `test-vercel-token` |
 | `RAILWAY_TOKEN` | CI deploy job only | Railway project token for deploying services | M2 | `test-railway-token` |
 | `FAULT_INJECT_SOURCE` | local demo only | Make one fixture source report a bad close; refused unless `SOLANA_CLUSTER=localnet` | no | `twelvedata` |
-| `DEMO_MODE` | automation, services | `live` (default) or `replay` - historical price replay for demo | no | `live` |
-| `DEMO_REPLAY_DATE` | automation, services | YYYY-MM-DD to replay (required when DEMO_MODE=replay) | no | `2024-10-08` |
 | `NEXT_PUBLIC_CLUSTER` / `NEXT_PUBLIC_RPC_URL` / `NEXT_PUBLIC_PROGRAM_ID` / `NEXT_PUBLIC_USDC_MINT` | app (browser) | Public config only (never secrets) | yes | same as above |
-| `NEXT_PUBLIC_DEMO_MODE` / `NEXT_PUBLIC_DEMO_REPLAY_DATE` | app (browser) | Demo mode config for UI banner (M4-08) | no | `live` / `` |
 On-chain parameters (staleness, spread, override delay) are in the Config account, not env (see [domain.md](domain.md#settlement-rules)).
 
 ## Devnet deploy

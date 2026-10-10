@@ -1,0 +1,94 @@
+# Fresh-clone reproducibility test (M4-01 AC1 + AC2)
+# Tests that a fresh Ubuntu 24.04 environment can build and run Meridian
+#
+# AC1: From a fresh Ubuntu 24.04 container with only git, running
+# `make toolchain && make install && make build-local && make e2e` succeeds
+# within 20 minutes (1200 seconds) total.
+#
+# AC2: Validator :8899 and app :3000 both listening within 15 minutes (900s).
+#
+# NOTE: Ubuntu 24.04 CI evidence will be provided by !82 (CI fresh-clone job, currently PARKED).
+#
+# Usage (MR verification - test this specific commit):
+#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=d8d0ef6 .
+#
+# Usage (CI - verify MR HEAD automatically):
+#   docker build -f Dockerfile.fresh-clone-test --build-arg GIT_COMMIT=$CI_COMMIT_SHA .
+#
+# Usage (test main branch):
+#   docker build -f Dockerfile.fresh-clone-test .
+#
+# GIT_COMMIT takes precedence over GIT_BRANCH. Without --build-arg GIT_COMMIT, defaults to main.
+
+FROM ubuntu:24.04
+
+# Install git and build-essential (make) as prerequisites
+RUN apt-get update && apt-get install -y git build-essential && rm -rf /var/lib/apt/lists/*
+
+# Clone repo preserving .git and checkout specific commit for verification.
+# GIT_COMMIT must be passed via --build-arg to verify a specific SHA.
+# In CI: --build-arg GIT_COMMIT=$CI_COMMIT_SHA
+# Locally: --build-arg GIT_COMMIT=$(git rev-parse HEAD)
+# Falls back to GIT_BRANCH if GIT_COMMIT is not provided.
+# For private repos, pass --build-arg GIT_TOKEN=$CI_JOB_TOKEN in CI.
+ARG GIT_REPO=https://labs.gauntletai.com/paawandesai/peak6-meridian.git
+ARG GIT_TOKEN
+ARG GIT_COMMIT
+ARG GIT_BRANCH=main
+WORKDIR /workspace
+RUN if [ -n "${GIT_TOKEN}" ]; then \
+      echo "Cloning with credentials (private repo)"; \
+      git clone https://gitlab-ci-token:${GIT_TOKEN}@labs.gauntletai.com/paawandesai/peak6-meridian.git meridian; \
+    else \
+      echo "Cloning without credentials (public repo or COPY)"; \
+      git clone ${GIT_REPO} meridian; \
+    fi
+WORKDIR /workspace/meridian
+RUN if [ -n "${GIT_COMMIT}" ]; then \
+      echo "Checking out commit ${GIT_COMMIT} for verification"; \
+      git checkout ${GIT_COMMIT}; \
+    else \
+      echo "Checking out branch ${GIT_BRANCH}"; \
+      git checkout ${GIT_BRANCH}; \
+    fi
+
+# AC1: whole sequence in single 20-minute budget
+RUN timeout 1200 bash -c 'set -e && \
+    cp .env.example .env && \
+    make toolchain && \
+    make install && \
+    make build-local && \
+    make e2e' || (echo "FAIL: AC1 sequence exceeded 20 minutes or failed" && exit 1)
+
+RUN echo "PASS: AC1 complete - full sequence in <20 minutes"
+
+# AC2: validate validator :8899 and app :3000 start within 15 minutes
+RUN timeout 900 bash -c ' \
+    set -e; \
+    echo "Starting make dev..."; \
+    make dev &>/tmp/dev.log & \
+    DEV_PID=$!; \
+    trap "kill -TERM -$DEV_PID 2>/dev/null || true; wait || true" EXIT; \
+    echo "Waiting for validator :8899 and app :3000..."; \
+    VALIDATOR_UP=false; \
+    APP_UP=false; \
+    for i in {1..900}; do \
+        if ! $VALIDATOR_UP && timeout 2 bash -c "cat < /dev/null > /dev/tcp/localhost/8899" 2>/dev/null; then \
+            echo "validator :8899 listening after $i seconds"; \
+            VALIDATOR_UP=true; \
+        fi; \
+        if ! $APP_UP && timeout 2 bash -c "cat < /dev/null > /dev/tcp/localhost/3000" 2>/dev/null; then \
+            echo "app :3000 listening after $i seconds"; \
+            APP_UP=true; \
+        fi; \
+        if $VALIDATOR_UP && $APP_UP; then \
+            echo "PASS: AC2 - both services up after $i seconds (<15 minutes)"; \
+            exit 0; \
+        fi; \
+        sleep 1; \
+    done; \
+    echo "FAIL: AC2 - services did not both start within 15 minutes"; \
+    [ -f /tmp/dev.log ] && tail -100 /tmp/dev.log; \
+    exit 1' || (echo "FAIL: AC2 exceeded timeout or failed" && exit 1)
+
+RUN echo "PASS: AC2 complete - validator and app up in <15 minutes"

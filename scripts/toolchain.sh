@@ -67,6 +67,7 @@ install_rust() {
     rustup toolchain install "$RUST_VERSION" --profile minimal --no-self-update
   fi
   rustup component add --toolchain "$RUST_VERSION" rustfmt clippy llvm-tools-preview
+  rustup default "$RUST_VERSION"
 }
 
 # cargo-build-sbf downloads the SBF platform tools on first use and cannot tell a finished

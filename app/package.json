@@ -22,7 +22,9 @@
     "@solana/wallet-adapter-react": "0.15.40",
     "@solana/wallet-adapter-react-ui": "0.9.40",
     "@solana/wallet-adapter-solflare": "0.6.34",
+    "@solana/wallet-standard-wallet-adapter-react": "^1.1.8",
     "@solana/web3.js": "1.99.0",
+    "decimal.js": "^10.6.0",
     "next": "15.5.27",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -41,5 +43,8 @@
     "postcss": "8.5.29",
     "tailwindcss": "4.3.3",
     "tsx": "4.23.15"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
