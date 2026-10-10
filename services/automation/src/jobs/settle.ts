@@ -1,12 +1,29 @@
 /**
- * The settlement job (FR-14, NFR-04, NFR-06; domain.md § Settlement rules): at close + 5 minutes
- * (early-close aware, it simply follows each market's `close_ts`) settle every open market.
+ * The settlement job (FR-14, NFR-04, NFR-06; domain.md § Settlement rules): from close + 5 minutes
+ * settle every open market, per ticker and trading date ("group").
  *
- * Per ticker and trading date: first the off-chain date check (both data sources must report the
- * market's trading date as their latest daily bar, else NOTHING is sent: AB-03), then one
- * oracle-update + `settle_market` transaction set (see `settleTx.ts`). A failing ticker is
- * retried every 30 s for 15 minutes; after that one alert and one incident (`POST /incidents`)
- * are sent. Settled markets are skipped, so a re-run after success sends nothing (NFR-05).
+ * Per group: first the off-chain date check (both data sources must report the market's trading
+ * date as their latest daily bar, else NOTHING is sent: AB-03), then one oracle-update +
+ * `settle_market` transaction set (see `settleTx.ts`). Settled markets are skipped, so a re-run
+ * after success sends nothing (NFR-05).
+ *
+ * Pacing (#53). The job runs every minute and every attempt costs data-API requests (Tiingo and
+ * Twelve Data, and on devnet the Switchboard oracles fetch both again with our keys), so:
+ * - A group is only considered once its trading date's regular session has really completed: an
+ *   NYSE trading day whose official close (16:00 ET, or 13:00 ET on early closes) plus the settle
+ *   delay has passed in real time, whatever the market's on-chain `close_ts` says. Weekend or
+ *   holiday groups (deliberate demo markets) and future sessions are logged once per process and
+ *   never reach the data APIs; an admin settles weekend demo markets by override.
+ * - At most one attempt per group per run, and at most `maxApiCallsPerRun` data-API requests per
+ *   run (each attempt reserves its worst case up front). Groups that do not fit wait for the next
+ *   run, least recently attempted first, so a backlog (e.g. a cold start after a redeploy, when
+ *   this in-process memory is empty) is spread over several runs instead of bursting.
+ * - A rate limit (HTTP 429, honouring `Retry-After`) stops the run's remaining attempts and pauses
+ *   every data-API request across runs with exponential backoff (2, 4, 8 ... minutes, capped at
+ *   60), reset by the next answer that is not a rate limit.
+ * - A failing group is retried on later runs (about once a minute) for 15 minutes from its first
+ *   failure; then one alert and one incident (`POST /incidents`) are sent. After that it is retried
+ *   quietly every 15 minutes, at most 8 times (two hours), then left to the `settle-now` CLI.
  *
  * `settle_market` is permissionless: the payer only pays fees. The job never reads or needs the
  * automation key beyond using it as that payer (AB-19).
@@ -23,18 +40,26 @@ import type { JobSpec } from "../scheduler";
 import type { OracleUpdateAdapter } from "../switchboard";
 import { type RunState } from "../state";
 import { planSettlement, planUpdateTx, sendPlan, type TxExecutor } from "../settleTx";
+import {
+  attemptCost,
+  backoffUntil,
+  DEFAULT_MAX_API_CALLS_PER_RUN,
+  parseRetryAfterMs,
+  sessionGate,
+  VERIFY_API_CALLS,
+  type SkipReason,
+} from "../settlePacing";
 
-/** The job checks for due markets every minute. */
+/** The job checks for due markets every minute (one attempt per group per run). */
 export const SETTLEMENT_CRON = "* * * * *";
-/** Settle this long after `close_ts` (domain.md: close + 5 min). */
+/** Settle this long after the close (domain.md: close + 5 min). */
 export const SETTLE_DELAY_SECS = 300;
-export const RETRY_EVERY_MS = 30_000;
+/** A failing group is retried on every run for this long after its first failure, then alerted. */
 export const RETRY_WINDOW_MS = 15 * 60_000;
 /**
- * After the 15-minute window and the alert, a still-failing ticker is retried quietly this
- * often, at most [`MAX_QUIET_ATTEMPTS`] times (two hours), then left to `settle-now`. Every
- * attempt calls both data APIs, so retrying every minute forever could burn the Twelve Data
- * daily quota and starve the next morning's job.
+ * After the 15-minute window and the alert, a still-failing group is retried quietly this often,
+ * at most [`MAX_QUIET_ATTEMPTS`] times (two hours), then left to `settle-now`, so a group that
+ * cannot settle never burns the Twelve Data daily quota the next morning's job needs.
  */
 export const QUIET_RETRY_MS = 15 * 60_000;
 export const MAX_QUIET_ATTEMPTS = 8;
@@ -65,24 +90,26 @@ export interface SettleChain {
 }
 
 export interface SettleOptions {
+  /** Seconds after both the market's `close_ts` and the session's official close. */
   readonly delaySecs: number;
-  readonly retryEveryMs: number;
+  /** How long a failing group is retried before the alert (0: alert on the first failure). */
   readonly windowMs: number;
   readonly minBalanceLamports: number;
+  /** Data-API requests one run may cause, oracle-side fetches included (#53). */
+  readonly maxApiCallsPerRun: number;
   /** Restricts the run to this ET date (`settle-now --date`). */
   readonly onlyDate?: IsoDate;
 }
 
 export const JOB_OPTIONS: SettleOptions = {
   delaySecs: SETTLE_DELAY_SECS,
-  retryEveryMs: RETRY_EVERY_MS,
   windowMs: RETRY_WINDOW_MS,
   minBalanceLamports: MIN_BALANCE_LAMPORTS,
+  maxApiCallsPerRun: DEFAULT_MAX_API_CALLS_PER_RUN,
 };
 
 export interface SettleDeps {
   readonly now: () => Date;
-  readonly sleep: (ms: number) => Promise<void>;
   readonly chain: SettleChain;
   /** Both sources' bar for `date` (the market's trading date); not ok = wrong date or sources disagree. */
   readonly verifyClose: (ticker: string, date: IsoDate) => Promise<PrevCloseResult>;
@@ -99,32 +126,87 @@ export interface SettleDeps {
   readonly state: RunState;
   readonly log: Logger;
   readonly options: SettleOptions;
-  /** Survives across runs of one process: what was already alerted. */
+  /** Survives across runs of one process: retry schedule, alerts, rate-limit backoff. */
   readonly memory?: SettleMemory;
 }
 
+/**
+ * What the job remembers between runs. In-process only: a redeploy starts empty, which is why the
+ * per-run cap (not this memory) is what bounds a cold start.
+ */
 export class SettleMemory {
   readonly alerted = new Set<string>();
-  /** When each alerted group was last attempted, and how many quiet attempts it has had. */
+  /** Start of each failing group's 15-minute window. */
+  readonly firstFailureMs = new Map<string, number>();
   readonly lastAttemptMs = new Map<string, number>();
+  readonly attempts = new Map<string, number>();
+  readonly lastError = new Map<string, string>();
+  /** Attempts made after the alert. */
   readonly quietAttempts = new Map<string, number>();
   readonly gaveUp = new Set<string>();
+  /** `group|reason` already logged as skipped (no completed session). */
+  readonly skipLogged = new Set<string>();
+  /** No data-API request before this instant (rate-limit backoff, shared by every group). */
+  backoffUntilMs = 0;
+  /** Consecutive rate limits; the backoff doubles with each. */
+  rateLimitStrikes = 0;
+  /** The backoff episode already logged as deferring groups. */
+  backoffLoggedUntilMs = 0;
   lowBalanceAlerted = false;
 
   forget(group: string): void {
     this.alerted.delete(group);
+    this.firstFailureMs.delete(group);
     this.lastAttemptMs.delete(group);
+    this.attempts.delete(group);
+    this.lastError.delete(group);
     this.quietAttempts.delete(group);
     this.gaveUp.delete(group);
+    for (const entry of [...this.skipLogged]) {
+      if (entry.startsWith(`${group}|`)) {
+        this.skipLogged.delete(entry);
+      }
+    }
+  }
+
+  /** Forgets every group that is no longer open and due (settled by us, by anyone, or overridden). */
+  retain(groups: ReadonlySet<string>): void {
+    const known = [
+      ...this.alerted,
+      ...this.lastAttemptMs.keys(),
+      ...this.firstFailureMs.keys(),
+      ...[...this.skipLogged].map((entry) => entry.split("|")[0] ?? ""),
+    ];
+    for (const group of new Set(known)) {
+      if (!groups.has(group)) {
+        this.forget(group);
+      }
+    }
   }
 }
 
 export interface SettleResult {
-  /** `idle`: nothing was due. */
+  /** `idle`: no attempt was made (nothing due, or everything due was skipped or deferred). */
   readonly status: "idle" | "ok" | "failed";
   readonly settled: number;
+  /** Group attempts made by this run (at most one per group). */
   readonly attempts: number;
   readonly failures: readonly { readonly group: string; readonly reason: string }[];
+  /** Due groups whose session has not completed: never sent to the data APIs. */
+  readonly skipped: readonly { readonly group: string; readonly reason: SkipReason }[];
+  /** Groups left for a later run by the per-run cap or the rate-limit backoff. */
+  readonly deferred: readonly string[];
+}
+
+/** Thrown by an attempt that a data source rate-limited. */
+export class RateLimitedError extends Error {
+  constructor(
+    message: string,
+    readonly retryAfter: string | null,
+  ) {
+    super(message);
+    this.name = "RateLimitedError";
+  }
 }
 
 export function isoDate(tradingDate: number): IsoDate {
@@ -136,7 +218,7 @@ function groupKey(market: OpenMarket): string {
   return `${market.ticker}:${isoDate(market.tradingDate)}`;
 }
 
-/** Due, open markets grouped by ticker and trading date. */
+/** Open markets past their `close_ts` + delay, grouped by ticker and trading date. */
 function dueGroups(
   open: readonly OpenMarket[],
   nowMs: number,
@@ -155,122 +237,246 @@ function dueGroups(
   return groups;
 }
 
+interface Candidates {
+  /** Groups to attempt this run, in order: least recently attempted first. */
+  readonly eligible: string[];
+  readonly skipped: { readonly group: string; readonly reason: SkipReason }[];
+}
+
+/** Drops groups without a completed session and alerted groups not yet due for a quiet retry. */
+function selectCandidates(
+  deps: SettleDeps,
+  memory: SettleMemory,
+  due: ReadonlyMap<string, readonly OpenMarket[]>,
+  nowMs: number,
+): Candidates {
+  const eligible: string[] = [];
+  const skipped: { group: string; reason: SkipReason }[] = [];
+  for (const [key, markets] of due) {
+    const tradingDate = markets[0]?.tradingDate ?? 0;
+    const gate = sessionGate(isoDate(tradingDate), nowMs, deps.options.delaySecs);
+    if (!gate.ok) {
+      skipped.push({ group: key, reason: gate.reason });
+      if (!memory.skipLogged.has(`${key}|${gate.reason}`)) {
+        memory.skipLogged.add(`${key}|${gate.reason}`);
+        deps.log("info", "settle_skipped_no_session", {
+          group: key,
+          reason: gate.reason,
+          detail: gate.detail,
+          markets: markets.length,
+        });
+      }
+      continue;
+    }
+    if (memory.alerted.has(key)) {
+      const quiet = memory.quietAttempts.get(key) ?? 0;
+      if (quiet >= MAX_QUIET_ATTEMPTS) {
+        if (!memory.gaveUp.has(key)) {
+          memory.gaveUp.add(key);
+          deps.log("error", "settlement_gave_up", { group: key, quietAttempts: quiet });
+        }
+        continue;
+      }
+      if (nowMs - (memory.lastAttemptMs.get(key) ?? 0) < QUIET_RETRY_MS) {
+        continue;
+      }
+    }
+    eligible.push(key);
+  }
+  const last = (key: string): number => memory.lastAttemptMs.get(key) ?? -1;
+  eligible.sort((a, b) => last(a) - last(b) || a.localeCompare(b));
+  return { eligible, skipped };
+}
+
+interface Attempts {
+  settled: number;
+  readonly attempted: string[];
+  readonly failed: Map<string, string>;
+  readonly deferred: string[];
+}
+
+/** At most one attempt per candidate, within the run's data-API budget and outside any backoff. */
+async function attemptCandidates(
+  deps: SettleDeps,
+  memory: SettleMemory,
+  due: ReadonlyMap<string, readonly OpenMarket[]>,
+  candidates: readonly string[],
+): Promise<Attempts> {
+  const cap = deps.options.maxApiCallsPerRun;
+  const cost = attemptCost(deps.adapter.kind);
+  const perUpdate = cost - VERIFY_API_CALLS;
+  // Every oracle update is counted: re-updates of a split plan are charged after the fact.
+  let updates = 0;
+  const adapter: OracleUpdateAdapter = {
+    kind: deps.adapter.kind,
+    build: (request) => {
+      updates += 1;
+      return deps.adapter.build(request);
+    },
+  };
+  const out: Attempts = { settled: 0, attempted: [], failed: new Map(), deferred: [] };
+  let spent = 0;
+  for (const key of candidates) {
+    const markets = due.get(key) ?? [];
+    const nowMs = deps.now().getTime();
+    if (markets.length === 0 || nowMs < memory.backoffUntilMs || spent + cost > cap) {
+      out.deferred.push(key);
+      continue;
+    }
+    const updatesBefore = updates;
+    out.attempted.push(key);
+    memory.lastAttemptMs.set(key, nowMs);
+    memory.attempts.set(key, (memory.attempts.get(key) ?? 0) + 1);
+    if (memory.alerted.has(key)) {
+      memory.quietAttempts.set(key, (memory.quietAttempts.get(key) ?? 0) + 1);
+    }
+    try {
+      await settleGroup({ ...deps, adapter }, memory, key, markets);
+      out.settled += markets.length;
+      memory.forget(key);
+      memory.rateLimitStrikes = 0;
+    } catch (error) {
+      const reason = describeError(error);
+      out.failed.set(key, reason);
+      memory.lastError.set(key, reason);
+      if (!memory.firstFailureMs.has(key)) {
+        memory.firstFailureMs.set(key, nowMs);
+      }
+      deps.log("warn", "settle_attempt_failed", {
+        group: key,
+        attempt: memory.attempts.get(key),
+        reason,
+      });
+      if (error instanceof RateLimitedError) {
+        startBackoff(deps, memory, key, error);
+      } else {
+        memory.rateLimitStrikes = 0;
+      }
+    } finally {
+      spent += VERIFY_API_CALLS + (updates - updatesBefore) * perUpdate;
+    }
+  }
+  logDeferred(deps, memory, out.deferred, spent);
+  return out;
+}
+
+function startBackoff(
+  deps: SettleDeps,
+  memory: SettleMemory,
+  group: string,
+  error: RateLimitedError,
+): void {
+  const nowMs = deps.now().getTime();
+  memory.rateLimitStrikes += 1;
+  memory.backoffUntilMs = backoffUntil(
+    nowMs,
+    memory.rateLimitStrikes,
+    parseRetryAfterMs(error.retryAfter, nowMs),
+  );
+  deps.log("warn", "settle_rate_limited", {
+    group,
+    strikes: memory.rateLimitStrikes,
+    retryAfter: error.retryAfter,
+    resumeAt: new Date(memory.backoffUntilMs).toISOString(),
+  });
+}
+
+/** One line per run while the budget defers groups; one line per backoff episode. */
+function logDeferred(
+  deps: SettleDeps,
+  memory: SettleMemory,
+  deferred: readonly string[],
+  spent: number,
+): void {
+  if (deferred.length === 0) {
+    return;
+  }
+  const backingOff = deps.now().getTime() < memory.backoffUntilMs;
+  if (backingOff && memory.backoffLoggedUntilMs === memory.backoffUntilMs) {
+    return;
+  }
+  if (backingOff) {
+    memory.backoffLoggedUntilMs = memory.backoffUntilMs;
+  }
+  deps.log("info", "settle_deferred", {
+    groups: deferred.length,
+    reason: backingOff ? "rate_limit_backoff" : "api_budget",
+    apiCallsThisRun: spent,
+    maxApiCallsPerRun: deps.options.maxApiCallsPerRun,
+    ...(backingOff ? { resumeAt: new Date(memory.backoffUntilMs).toISOString() } : {}),
+  });
+}
+
 export async function runSettlement(deps: SettleDeps): Promise<SettleResult> {
   const { options } = deps;
   const memory = deps.memory ?? new SettleMemory();
   const startedAt = deps.now();
-  const initial = dueGroups(await deps.chain.openMarkets(), startedAt.getTime(), options);
-  // Groups already alerted are retried quietly: not before QUIET_RETRY_MS has passed, and only
-  // MAX_QUIET_ATTEMPTS times (then `settle-now` is the way).
-  for (const key of [...initial.keys()]) {
-    if (!memory.alerted.has(key)) {
-      continue;
-    }
-    const attempts = memory.quietAttempts.get(key) ?? 0;
-    if (attempts >= MAX_QUIET_ATTEMPTS) {
-      if (!memory.gaveUp.has(key)) {
-        memory.gaveUp.add(key);
-        deps.log("error", "settlement_gave_up", { group: key, quietAttempts: attempts });
-      }
-      initial.delete(key);
-    } else if (startedAt.getTime() - (memory.lastAttemptMs.get(key) ?? 0) < QUIET_RETRY_MS) {
-      initial.delete(key);
-    } else {
-      memory.quietAttempts.set(key, attempts + 1);
-      memory.lastAttemptMs.set(key, startedAt.getTime());
-    }
-  }
-  if (initial.size === 0) {
-    return { status: "idle", settled: 0, attempts: 0, failures: [] };
-  }
+  const due = dueGroups(await deps.chain.openMarkets(), startedAt.getTime(), options);
+  memory.retain(new Set(due.keys()));
+  const { eligible, skipped } = selectCandidates(deps, memory, due, startedAt.getTime());
+  const run = await attemptCandidates(deps, memory, due, eligible);
 
-  const pending = new Set(initial.keys());
-  const lastError = new Map<string, string>();
-  // A group whose 15 minutes are over and was alerted is retried quietly, one attempt per run.
-  const quiet = [...pending].every((key) => memory.alerted.has(key));
-  const windowMs = quiet ? 0 : options.windowMs;
-  let settled = 0;
-  let attempts = 0;
-
-  for (;;) {
-    attempts += 1;
-    const open = await deps.chain.openMarkets();
-    const groups = dueGroups(open, deps.now().getTime(), options);
-    for (const key of [...pending]) {
-      const markets = groups.get(key);
-      if (markets === undefined || markets.length === 0) {
-        pending.delete(key); // settled meanwhile (by us or by anyone: it is permissionless)
-        lastError.delete(key);
-        memory.forget(key);
-        continue;
-      }
-      if (attempts > 1 && memory.alerted.has(key)) {
-        continue; // an alerted group is not retried inside another group's 15-minute window
-      }
-      try {
-        await settleGroup(deps, memory, key, markets);
-        settled += markets.length;
-        pending.delete(key);
-        lastError.delete(key);
-        memory.forget(key);
-      } catch (error) {
-        const reason = describeError(error);
-        lastError.set(key, reason);
-        deps.log("warn", "settle_attempt_failed", { group: key, attempt: attempts, reason });
-      }
-    }
-    if (pending.size === 0) {
-      break;
-    }
-    const elapsed = deps.now().getTime() - startedAt.getTime();
-    if (elapsed >= windowMs) {
-      break;
-    }
-    await deps.sleep(Math.min(options.retryEveryMs, windowMs - elapsed));
-  }
-
-  const failures = [...pending].map((group) => ({
+  // Groups whose window is over (counted from their first failure) are alerted once, even when
+  // this run deferred them: a sustained rate limit must still reach the operator.
+  const nowMs = deps.now().getTime();
+  const fresh = [...due.keys()].filter((key) => {
+    const first = memory.firstFailureMs.get(key);
+    return !memory.alerted.has(key) && first !== undefined && nowMs - first >= options.windowMs;
+  });
+  const failed = [...new Set([...run.failed.keys(), ...fresh])];
+  const failures = failed.map((group) => ({
     group,
-    reason: lastError.get(group) ?? "unknown",
+    reason: run.failed.get(group) ?? memory.lastError.get(group) ?? "unknown",
   }));
+  const base = { settled: run.settled, attempts: run.attempted.length, skipped };
+  if (run.attempted.length === 0 && fresh.length === 0) {
+    return { status: "idle", ...base, failures: [], deferred: run.deferred };
+  }
   const status = failures.length === 0 ? "ok" : "failed";
+  const firstGroup = run.attempted[0] ?? failed[0] ?? "";
   deps.state.record({
     job: "settlement",
-    tradingDate: isoDate([...initial.values()][0]?.[0]?.tradingDate ?? 0),
+    tradingDate: firstGroup.split(":")[1] ?? "",
     status,
     startedAt: startedAt.toISOString(),
     finishedAt: deps.now().toISOString(),
     created: 0,
     existed: 0,
-    settled,
-    attempts,
+    settled: run.settled,
+    attempts: run.attempted.length,
     notes: failures.map((f) => `${f.group}: ${f.reason}`),
   });
-  const fresh = failures.filter((f) => !memory.alerted.has(f.group));
   if (fresh.length > 0) {
-    for (const f of fresh) {
-      memory.alerted.add(f.group);
-      memory.lastAttemptMs.set(f.group, deps.now().getTime());
-      memory.quietAttempts.set(f.group, 0);
-    }
-    const tickers = [...new Set(fresh.map((f) => f.group.split(":")[0] ?? ""))];
-    const reasons = fresh.map((f) => `${f.group}: ${f.reason}`);
-    await deps.alerter.send({
-      kind: "settlement_failed",
-      summary:
-        `could not settle ${fresh.map((f) => f.group).join(", ")} after ${String(attempts)} attempts; ` +
-        "it is retried quietly every 15 minutes for two hours, or settle it now with the settle-now CLI",
-      details: { groups: fresh.map((f) => f.group), reasons, attempts },
-    });
-    await deps.incidents.post({
-      kind: "settlement_failed",
-      tradingDate: fresh[0]?.group.split(":")[1] ?? "",
-      tickers,
-      reasons,
-      at: deps.now().toISOString(),
-    });
+    await alertFresh(deps, memory, fresh);
   }
-  return { status, settled, attempts, failures };
+  return { status, ...base, failures, deferred: run.deferred };
+}
+
+async function alertFresh(
+  deps: SettleDeps,
+  memory: SettleMemory,
+  fresh: readonly string[],
+): Promise<void> {
+  for (const group of fresh) {
+    memory.alerted.add(group);
+    memory.quietAttempts.set(group, 0);
+  }
+  const attempts = Math.max(...fresh.map((group) => memory.attempts.get(group) ?? 0));
+  const reasons = fresh.map((group) => `${group}: ${memory.lastError.get(group) ?? "unknown"}`);
+  await deps.alerter.send({
+    kind: "settlement_failed",
+    summary:
+      `could not settle ${fresh.join(", ")} after ${String(attempts)} attempts; ` +
+      "it is retried quietly every 15 minutes for two hours, or settle it now with the settle-now CLI",
+    details: { groups: fresh, reasons, attempts },
+  });
+  await deps.incidents.post({
+    kind: "settlement_failed",
+    tradingDate: fresh[0]?.split(":")[1] ?? "",
+    tickers: [...new Set(fresh.map((group) => group.split(":")[0] ?? ""))],
+    reasons,
+    at: deps.now().toISOString(),
+  });
 }
 
 /**
@@ -312,7 +518,11 @@ async function settleGroup(
   // AB-03: nothing is sent unless both sources report this trading date's close.
   const close = await deps.verifyClose(first.ticker, date);
   if (!close.ok) {
-    throw new Error(`${close.error.kind}: ${close.error.message}`);
+    const message = `${close.error.kind}: ${close.error.message}`;
+    if (close.error.rateLimit !== undefined) {
+      throw new RateLimitedError(message, close.error.rateLimit.retryAfter);
+    }
+    throw new Error(message);
   }
 
   const pinned = await deps.chain.pinnedFeeds();

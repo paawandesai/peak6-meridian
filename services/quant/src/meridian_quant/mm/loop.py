@@ -5,7 +5,6 @@ import json
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
 
 from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair
@@ -17,6 +16,7 @@ from .config import MMConfig
 from .inventory import InventoryTracker
 from .metrics import book_coverage
 from .quoter import generate_quote
+from .session import session_trading_date
 from .sources import FairValueSource, MarketSource, OrderClient
 from .types import FairValue, MarketKey, MarketState, Quote, RestingOrder
 
@@ -194,10 +194,9 @@ class MarketMakerLoop:
                 logger.warning(f"Stale spot data for {fv.ticker}: {age_secs:.1f}s old")
                 return True
 
-        # Get today's trading date (YYYYMMDD in ET)
-        # Markets use ET for trading_date, so convert UTC now to ET date
-        et_now = now.astimezone(ZoneInfo("America/New_York"))
-        today_trading_date = int(et_now.strftime("%Y%m%d"))
+        # The current session's trading date (today in ET, or the demo/next session when only
+        # it still has markets before close; see meridian_quant.mm.session)
+        today_trading_date = session_trading_date(markets, now)
 
         # Check for time to close: pull at close, within 2min, or after close
         # Only check markets from today's session; prior-day markets remain Open
@@ -343,10 +342,9 @@ class MarketMakerLoop:
         """
         if cancel_failed_markets is None:
             cancel_failed_markets = set()
-        # Get today's trading date (YYYYMMDD in ET)
+        # The current session's trading date (see meridian_quant.mm.session)
         now = self._clock()
-        et_now = now.astimezone(ZoneInfo("America/New_York"))
-        today_trading_date = int(et_now.strftime("%Y%m%d"))
+        today_trading_date = session_trading_date(markets, now)
 
         # Filter to today's markets only (Finding #3: prior-day markets stay Open for
         # settlement but don't get new quotes)
@@ -575,8 +573,7 @@ class MarketMakerLoop:
         try:
             # Get today's trading date (YYYYMMDD in ET) - same filter as _quote_all_strikes
             now = self._clock()
-            et_now = now.astimezone(ZoneInfo("America/New_York"))
-            today_trading_date = int(et_now.strftime("%Y%m%d"))
+            today_trading_date = session_trading_date(markets, now)
 
             # Filter to today's quotable markets only
             today_markets = [

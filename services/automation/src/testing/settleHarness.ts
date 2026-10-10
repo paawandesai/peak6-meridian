@@ -20,7 +20,7 @@ import {
 import { RunState } from "../state";
 import { buildSettleInstructions, type PlannedTx, type TxExecutor } from "../settleTx";
 import { type OracleUpdateAdapter, switchboardAdapter } from "../switchboard";
-import { fetchPrevClose, type PrevCloseResult } from "../prevCloses";
+import { fetchPrevClose, type HttpGet, type PrevCloseResult } from "../prevCloses";
 import { fakeSourcesHttp } from "./fakeHttp";
 import { FakeClock, RecordingAlerter, recordingLogger } from "./harness";
 import { loadUpdateFixture } from "./updateFixture";
@@ -112,6 +112,10 @@ export class SettleWorld {
   verifyCalls: { ticker: string; date: string }[] = [];
   /** Overrides the data sources' answer, e.g. to simulate a wrong date. */
   verifyOverride: ((ticker: string, date: string) => PrevCloseResult | null) | null = null;
+  /** Replaces the fake data-API HTTP (e.g. to answer 429); every request is still recorded. */
+  httpOverride: HttpGet | null = null;
+  /** Every data-API request made through `verifyClose`, across runs. */
+  readonly httpCalls: string[] = [];
   pinned: PinnedFeeds;
   private readonly delaySecs: number;
 
@@ -157,15 +161,21 @@ export class SettleWorld {
   }
 
   deps(overrides: Partial<SettleDeps> = {}): SettleDeps {
-    const http = () =>
-      fakeSourcesHttp({
-        closes: this.closes,
-        date: this.sourceDate,
-        ...(this.twelveDataDate === undefined ? {} : { twelveDataDate: this.twelveDataDate }),
-      });
+    const http = (): HttpGet => {
+      const inner =
+        this.httpOverride ??
+        fakeSourcesHttp({
+          closes: this.closes,
+          date: this.sourceDate,
+          ...(this.twelveDataDate === undefined ? {} : { twelveDataDate: this.twelveDataDate }),
+        });
+      return (url, init) => {
+        this.httpCalls.push(url);
+        return inner(url, init);
+      };
+    };
     return {
       now: this.clock.now,
-      sleep: this.clock.sleep,
       chain: this.chain,
       verifyClose: (ticker, date) => {
         this.verifyCalls.push({ ticker, date });
