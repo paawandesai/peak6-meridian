@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { DESKTOP_QUERY, DistributionSection, emptyDistributionText } from "./distribution-section";
 import type { DistributionPoint } from "./distribution";
+import { NOW } from "@/components/fair-value/test-support";
 
 beforeAll(() => {
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -44,7 +45,13 @@ const pt = (strike: number, yes: number | null, fair: number | null = null): Dis
 describe("DistributionSection (P0-7 AC4, FR-26)", () => {
   it("is open on desktop and renders the chart with its table", async () => {
     viewport(true);
-    render(<DistributionSection ticker="NVDA" points={[pt(170, 71, 70), pt(180, 56, 58)]} />);
+    render(
+      <DistributionSection
+        nowSecs={NOW}
+        ticker="NVDA"
+        points={[pt(170, 71, 70), pt(180, 56, 58)]}
+      />,
+    );
     expect(await screen.findByTestId("distribution-table")).toBeInTheDocument();
     expect(screen.getByTestId("distribution-section")).toHaveAttribute("open");
     expect(
@@ -54,7 +61,7 @@ describe("DistributionSection (P0-7 AC4, FR-26)", () => {
 
   it("is collapsed on mobile until opened", async () => {
     viewport(false);
-    render(<DistributionSection ticker="NVDA" points={[pt(170, 71), pt(180, 56)]} />);
+    render(<DistributionSection nowSecs={NOW} ticker="NVDA" points={[pt(170, 71), pt(180, 56)]} />);
     const section = screen.getByTestId("distribution-section");
     expect(section).not.toHaveAttribute("open");
     expect(screen.queryByTestId("distribution-table")).toBeNull();
@@ -65,7 +72,13 @@ describe("DistributionSection (P0-7 AC4, FR-26)", () => {
 
   it("shows explicit empty text when no strike has a displayed price", async () => {
     viewport(true);
-    render(<DistributionSection ticker="NVDA" points={[pt(170, null, 70), pt(180, null)]} />);
+    render(
+      <DistributionSection
+        nowSecs={NOW}
+        ticker="NVDA"
+        points={[pt(170, null, 70), pt(180, null)]}
+      />,
+    );
     expect(await screen.findByTestId("distribution-empty")).toHaveTextContent(
       emptyDistributionText("NVDA"),
     );
@@ -74,7 +87,7 @@ describe("DistributionSection (P0-7 AC4, FR-26)", () => {
 
   it("shows the empty text for an empty ladder too", async () => {
     viewport(true);
-    render(<DistributionSection ticker="AAPL" points={[]} />);
+    render(<DistributionSection nowSecs={NOW} ticker="AAPL" points={[]} />);
     expect(await screen.findByTestId("distribution-empty")).toHaveTextContent(
       "No market-implied distribution yet: no AAPL strike has a two-sided book within 10¢.",
     );

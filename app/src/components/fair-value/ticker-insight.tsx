@@ -1,7 +1,11 @@
 "use client";
 
 import { DistributionChart } from "@/components/distribution-chart/distribution-chart";
-import { displayedYes, distributionPoints } from "@/components/distribution-chart/distribution";
+import {
+  displayedYes,
+  distributionPoints,
+  fairStaleness,
+} from "@/components/distribution-chart/distribution";
 import { PriceHistoryChart } from "@/components/price-history-chart/price-history-chart";
 import { FairEdge } from "./fair-edge";
 import { type FairValues, useFairValues } from "@/lib/fair-values";
@@ -28,7 +32,8 @@ export function TickerInsightView({ market, ladder, books, fair, nowSecs }: View
   const fairByAddress = Object.fromEntries(
     Object.entries(fair.byMarket).map(([addr, fv]) => [addr, fv.fair_cents]),
   );
-  const points = distributionPoints(ladder, quotes, fairByAddress);
+  const staleness = fairStaleness(fair.byMarket, fair.refreshFailed, nowSecs);
+  const points = distributionPoints(ladder, quotes, fairByAddress, staleness);
   const own = quotes[market.address];
   const headingId = `fair-heading-${market.ticker}`;
   const marketFair = fair.byMarket[market.address];
@@ -44,7 +49,7 @@ export function TickerInsightView({ market, ladder, books, fair, nowSecs }: View
         refreshFailed={fair.refreshFailed}
         nowSecs={nowSecs}
       />
-      <DistributionChart ticker={market.ticker} points={points} />
+      <DistributionChart ticker={market.ticker} points={points} nowSecs={nowSecs} />
       <PriceHistoryChart
         ticker={market.ticker}
         nowSecs={nowSecs}

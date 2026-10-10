@@ -14,7 +14,7 @@ import type { TradeReader, WalletView } from "../_lib/reader";
 import { badgeProps, nextTransition, panelState } from "../_lib/state";
 import type { TradeActions } from "../_lib/tx";
 import { usePolled } from "../_lib/use-polled";
-import { distributionPoints } from "@/components/distribution-chart/distribution";
+import { distributionPoints, fairStaleness } from "@/components/distribution-chart/distribution";
 import { DistributionSection } from "@/components/distribution-chart/distribution-section";
 import { Countdown, StateBadge, VaultInvariantChip } from "@/components/ui";
 import { PythPrice, PythPricePlaceholder, PythPriceUnavailable } from "@/components/pyth-price";
@@ -85,6 +85,7 @@ function ladderPoints(
   market: MarketRow,
   ownYes: number | null,
   haveBook: boolean,
+  nowSecs: number,
 ) {
   const quotes = Object.fromEntries(
     Object.entries(insight.books).map(([address, book]) => [
@@ -95,7 +96,8 @@ function ladderPoints(
   const fair = Object.fromEntries(
     Object.entries(insight.fair.byMarket).map(([address, value]) => [address, value.fair_cents]),
   );
-  return distributionPoints(insight.ladder, quotes, fair).map((point) =>
+  const staleness = fairStaleness(insight.fair.byMarket, insight.fair.refreshFailed, nowSecs);
+  return distributionPoints(insight.ladder, quotes, fair, staleness).map((point) =>
     point.market === market.address && haveBook ? { ...point, yesCents: ownYes } : point,
   );
 }
@@ -130,7 +132,7 @@ export function TradeView(props: Props) {
     () => (fullBook === null ? null : displayedYesOfLevels(levelsOf(fullBook))),
     [fullBook],
   );
-  const points = ladderPoints(insight, market, ownYes, fullBook !== null);
+  const points = ladderPoints(insight, market, ownYes, fullBook !== null, nowSecs);
   const walletData = walletView.state.status === "ready" ? walletView.state.value : null;
   const own = useMemo(
     () => (fullBook === null || walletKey === "" ? [] : ownOrders(fullBook, walletKey)),
@@ -213,7 +215,7 @@ export function TradeView(props: Props) {
               </p>
             ) : null}
           </div>
-          <DistributionSection ticker={market.ticker} points={points} />
+          <DistributionSection ticker={market.ticker} points={points} nowSecs={nowSecs} />
         </div>
         <div className="order-1 grid content-start gap-mer-6 md:order-2">
           <OrderPanel
