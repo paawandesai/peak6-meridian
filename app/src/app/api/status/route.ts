@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import "./reader"; // Auto-install StatusChainReader
 
 /**
  * Per-market invariant data for Status page (P1-6).
