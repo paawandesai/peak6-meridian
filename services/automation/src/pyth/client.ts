@@ -72,9 +72,7 @@ const PythLatestPriceResponseSchema = z.object({
 });
 
 export type PythPrice = z.infer<typeof PythPriceSchema>;
-export type PythLatestPriceResponse = z.infer<
-  typeof PythLatestPriceResponseSchema
->;
+export type PythLatestPriceResponse = z.infer<typeof PythLatestPriceResponseSchema>;
 
 /**
  * Pyth signed update (for on-chain verification).
@@ -103,8 +101,7 @@ export class PythClient {
 
   constructor(config: PythClientConfig) {
     this.#apiToken = config.apiToken;
-    this.baseUrl =
-      config.baseUrl ?? "https://api.lazer.pyth.network"; // TODO: Verify against official Pyth Pro docs
+    this.baseUrl = config.baseUrl ?? "https://api.lazer.pyth.network"; // TODO: Verify against official Pyth Pro docs
     this.timeoutMs = config.timeoutMs ?? 5000;
 
     // Never log the API token (AB-17, AC3)

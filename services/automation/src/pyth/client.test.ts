@@ -5,7 +5,7 @@
  * Security: Never call live Pyth API in tests (use mocks)
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { PythClient, createPythClient, PYTH_FEED_IDS } from "./client";
 
 describe("PythClient", () => {
@@ -21,9 +21,7 @@ describe("PythClient", () => {
 
   describe("construction", () => {
     it("requires non-empty API token", () => {
-      expect(() => new PythClient({ apiToken: "" })).toThrow(
-        "PYTH_API_TOKEN is required",
-      );
+      expect(() => new PythClient({ apiToken: "" })).toThrow("PYTH_API_TOKEN is required");
     });
 
     it("accepts valid API token", () => {
@@ -41,9 +39,7 @@ describe("PythClient", () => {
   describe("createPythClient from environment", () => {
     it("throws if PYTH_API_TOKEN not set", () => {
       delete process.env.PYTH_API_TOKEN;
-      expect(() => createPythClient()).toThrow(
-        "PYTH_API_TOKEN environment variable not set",
-      );
+      expect(() => createPythClient()).toThrow("PYTH_API_TOKEN environment variable not set");
     });
 
     it("creates client when PYTH_API_TOKEN is set", () => {
@@ -82,9 +78,7 @@ describe("PythClient", () => {
   describe("getLatestPrice", () => {
     it("rejects unknown ticker", async () => {
       const client = new PythClient({ apiToken: "test-token" });
-      await expect(client.getLatestPrice("UNKNOWN")).rejects.toThrow(
-        "Unknown ticker: UNKNOWN",
-      );
+      await expect(client.getLatestPrice("UNKNOWN")).rejects.toThrow("Unknown ticker: UNKNOWN");
     });
 
     it("fetches price with valid auth and structure", async () => {
@@ -110,7 +104,7 @@ describe("PythClient", () => {
       expect(result.price.price).toBe("15000");
       expect(result.price.expo).toBe(-2);
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining(PYTH_FEED_IDS.AAPL!),
+        expect.stringContaining(PYTH_FEED_IDS.AAPL ?? ""),
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: "Bearer test-token",
@@ -148,9 +142,7 @@ describe("PythClient", () => {
       } as Response);
 
       const client = new PythClient({ apiToken: "test-token" });
-      await expect(client.getLatestPrice("AAPL")).rejects.toThrow(
-        "Feed ID mismatch",
-      );
+      await expect(client.getLatestPrice("AAPL")).rejects.toThrow("Feed ID mismatch");
     });
 
     it("handles API errors", async () => {
@@ -161,18 +153,14 @@ describe("PythClient", () => {
       } as Response);
 
       const client = new PythClient({ apiToken: "test-token" });
-      await expect(client.getLatestPrice("AAPL")).rejects.toThrow(
-        "Pyth API error: 500",
-      );
+      await expect(client.getLatestPrice("AAPL")).rejects.toThrow("Pyth API error: 500");
     });
   });
 
   describe("getSignedUpdate", () => {
     it("rejects unknown ticker", async () => {
       const client = new PythClient({ apiToken: "test-token" });
-      await expect(client.getSignedUpdate("UNKNOWN")).rejects.toThrow(
-        "Unknown ticker: UNKNOWN",
-      );
+      await expect(client.getSignedUpdate("UNKNOWN")).rejects.toThrow("Unknown ticker: UNKNOWN");
     });
 
     it("returns valid signed update bytes", async () => {
@@ -188,7 +176,8 @@ describe("PythClient", () => {
 
       const mockSignedUpdate = new Uint8Array([1, 2, 3, 4, 5]); // Mock binary data
 
-      global.fetch = vi.fn()
+      global.fetch = vi
+        .fn()
         .mockResolvedValueOnce({
           ok: true,
           json: async () => mockPriceResponse,
@@ -218,7 +207,8 @@ describe("PythClient", () => {
         },
       };
 
-      global.fetch = vi.fn()
+      global.fetch = vi
+        .fn()
         .mockResolvedValueOnce({
           ok: true,
           json: async () => mockPriceResponse,
@@ -229,9 +219,7 @@ describe("PythClient", () => {
         } as Response);
 
       const client = new PythClient({ apiToken: "test-token" });
-      await expect(client.getSignedUpdate("AAPL")).rejects.toThrow(
-        "Empty signed update",
-      );
+      await expect(client.getSignedUpdate("AAPL")).rejects.toThrow("Empty signed update");
     });
   });
 

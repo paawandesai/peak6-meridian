@@ -100,10 +100,23 @@ def test_pyth_spot_rejects_unknown_ticker() -> None:
 @pytest.mark.parametrize(
     "body",
     [
-        {"id": "wrong-id", "price": {"price": "15000", "conf": "5", "expo": -2, "publish_time": 1791316801}},
-        {"price": {"price": "15000", "conf": "5", "expo": -2, "publish_time": 1791316801}},  # missing id
+        {
+            "id": "wrong-id",
+            "price": {"price": "15000", "conf": "5", "expo": -2, "publish_time": 1791316801},
+        },
+        {
+            "price": {"price": "15000", "conf": "5", "expo": -2, "publish_time": 1791316801}
+        },  # missing id
         {"id": "0x49...", "price": {}},  # missing price fields
-        {"id": "0x49...", "price": {"price": "not-a-number", "conf": "5", "expo": -2, "publish_time": 1791316801}},
+        {
+            "id": "0x49...",
+            "price": {
+                "price": "not-a-number",
+                "conf": "5",
+                "expo": -2,
+                "publish_time": 1791316801,
+            },
+        },
         [1, 2],  # not an object
         {"id": "0x49...", "price": None},
     ],
@@ -174,6 +187,4 @@ def test_pyth_request_url_includes_feed_id() -> None:
         )
 
     fetch_pyth_spot(client(httpx.MockTransport(handler)), "NVDA", "token")
-    assert "0x6fa7e48602d2e6c0f46c1f2ef3d9d4b16d67a7a72f000a83aee12cb4e5d1c7a6" in str(
-        seen[0].url
-    )
+    assert "0x6fa7e48602d2e6c0f46c1f2ef3d9d4b16d67a7a72f000a83aee12cb4e5d1c7a6" in str(seen[0].url)
