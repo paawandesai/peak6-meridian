@@ -137,11 +137,15 @@ pub fn handle_post_redstone_price(
     }
 
     // Update RedstonePrice account
+    // AB-13: equal timestamp only refreshes slot, never overwrites value
+    let is_refresh = redstone_price.package_timestamp_ms == expected_timestamp;
     redstone_price.symbol = symbol;
-    redstone_price.value = median_value;
-    redstone_price.package_timestamp_ms = expected_timestamp;
-    redstone_price.posted_slot = clock.slot;
-    redstone_price.signer_count = seen_signers.len() as u8;
+    if !is_refresh {
+        redstone_price.value = median_value;
+        redstone_price.package_timestamp_ms = expected_timestamp;
+        redstone_price.signer_count = seen_signers.len() as u8;
+    }
+    redstone_price.posted_slot = clock.slot; // Always refresh slot for 30-slot budget
 
     emit!(crate::events::RedstonePricePosted {
         symbol,
