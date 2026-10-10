@@ -1,4 +1,5 @@
 import { Countdown, StateBadge } from "../ui";
+import { FairEdge } from "../fair-value/fair-edge";
 import type { BookQuotes } from "@meridian/client";
 import {
   type BadgeContext,
@@ -9,9 +10,16 @@ import {
   yesView,
 } from "@/lib/market-view";
 import { formatStrike, marketStatus, type MarketRow } from "@/lib/markets";
+import type { FairValue } from "@/lib/fair-values";
 
-/** What the page knows about one strike's book: quotes, or `undefined` while not live. */
-export type StrikeData = { readonly quotes?: BookQuotes | null; readonly openedAt: number | null };
+/** What the page knows about one strike's book and fair value. */
+export type StrikeData = {
+  readonly quotes?: BookQuotes | null;
+  readonly openedAt: number | null;
+  readonly fair?: FairValue;
+  readonly fairStatus: "loading" | "ready" | "unavailable";
+  readonly fairRefreshFailed: boolean;
+};
 
 function YesCell({ view }: { readonly view: ReturnType<typeof yesView> }) {
   if (view.kind === "mid") {
@@ -124,6 +132,15 @@ export function StrikeRow({
         <span className="block text-mer-xs text-mer-ink-muted">
           NO is 100 − YES; YES + NO = 100¢
         </span>
+      </td>
+      <td className="py-mer-2 pr-mer-3">
+        <FairEdge
+          yesCents={view.kind === "mid" ? view.yes : null}
+          fair={data.fair}
+          status={data.fairStatus}
+          refreshFailed={data.fairRefreshFailed}
+          nowSecs={ctx.nowSecs}
+        />
       </td>
       <td className="hidden w-32 py-mer-2 pr-mer-3 sm:table-cell">
         <Bar view={view} />

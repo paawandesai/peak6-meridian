@@ -14,6 +14,7 @@ import { formatTradingDate, groupByTicker, marketStatus, type MarketRow } from "
 import { activeDateMarkets, etTradingDate } from "@/lib/time";
 import { tradeHref } from "@/app/trade/_lib/href";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
+import { useFairValues } from "@/lib/fair-values";
 
 /** Inert sources for pages without a data provider: nothing is live, so rows show "—". */
 const NO_SOURCES: MarketDataSources = {
@@ -67,6 +68,8 @@ export function MarketsView({
   const openTimes = useOpenTimes(active);
   // M3-10: Fetch Pyth live quotes (D-055: Pyth Pro is primary demo price source)
   const pythQuotes = usePythQuotes();
+  // M3-03: Fair values for edge calculation and distribution chart
+  const fairValues = useFairValues();
 
   if (state.status === "loading" || clock === null) {
     return <p role="status">Loading markets…</p>;
@@ -89,9 +92,13 @@ export function MarketsView({
     statuses.some((s) => s === "Closed" || s === "Settling" || s === "SettlementDelayed");
   const strikeData = (market: MarketRow): StrikeData => {
     const book = data.books[market.address];
+    const fairValue = fairValues.byMarket[market.address];
     return {
       openedAt: openTimes[market.address] ?? null,
       ...(book?.state === "ready" ? { quotes: book.quotes } : {}),
+      fair: fairValue,
+      fairStatus: fairValues.status,
+      fairRefreshFailed: fairValues.refreshFailed,
     };
   };
   return (

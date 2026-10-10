@@ -13,6 +13,16 @@ vi.mock("@solana/wallet-adapter-react", async (importOriginal) => ({
   useWallet: () => wallet,
 }));
 
+const mockFairValues = vi.hoisted(() => ({
+  status: "ready" as const,
+  byMarket: {} as Record<string, unknown>,
+  refreshFailed: false,
+}));
+vi.mock("@/lib/fair-values", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/fair-values")>()),
+  useFairValues: () => mockFairValues,
+}));
+
 const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 const NOW = utc("2026-10-08T19:00:00Z"); // 15:00 ET
 const TODAY = 20261008;
@@ -374,5 +384,34 @@ describe("live price (header line)", () => {
     const section = await screen.findByRole("region", { name: "NVDA" });
     await vi.waitFor(() => expect(section).toHaveTextContent("Pyth price loading"));
     expect(within(section).getByRole("heading", { level: 2 })).toHaveTextContent(/^NVDA$/);
+  });
+});
+
+describe("fair value and edge (M3-03: AC per-strike)", () => {
+  it("mounts FairEdge on each strike row with that market's fair value", async () => {
+    // Three strikes with distinct fair values
+    const markets = [m(1), m(2), m(3)];
+    mockFairValues.byMarket = {
+      [addr(1)]: { market: addr(1), fair_cents: 50, ticker: "NVDA", strike_cents: 18000, sigma: 0.3, spot: 18142, as_of: new Date(NOW * 1000).toISOString(), stale: false },
+      [addr(2)]: { market: addr(2), fair_cents: 45, ticker: "NVDA", strike_cents: 19000, sigma: 0.3, spot: 18142, as_of: new Date(NOW * 1000).toISOString(), stale: false },
+      [addr(3)]: { market: addr(3), fair_cents: 40, ticker: "NVDA", strike_cents: 20000, sigma: 0.3, spot: 18142, as_of: new Date(NOW * 1000).toISOString(), stale: false },
+    };
+    renderView(markets, {
+      sources: sources({
+        books: {
+          [addr(1)]: q(50, 52), // $180 strike: 51¢ mid
+          [addr(2)]: q(45, 47), // $190 strike: 46¢ mid
+          [addr(3)]: q(40, 42), // $200 strike: 41¢ mid
+        },
+      }),
+    });
+
+    const section = await screen.findByRole("region", { name: "NVDA" });
+    // Header + 3 strikes = 4 rows
+    expect(within(section).getAllByRole("row")).toHaveLength(4);
+
+    // Each strike row should have a FairEdge (data-testid="fair-edge")
+    const fairEdges = within(section).getAllByTestId("fair-edge");
+    expect(fairEdges).toHaveLength(3);
   });
 });
