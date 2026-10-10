@@ -241,7 +241,14 @@ class MarketMakerLoop:
         Returns markets that were successfully synced. Markets whose balances could not
         be read are excluded (not quoted).
         """
-        open_markets = [m for m in markets if m.is_open]
+        # Only markets still tradable: mint_pair and place_order fail at or after close_ts
+        # (MarketClosed), and unsettled prior-day markets stay Open for settlement (AB-11).
+        now_ts = int(self._clock().timestamp())
+        open_markets = [
+            m
+            for m in markets
+            if m.is_open and m.close_ts - now_ts >= self.config.min_time_to_close_secs
+        ]
         if not open_markets:
             return []
 
