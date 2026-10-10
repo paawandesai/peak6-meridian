@@ -31,7 +31,6 @@ const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 const NOW = utc("2026-10-08T19:00:00Z"); // 15:00 ET
 const TODAY = 20261008;
 const CLOSE = BigInt(utc("2026-10-08T20:00:00Z")); // 16:00 ET
-const OPEN = utc("2026-10-08T13:00:00Z"); // 09:00 ET
 
 type Q = {
   yesBid: number | null;
