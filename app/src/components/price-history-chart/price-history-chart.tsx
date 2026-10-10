@@ -83,12 +83,13 @@ export function PriceHistoryChart({ ticker, nowSecs }: Props) {
           return;
         }
 
-        const candles = data.t.map((time, i) => ({
+        const { t, o, h, l, c } = data;
+        const candles = t.map((time, i) => ({
           time: time as UTCTimestamp,
-          open: data.o![i]!,
-          high: data.h![i]!,
-          low: data.l![i]!,
-          close: data.c![i]!,
+          open: o[i] ?? 0,
+          high: h[i] ?? 0,
+          low: l[i] ?? 0,
+          close: c[i] ?? 0,
         }));
 
         candlestickSeries.setData(candles);
