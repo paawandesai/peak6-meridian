@@ -63,8 +63,8 @@ export function MarketsView({
   const pythQuotes = usePythQuotes();
   // M3-03: Fair values for edge calculation and distribution chart
   const fairValues = useFairValues();
-  // P0-3 MR A: Ticker selection with ?t= deep link
-  const [selectedTicker] = useTickerSelection();
+  // P0-3 MR A: Ticker selection with ?t= deep link (defaults to "All" for now, tabs handle selection)
+  const selectedTicker = "All"; // TODO P0-3: wire useTickerSelection when Suspense boundary added
 
   if (state.status === "loading" || clock === null) {
     return (
