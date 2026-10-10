@@ -6,6 +6,7 @@ from statistics import NormalDist
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+
 from meridian_quant.fair_value import (
     SESSION_SECONDS_PER_YEAR,
     FairValueError,

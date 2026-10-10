@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
  * colour only reinforces it.
  */
 export type StateBadgeProps =
-  | { readonly state: "open" }
+  | { readonly state: "open"; readonly closesAt?: string }
   | { readonly state: "closing-soon"; readonly remaining: string }
   | { readonly state: "closed"; readonly settlingAt: string }
   | { readonly state: "settling"; readonly attempt?: number }
@@ -32,7 +32,7 @@ export function stateBadgeText(
   }
   switch (props.state) {
     case "open":
-      return "Open";
+      return props.closesAt !== undefined ? `Open · closes ${props.closesAt} ET` : "Open";
     case "closing-soon":
       return `Closes in ${props.remaining}`;
     case "closed":

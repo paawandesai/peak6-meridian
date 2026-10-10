@@ -13,8 +13,8 @@ export NEXT_TELEMETRY_DISABLED := 1
 PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
-	client lint lint-rust lint-js-py typecheck test test-rust-unit test-js-py-unit test-security \
-	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet deploy-vercel deploy-railway test-deploy-devnet e2e dev
+	client lint lint-rust lint-js-py check-links typecheck test test-rust-unit test-js-py-unit test-security \
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet test-deploy-devnet e2e dev demo-ops
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -25,7 +25,7 @@ PNPM_R_FLAGS ?=
 BUILD_LOCAL := $(if $(MERIDIAN_PREBUILT),,build-local)
 
 help:
-	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e dev"
+	@echo "Targets: toolchain install build-local build-devnet client lint typecheck test test-security coverage eval-live e2e dev demo-ops"
 
 ## Toolchain (once per machine): pinned Rust, Agave CLI, Anchor, Node, pnpm, uv, cargo tools.
 toolchain:
@@ -58,7 +58,7 @@ client: build-local
 	cp target/types/meridian.ts packages/client/src/idl/meridian.ts
 	pnpm exec prettier --write packages/client/src/idl
 
-lint: lint-rust lint-js-py
+lint: lint-rust lint-js-py check-links
 
 lint-rust:
 	cargo fmt --all -- --check
@@ -69,6 +69,9 @@ lint-js-py:
 	pnpm exec prettier --check .
 	uv run --locked ruff check .
 	uv run --locked ruff format --check .
+
+check-links:
+	scripts/check-links.sh
 
 typecheck:
 	pnpm -r run typecheck
@@ -146,3 +149,13 @@ deploy-vercel:
 
 deploy-railway:
 	pnpm --filter deploy run deploy-platform railway $(DEPLOY_ARGS)
+
+## M3-07: Ops-agent override demo with fault injection (local validator only).
+## Requires: local validator running, FAULT_INJECT_SOURCE=tiingo|twelvedata.
+## Stages a data-source fault → settlement failure → ops-agent investigation → admin override.
+demo-ops:
+	@if [ -z "$$FAULT_INJECT_SOURCE" ]; then \
+		echo "Error: FAULT_INJECT_SOURCE must be set (tiingo or twelvedata)" >&2; \
+		exit 1; \
+	fi
+	pnpm exec tsx scripts/demo-ops.ts

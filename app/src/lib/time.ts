@@ -79,15 +79,15 @@ export type NextClose =
 
 /**
  * The header's next-close state. The target is the smallest on-chain `close_ts` with
- * `now < close_ts` among the active date's markets whose on-chain status is `Open` (not settled),
- * so Open and Closing soon both count and early-close days need no calendar. The header never
- * counts down to a time it computed itself.
+ * `now < close_ts` among ALL markets (across all trading dates) whose on-chain status is `Open`
+ * (not settled), so Open and Closing soon both count and early-close days need no calendar.
+ * The header never counts down to a time it computed itself.
  */
 export function nextClose(markets: readonly MarketRow[], nowSecs: number): NextClose {
-  const active = activeDateMarkets(markets, nowSecs);
-  if (active.length === 0) return { kind: "none" };
+  if (markets.length === 0) return { kind: "none" };
   const now = BigInt(nowSecs);
-  const open = active.filter((market) => !market.settled && now < market.closeTs);
+  // Look at ALL markets, not just active date — any open market across any trading date
+  const open = markets.filter((market) => !market.settled && now < market.closeTs);
   if (open.length > 0) {
     const closeTs = open.reduce(
       (min, market) => (market.closeTs < min ? market.closeTs : min),
@@ -95,7 +95,7 @@ export function nextClose(markets: readonly MarketRow[], nowSecs: number): NextC
     );
     return { kind: "countdown", closeTs, secondsLeft: Number(closeTs - now) };
   }
-  const unsettled = active.filter((market) => !market.settled);
+  const unsettled = markets.filter((market) => !market.settled);
   if (unsettled.length === 0) return { kind: "markets-closed" };
   // Settlement delayed wins: it is the state that needs attention.
   return unsettled.some((market) => marketStatus(market, nowSecs) === "SettlementDelayed")

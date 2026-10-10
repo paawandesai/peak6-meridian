@@ -131,3 +131,63 @@ Against a local validator: `SOLANA_CLUSTER=localnet` with a loopback `SOLANA_RPC
 - Below `FAUCET_MIN_LAMPORTS` (default 0.1 SOL) the endpoint answers 503 and posts one alert to `ALERT_WEBHOOK_URL` per instance per `FAUCET_ALERT_COOLDOWN_SEC`. Top up the key; no restart is needed.
 - A claim limit of one per wallet per 24 h is enforced on chain by marker accounts; there is nothing to reset. A refused wallet (429) simply waits: the gap is at least 24 h minus about 90 s, and up to about 48 h.
 - A "faucet misconfigured" error means `FAUCET_KEYPAIR` is not the mint authority of `USDC_MINT`; fix the environment and redeploy.
+
+## Demo ops-agent override path (M3-07)
+
+Local fault-injection demonstration of the ops-agent investigation and admin override workflow. **Local validator only** (refused on devnet or any other cluster).
+
+**Scenario:** One oracle source is configured to report a close 2% off (`FAULT_INJECT_SOURCE`), causing settlement to fail the 5 bps spread check. The automation service posts an incident to the ops-agent, which investigates using recorded source fixtures (no live API calls by default) and produces a validated override draft. The admin approves the draft, and after the override delay the market settles with `admin_settle_override`.
+
+**Requirements:**
+- Local validator running (`solana-test-validator` from `make dev` or started separately)
+- M3-05 (ops-agent service) and M3-06 (admin override UI) available
+- Environment: `SOLANA_CLUSTER=localnet`, `FAULT_INJECT_SOURCE=tiingo|twelvedata`, `OPS_AGENT_URL`, `SERVICE_TOKEN`, `ADMIN_KEYPAIR_PATH`
+
+**Run:** `make demo-ops`
+
+The script validates that `FAULT_INJECT_SOURCE` is only set on localnet (security: never against real services), stages the fault, attempts settlement (which fails), posts to the ops-agent, fetches the draft, approves it, waits for the shortened override delay, and settles. Each stage is printed with its result and the final settle transaction signature.
+
+**Live LLM (optional):** Set `ENABLE_LIVE_LLM=1` to call the Anthropic API for the agent's investigation narrative. Default: uses the deterministic fallback (source table + median, no Claude call) per M3-07 AC3.
+
+## Friday
+
+Friday's recorded run (M3-09, plan M3 exit): the morning job creates the day's markets unattended, the market-maker quotes, **book coverage is measured over a 30-minute window (target ≥ 95% of open strikes two-sided)**, and the **16:05 ET settlement from Switchboard plus a redeem are recorded** in `docs/log.md` with signatures, explorer links and screen-capture paths. All times ET (`America/New_York`). Tools (both read-only, no key needed, `tests/e2e/src`, unit-tested on recorded streams):
+
+- `pnpm --filter e2e run coverage-window -- --who <name>`: every 30 s for 30 min reads each open strike's on-chain book and counts it two-sided when it has a best bid **and** a best ask. Coverage is the pooled share of (strike, sample) pairs that were two-sided, in integer basis points. Options: `--interval-secs`, `--duration-secs`, `--date YYYYMMDD`, `--out DIR`. Writes `summary.json`, `samples.json` and `log-entry.md` to `target/friday/` (gitignored) and exits 0 only on a pass (≥ 95.00%, some strikes sampled, at most 10% failed reads).
+- `pnpm --filter e2e run settlement-evidence -- --who <name> --wallet <trader pubkey> [--wallet …] [--capture <path> …]`: for each of the day's markets finds its `MarketSettled` transaction, the latency `settled_ts − close_ts` against the 10-minute budget, and the given wallets' `Redeemed` transactions; writes `settlement-entry.md` and `settlement.json`. Exits 0 only when every market settled within budget and a redeem is recorded.
+
+Environment for both: `SOLANA_CLUSTER=devnet`, `SOLANA_RPC_URL`, `MERIDIAN_PROGRAM_ID` (if not the default). They verify the cluster by genesis hash first and never print the RPC URL.
+
+### What must be true before Friday (gates)
+
+1. **Feeds pinned** (M2-02): the 14 Switchboard feeds exist and `make deploy-devnet DEPLOY_ARGS="--feeds deployments/feeds.devnet.json"` pinned them in Config. Creating them needs Crossbar (`crossbar.switchboard.xyz`); until then Config holds placeholders and settlement fails closed. `pnpm tsx scripts/switchboard/check-feeds.ts` passes.
+2. **Automation running before 08:00 ET** (Railway per M2-11, or an AO worker per Fallback A in the Rehearsal section) so the morning job creates the markets; the 16:05 settlement job runs in the same service.
+3. **Market-maker running** (M3-02, deployed per M3-08) with funded keys, quoting every open strike. Without it the coverage window honestly reports a failure.
+4. Wallets funded (`.ao-ops/fund-devnet-wallets.sh`, dry-run first) and the trader wallets that will redeem hold a position in a Friday market.
+
+### Timeline
+
+| ET | Step | Who |
+|---|---|---|
+| before 08:00 | Gates 1–4 hold; `make deploy-devnet` re-run sends no tx | operator |
+| 08:30 | Markets exist: `pnpm --filter e2e run coverage-window -- --duration-secs 0 --out target/friday/probe` lists the open strike count; if zero use Fallback B (before 09:00) | operator |
+| 09:30–15:00 | Normal trading; a trader wallet opens a position in at least one market (the Rehearsal `--phase trade`, or the app) | operator |
+| ≥ 14:00 and ending ≥ 5 min before 16:00 | **Coverage window**: `pnpm --filter e2e run coverage-window -- --who <name>` (30 min). Do not end it inside the last 2 minutes, when the MM pulls its quotes by design | operator |
+| 16:00 | Markets close | |
+| 16:05 | Settlement by the automation service | automation |
+| ≤ 16:15 | **Settlement evidence**: `settlement-evidence` (after a redeem, below). Over 10 min after close for any market is a finding | operator |
+| after settlement | Winners redeem (`rehearsal --phase redeem`, or the app); take screen captures of the settled Trade/Portfolio pages | operator |
+| after 16:15 | Paste `target/friday/log-entry.md` and `settlement-entry.md` into `docs/log.md` via a docs MR | operator |
+
+### What to log (docs/log.md)
+
+The two generated entries, plus the screen-capture paths (kept on the box under `captures/`, never committed: no binaries in the repo) and who ran each step. Public data only: no keys, no RPC URLs with API keys.
+
+### When a number misses
+
+- **Coverage below 95%:** the entry lists the strikes below target, worst first. Diagnose each (MM stopped, spot data older than 10 s, inventory cap reached, the final-2-minutes pull, a read failure) and open a fix ticket before Saturday; do not re-run the window until you can say what changed.
+- **Settlement over 10 min or missing:** check the automation logs and the Switchboard feed status (`check-feeds`), the oracle age at settle and the override timing (an admin override opens at `close_ts + override_delay_secs`). Open a fix ticket before Saturday. A market that is not settled at all stays in the entry as an open item.
+
+### Rehearsing the tools without devnet
+
+`SOLANA_CLUSTER=localnet` with a loopback `SOLANA_RPC_URL` against a seeded validator (the Rehearsal section's "Testing the script without devnet"); with the test oracle the settle is `lifecycle` / `rehearsal --phase redeem --local-settle`. Unit tests (recorded 61-sample stream, fake clock, recorded settle logs): `pnpm --filter e2e run test`. Read-only against devnet, the tools run now and report the honest state (for example "no open strike was ever sampled").

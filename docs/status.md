@@ -49,6 +49,7 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 | OQ-15 | **ANSWERED 2026-10-08 13:45 CT (Paawan) → [D-049](decisions.md).** Option (a): the five display-only money helpers go in `packages/client/src/units.ts`, added once by UI-02 with fast-check tests. | human | — |
 | OQ-16 | M1-07 (MR !18): the `build-devnet-check` CI job (AB-22: `make build-devnet`, assert the IDL has no `local_oracle_set`) is **held** by the operator because `.gitlab-ci.yml` is human-owned. Patch: `/tmp/m1-07-ci-job/0001-ci-HUMAN-OWNED-.gitlab-ci.yml-needs-Paawan-s-review-.patch`; it also sets `MERIDIAN_DEVNET_IDL` so the built-IDL test in `tests/security/program/tests/ab_22_devnet_build.rs` runs (the test is `#[ignore]`d, shown as ignored not passed, and the job runs it with `-- --include-ignored`). The same held job will also run `make test-deploy-devnet` (M2-01: devnet-build and deploy-script tests in an isolated copy; kept out of `make test` because of its cold devnet build). **AB-22 built-IDL evidence stays open until this job is applied.** Needs: Paawan to apply or approve the CI change. | human | M1-07 AC3 (AB-22 built-IDL check in CI) |
 | OQ-17 | M2-09 faucet limit = atomic marker accounts (transfer + allocateWithSeed, space 1, owner SystemProgram) for UTC day buckets N and N+1 per claim (no program change, no off-chain store). The two-bucket rule guarantees a gap of at least 24 h minus W, where W is the blockhash lifetime (about 150 blocks, 60 to 90 s; fixed by the recent blockhash, the server only stops rebroadcasting), worst case about 48 h. NFR-13 ("1 claim per wallet per 24 h") therefore holds to within W; confirm that tolerance. FYI, not blocking. Also confirm: no per-IP/global cap in M2; a sybil drain of faucet SOL is bounded only by a balance floor (503 + alert) and accepted for devnet. | human | none |
+| OQ-18 | M2-06 (#18) Trade page: UI-04 **AC8** (Markets → Trade link) and the **Markets half of AC4's Lighthouse run** cannot be done on `main` yet: the strike ladder with the `tradeHref` prop is UI-03 (branch `ao/peak6-meridian-20/ui-03-markets`), not merged; `main`'s `markets-view.tsx` has no such prop and rewriting it here would collide with UI-03. M2-06 ships `tradeHref(market)` (`app/src/app/trade/_lib/href.ts`, tested) and the route. Option (a): whichever of UI-03 / M2-06 merges second adds the one line in `app/src/components/app-shell.tsx` passing `tradeHref` and its AC8 test (recommended); (b) fold it into UI-03. Also: AC5 (manual four-intent run with screenshots on a local validator) and the Trade Lighthouse run are not done by this worker (operator §6a: no local validator/e2e); Playwright M2-13 / CI cover the flow. | operator | M2-06 AC4/AC5, UI-03 |
 
 ## Requirements coverage
 | ID | Status |
@@ -109,3 +110,22 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 | ID | Severity | Status | Ticket |
 |---|---|---|---|
 | _none_ | | | M1-01 AB-16/17/22; M1-02 LiteSVM audit ignores accepted (D-047 / OQ-10); M1-03 AB-09/10; M1-11 AB-14/15/20 — no open findings |
+
+## Final Summary (M4-06)
+
+M1-M3 complete. M4 in progress (!62 fresh-clone, demo video pending). Code freeze Sun Oct 11 09:00 CT. Devnet program ID: `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`. App URL: `[TBD]`. Demo video: `[TBD]`.
+
+**Version tag:** `v1.0.0-devnet-submission` (to be pushed when all M4 deps merge)
+
+**Exit criteria status:**
+- [x] M1: Core lifecycle local - all tickets merged, tests passing
+- [x] M2: Devnet deployment - program live, automation running
+- [x] M3: Automation services - market-maker, fair-value, ops-agent deployed
+- [ ] M4: Polish and docs - !62 (fresh-clone), !67 (this MR), demo video in progress
+
+**Known limitations:**
+- See [docs/risks.md](risks.md) (merged in M4-02)
+
+**Outstanding work:**
+- Fresh-clone reproducibility verification (!62)
+- Demo video (#43)

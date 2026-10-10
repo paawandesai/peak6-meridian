@@ -8,7 +8,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lifecycle": "tsx src/lifecycle.ts",
-    "rehearsal": "tsx --env-file-if-exists=../../.env src/lifecycle.ts --cluster devnet"
+    "rehearsal": "tsx --env-file-if-exists=../../.env src/lifecycle.ts --cluster devnet",
+    "coverage-window": "tsx --env-file-if-exists=../../.env src/coverage-window.ts",
+    "settlement-evidence": "tsx --env-file-if-exists=../../.env src/settlement-evidence.ts",
+    "test:ui": "playwright test"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.31.1",
@@ -19,6 +22,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "fast-check": "4.10.2",
     "tsx": "4.23.15"
   }

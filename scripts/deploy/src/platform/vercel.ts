@@ -46,7 +46,12 @@ export async function ensureVercelProject(
   deps: PlatformDeps,
   options: VercelOptions,
   secrets: readonly string[],
-): Promise<{ readonly id: string; readonly orgId: string; readonly created: boolean }> {
+): Promise<{
+  readonly id: string;
+  readonly orgId: string;
+  readonly created: boolean;
+  readonly teamId?: string;
+}> {
   const headers = { Authorization: `Bearer ${options.token}`, "Content-Type": "application/json" };
   const scope = options.teamId === undefined ? "" : `teamId=${encodeURIComponent(options.teamId)}`;
   const q = (prefix: string): string => (scope === "" ? "" : `${prefix}${scope}`);
@@ -64,9 +69,11 @@ export async function ensureVercelProject(
   }
 
   const name = encodeURIComponent(options.projectName);
-  const found = await call("vercel GET project", `/v9/projects/${name}${q("?")}`, {
-    method: "GET",
-  });
+  const lookup = async (teamScope: string) =>
+    call("vercel GET project", `/v9/projects/${name}${teamScope === "" ? "" : `?${teamScope}`}`, {
+      method: "GET",
+    });
+  const found = await lookup(scope);
   if (found.status === 200) {
     const id = asRecord(found.body).id;
     if (typeof id !== "string") throw new Error("vercel: project response has no id");
@@ -75,18 +82,41 @@ export async function ensureVercelProject(
   if (found.status !== 404) {
     throw new Error(`vercel: looking up project failed (status ${found.status})`);
   }
+  if (options.teamId === undefined) {
+    // The live project may sit under a team the token can see (VERCEL_TEAM_ID unset): reuse it
+    // rather than create a duplicate in the personal scope.
+    const teams = await call("vercel GET /v2/teams", "/v2/teams", { method: "GET" });
+    const list = asRecord(teams.body).teams;
+    for (const team of Array.isArray(list) ? list : []) {
+      const teamId = asRecord(team).id;
+      if (typeof teamId !== "string") continue;
+      const inTeam = await lookup(`teamId=${encodeURIComponent(teamId)}`);
+      const id = asRecord(inTeam.body).id;
+      if (inTeam.status === 200 && typeof id === "string") {
+        deps.log(`vercel: reusing project ${options.projectName} in team ${teamId}`);
+        return { id, orgId: teamId, created: false, teamId };
+      }
+    }
+  }
   const created = await call("vercel POST project", `/v11/projects${q("?")}`, {
     method: "POST",
     body: JSON.stringify({
       name: options.projectName,
       framework: "nextjs",
       rootDirectory: "app",
-      nodeVersion: "22.x",
     }),
   });
   const id = asRecord(created.body).id;
   if (created.status >= 300 || typeof id !== "string") {
-    throw new Error(`vercel: creating project failed (status ${created.status})`);
+    const err = asRecord(asRecord(created.body).error);
+    const code = typeof err.code === "string" ? `, ${err.code}` : "";
+    const message = typeof err.message === "string" ? `: ${err.message}` : "";
+    throw new Error(
+      redactSecrets(
+        `vercel: creating project ${options.projectName} failed (status ${created.status}${code})${message}`,
+        secrets,
+      ),
+    );
   }
   deps.log(`vercel: created project ${options.projectName}`);
   return { id, orgId, created: true };
@@ -140,7 +170,8 @@ export async function deployVercel(
   assertComplete("vercel", collected);
   const secrets = secretValues([options.token], collected);
   const project = await ensureVercelProject(deps, options, secrets);
-  await upsertVercelEnv(deps, options, project.id, collected, secrets);
+  const scoped = project.teamId === undefined ? options : { ...options, teamId: project.teamId };
+  await upsertVercelEnv(deps, scoped, project.id, collected, secrets);
 
   const env = childEnv({
     VERCEL_TOKEN: options.token,
@@ -160,5 +191,43 @@ export async function deployVercel(
   }
   const url = parseDeploymentUrl(stdout);
   deps.log(`vercel: deployed ${url}`);
+  const alias = options.env.VERCEL_PRODUCTION_ALIAS ?? "peak6-meridian.vercel.app";
+  if (alias !== "") await assignAlias(deps, scoped, url, alias, secrets);
   return { url };
+}
+
+/** Points the public alias at this deployment; a failure is logged (with Vercel's code), not fatal. */
+async function assignAlias(
+  deps: PlatformDeps,
+  options: VercelOptions,
+  url: string,
+  alias: string,
+  secrets: readonly string[],
+): Promise<void> {
+  const host = encodeURIComponent(new URL(url).host);
+  const scope = options.teamId === undefined ? "" : `?teamId=${encodeURIComponent(options.teamId)}`;
+  const result = await requestJson(
+    deps,
+    "vercel POST alias",
+    `${API}/v2/deployments/${host}/aliases${scope}`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${options.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ alias }),
+    },
+    secrets,
+  );
+  if (result.status < 300) {
+    deps.log(`vercel: aliased https://${alias} -> ${url}`);
+    return;
+  }
+  const err = asRecord(asRecord(result.body).error);
+  const code = typeof err.code === "string" ? `, ${err.code}` : "";
+  const message = typeof err.message === "string" ? `: ${err.message}` : "";
+  deps.log(
+    redactSecrets(
+      `vercel: WARNING could not alias ${alias} (status ${result.status}${code})${message}`,
+      secrets,
+    ),
+  );
 }

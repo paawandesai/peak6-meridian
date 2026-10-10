@@ -78,17 +78,23 @@ describe("runPlatformCli", () => {
       USDC_MINT: "M",
       FAUCET_KEYPAIR: "[1]",
     };
+    const urls: string[] = [];
     const code = await runPlatformCli(["vercel"], env, {
       repoRoot: "/repo",
       log: (l) => logs.push(l),
       sleep: async () => undefined,
-      fetch: async (url) =>
-        new Response(
+      fetch: async (url) => {
+        urls.push(url);
+        return new Response(
           JSON.stringify(url.endsWith("/v2/user") ? { user: { id: "u" } } : { id: "prj" }),
-        ),
+        );
+      },
       run: async () => ({ stdout: "https://a.vercel.app" }),
     });
     expect(code).toBe(0);
     expect(logs.join("\n")).toContain("app URL: https://a.vercel.app");
+    // Reuses the live peak6-meridian project instead of creating "meridian".
+    expect(urls.some((u) => u.includes("/v9/projects/peak6-meridian"))).toBe(true);
+    expect(urls.some((u) => u.includes("/v11/projects"))).toBe(false);
   });
 });

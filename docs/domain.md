@@ -31,7 +31,7 @@ This file is the single source for business rules and units. If code disagrees w
 - YES/NO mints: **0 decimals**; 1 token = 1 contract.
 - Order price: **cents, integer 1–99** (u8). Cost of 1 contract at price p = p × 10,000 USDC base units.
 - Strike: **cents** (u64). $680 → 68,000.
-- Oracle value: Switchboard returns a decimal with 18 fractional digits (i128). Compare `close_scaled ≥ strike_cents × 10^16` exactly; never round the close.
+- Oracle value (D-054): a RedStone data point is an unsigned integer with **8** fractional digits (32-byte big-endian; stored as u128). Compare `close_scaled ≥ strike_cents × 10^6` exactly; never round the close. (Switchboard's 18-digit i128 and `× 10^16` applied until D-054.)
 - Trading date: ET calendar date as `YYYYMMDD` (u32). Close time: unix seconds (i64).
 
 ## Invariants (on-chain, every instruction)
@@ -85,12 +85,12 @@ Admin may add strikes before close (`add_strike`).
 ## Settlement rules
 `settle_market` (permissionless) succeeds only if all hold:
 1. Market is `Open` and `now ≥ close_ts`.
-2. Two oracle feed accounts are passed, one per data source, and each is owned by the Switchboard On-Demand program with a feed hash equal to the one pinned in Config for that ticker and source slot.
-3. Each feed value was updated ≤ `max_staleness_slots` (default **30**, ≈12 s) before the current slot (the settle transaction includes both feed updates) and after `close_ts`.
-4. The two values differ by ≤ `max_conf_bps` (default **5 bps = 0.05%**) of their mean. Settle price = mean of the two.
+2. The ticker's RedStone price account is passed: the program-owned PDA `["redstone_price", symbol]` written by the permissionless `post_redstone_price` instruction, which verified the signed `redstone-primary-prod` payload on-chain (D-054): secp256k1 recovery per data package, signer in the admin-pinned signer set in `OracleConfig`, and at least `signer_threshold` distinct signers (default **3 of 5**) for that feed id at one timestamp; value = median of those signers' values.
+3. The package timestamp is ≥ `close_ts` and ≤ `close_ts + max_package_delay_secs` (default **600**), and the price account was posted ≤ `max_staleness_slots` (default **30**, ≈12 s) before the current slot (the settle transaction, or the one just before it, carries the post).
+4. One on-chain source until Pyth is added (D-054): there is no on-chain two-source spread check. The `max_conf_bps` limit (default **5 bps = 0.05%**) is applied off-chain by `automation` against the official close (below). Settle price = the verified RedStone value. When Pyth lands (M3-10), the on-chain RedStone–Pyth spread ≤ `max_conf_bps` of their mean returns and the settle price becomes their mean (D-033).
 5. Outcome = YES if close ≥ strike, else NO. Store settle price, oracle slot, timestamp, source = Oracle.
 
-Date check: each feed job reads its source's latest official regular-session daily close. The chain can't see the bar's date, so `automation` verifies off-chain that both sources' latest bar date equals the market's trading date before it submits a settle transaction, and retries until it does. The M1 Switchboard spike tries to move this check into the feed job itself; until then it's a documented limitation.
+Date and close check (D-054): the chain can't see the official close or its bar date. Before it submits, `automation` (and `settle-now`) takes the package from ≥ 2 RedStone gateways and requires them to agree, verifies that Tiingo's and Twelve Data's latest regular-session daily bar date equals the market's trading date, and requires the RedStone value to be within 5 bps of each source's official close. Otherwise it sends nothing and retries; after the retry window it alerts and triggers the ops agent, whose override goes through `admin_settle_override`. (Until D-054 this paragraph described two Switchboard feed jobs, one per source.)
 
 Settlement job: first attempt at close + 5 min; retry every 30 s for 15 min; then alert and trigger the ops agent.
 `admin_settle_override`: admin signer, market `Open`, `now ≥ close_ts + override_delay_secs` (default **3600**), stores source = Override.
