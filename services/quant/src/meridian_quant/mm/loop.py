@@ -11,6 +11,7 @@ from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 
 from meridian_quant.demo import demo_allow_stale_spot
+from meridian_quant.ratelog import RateLimitedLog
 
 from .config import MMConfig
 from .inventory import InventoryTracker
@@ -21,6 +22,11 @@ from .sources import FairValueSource, MarketSource, OrderClient
 from .types import FairValue, MarketKey, MarketState, Quote, RestingOrder
 
 logger = logging.getLogger(__name__)
+
+# M3-08b: a pull condition (no fair values, a stale value, close near) that persists is logged
+# loudly when it starts and then at most once a minute per reason; repeats go to DEBUG.
+PULL_LOG_INTERVAL_SECS = 60.0
+PULL_KEYS = ("pull:no-fair-values", "pull:stale", "pull:close")
 
 
 # Clock protocol for testing (Finding #2)
@@ -63,6 +69,9 @@ class MarketMakerLoop:
         self._running = False
         self._coverage = 0.0
         self._clock = clock or _utc_now  # Finding #2: injectable clock
+        self._pull_log = RateLimitedLog(
+            logger, PULL_LOG_INTERVAL_SECS, clock=lambda: self._clock().timestamp()
+        )
         self._market_source = market_source
         self._fair_value_source = fair_value_source
         self._order_client = order_client
@@ -102,7 +111,9 @@ class MarketMakerLoop:
             # Fetch fair values from the quant service
             fair_values = await self._fetch_fair_values()
             if not fair_values:
-                logger.warning("No fair values available, pulling all quotes")
+                self._pull_log.warning(
+                    "pull:no-fair-values", "Pulling all quotes: no fair values available"
+                )
                 try:
                     await self._cancel_all_quotes()  # Will fetch markets internally
                 except Exception:
@@ -136,12 +147,13 @@ class MarketMakerLoop:
 
             # Check pull conditions (stale spot data or near close)
             if self._should_pull_all_quotes(fair_values, open_markets):
-                logger.info("Pull condition met, canceling all quotes")
                 await self._cancel_all_quotes(open_markets)
                 # Settle funds to recycle proceeds (AB-11: settle still works after close)
                 await self._settle_funds(open_markets)
                 self._coverage = 0.0
                 return
+
+            self._log_resume()
 
             # Cancel all old quotes first (frees escrowed YES to OpenOrders.free_yes)
             # Track markets where cancel listing failed (AB-10: don't quote those markets)
@@ -191,7 +203,12 @@ class MarketMakerLoop:
                 break  # devnet demo only: quote from the last close (see meridian_quant.demo)
             age_secs = (now - fv.as_of).total_seconds()
             if age_secs > self.config.max_spot_age_secs or fv.stale:
-                logger.warning(f"Stale spot data for {fv.ticker}: {age_secs:.1f}s old")
+                self._pull_log.warning(
+                    "pull:stale",
+                    f"Pulling all quotes: stale fair value for {fv.ticker} {fv.market} "
+                    f"(spot {age_secs:.1f}s old, limit {self.config.max_spot_age_secs}s, "
+                    f"stale={fv.stale})",
+                )
                 return True
 
         # The current session's trading date (today in ET, or the demo/next session when only
@@ -206,13 +223,22 @@ class MarketMakerLoop:
                 time_to_close_secs = market.close_ts - int(now.timestamp())
                 # Pull if at/within close window OR after close (negative ttc)
                 if time_to_close_secs < self.config.min_time_to_close_secs:
-                    logger.info(
-                        f"Pulling quotes: {time_to_close_secs}s to close "
-                        f"for {market.ticker} (< {self.config.min_time_to_close_secs}s threshold)"
+                    self._pull_log.log(
+                        "pull:close",
+                        f"Pulling all quotes: {time_to_close_secs}s to close "
+                        f"for {market.ticker} (< {self.config.min_time_to_close_secs}s threshold)",
+                        logging.INFO,
                     )
                     return True
 
         return False
+
+    def _log_resume(self) -> None:
+        """Once quoting resumes after a pull, say so (once) and re-arm the pull warnings."""
+        if any(self._pull_log.active(key) for key in PULL_KEYS):
+            logger.info("Resuming quotes: pull condition cleared")
+            for key in PULL_KEYS:
+                self._pull_log.clear(key)
 
     async def _fetch_open_markets(self) -> list[MarketState]:
         """Fetch open markets (AC1: uses injected source).

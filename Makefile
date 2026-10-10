@@ -15,7 +15,7 @@ PIP_AUDIT_VERSION := 2.10.1
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
 	client lint lint-rust lint-js-py check-links typecheck test test-rust-unit test-js-py-unit test-security \
 	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet migrate-config test-deploy-devnet e2e e2e-ui e2e-ui-browser dev demo-ops \
-	demo-markets demo-settle
+	demo-markets demo-settle deploy-quant
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -164,6 +164,12 @@ deploy-vercel:
 
 deploy-railway:
 	pnpm --filter deploy run deploy-platform railway $(DEPLOY_ARGS)
+
+## M3-08b: deploy the quant service (GET /fair-values, GET /health, market maker) to Railway as
+## service `quant`. Run by hand by the operator (not wired into CI); needs RAILWAY_TOKEN and the
+## variables in docs/environment.md § Quant on Railway. DEPLOY_ARGS=--dry-run lists them by name.
+deploy-quant:
+	pnpm --filter deploy run deploy-quant $(DEPLOY_ARGS)
 
 ## M3-07: Ops-agent override demo with fault injection (local validator only).
 ## Requires: local validator running, FAULT_INJECT_SOURCE=tiingo|twelvedata.

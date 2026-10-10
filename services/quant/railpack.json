@@ -1,0 +1,5 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "python",
+  "packages": { "uv": "0.12.0" }
+}

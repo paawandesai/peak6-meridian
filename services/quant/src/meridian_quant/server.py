@@ -4,6 +4,9 @@ Standard-library HTTP server: the request logic is `handle_request`, a pure func
 injected sources and a clock, so tests never open a socket or call a provider. A market whose
 spot or closes are unavailable is left out of the answer (and logged by ticker and reason), never
 priced with a made-up sigma or price.
+
+In production (mm/main.py) the service is given `fair_values`, a read of the background
+fair-value cache (fair_value_cache.py), so a request never calls a price provider (M3-08b).
 """
 
 import hmac
@@ -63,6 +66,8 @@ class Service:
     token: str
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
     mm_loop: object | None = None  # Optional MarketMakerLoop for M3-02 book_coverage
+    # M3-08b: read precomputed fair values (the cache) instead of pricing per request
+    fair_values: Callable[[], list[FairValue]] | None = None
 
     def __post_init__(self) -> None:
         if not self.token:
@@ -70,16 +75,30 @@ class Service:
 
 
 def compute_fair_values(service: Service) -> list[FairValue]:
-    now = service.now()
+    return price_markets(service.sources, service.sources.markets(), service.now())
+
+
+# (key, message): a skipped ticker or market; the cache passes a rate-limited logger here.
+Warn = Callable[[str, str], object]
+
+
+def _log_warning(_key: str, message: str) -> None:
+    log.warning(message)
+
+
+def price_markets(
+    sources: Sources, markets: list[MarketInfo], now: datetime, warn: Warn = _log_warning
+) -> list[FairValue]:
+    """Fair values for the priceable `markets`; each ticker's spot and closes fetched once."""
     spots: dict[str, tuple[Spot, float] | None] = {}
     out: list[FairValue] = []
-    for info in service.sources.markets():
+    for info in markets:
         if info.ticker not in spots:
             try:
-                spot = service.sources.spot(info.ticker)
-                spots[info.ticker] = (spot, realized_vol(service.sources.closes(info.ticker)))
+                spot = sources.spot(info.ticker)
+                spots[info.ticker] = (spot, realized_vol(sources.closes(info.ticker)))
             except (PriceError, VolError) as error:
-                log.warning("skipping ticker %s: %s", info.ticker, error)
+                warn(f"ticker:{info.ticker}", f"skipping ticker {info.ticker}: {error}")
                 spots[info.ticker] = None
         entry = spots[info.ticker]
         if entry is None:
@@ -94,7 +113,10 @@ def compute_fair_values(service: Service) -> list[FairValue]:
             cents = fair_cents(spot.price, info.strike_cents, sigma, remaining)
         except FairValueError as error:
             # One unpriceable market (e.g. a non-positive strike) must not 500 every other market.
-            log.warning("skipping market %s (%s): %s", info.market, info.ticker, error)
+            warn(
+                f"market:{info.market}",
+                f"skipping market {info.market} ({info.ticker}): {error}",
+            )
             continue
         out.append(
             FairValue(
@@ -139,7 +161,10 @@ def handle_request(
         return 405, b'{"error":"method not allowed"}'
     if not _authorized(authorization, service.token):
         return 401, b'{"error":"unauthorized"}'
-    body = [value.model_dump(mode="json") for value in compute_fair_values(service)]
+    values = (
+        service.fair_values() if service.fair_values is not None else compute_fair_values(service)
+    )
+    body = [value.model_dump(mode="json") for value in values]
     return 200, json.dumps(body).encode()
 
 

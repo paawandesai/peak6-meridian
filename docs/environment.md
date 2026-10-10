@@ -34,12 +34,14 @@
 | `TIINGO_API_KEY` | automation, app server, quant, ops-agent, feed jobs | Tiingo API | devnet | `test-tiingo-key` |
 | `TWELVEDATA_API_KEY` | same | Twelve Data API | devnet | `test-twelvedata-key` |
 | `FINNHUB_API_KEY` | app server, quant, ops-agent | Finnhub live quotes | no | `test-finnhub-key` |
-| `PYTH_API_TOKEN` | automation, quant | Pyth Pro (Lazer) API for signed price updates (server-only secret, never in tests/logs/commits) | M3 | `test-pyth-token` |
+| `PYTH_API_TOKEN` | automation, quant, app (server) | Pyth Pro (Lazer) API (server-only secret, never in tests/logs/commits). Quant: primary spot source (one `latest_price` call for all 7 tickers per 5 s) and daily-closes fallback; without it quant uses Finnhub only | M3 (quant: recommended) | `test-pyth-token` |
 | `ANTHROPIC_API_KEY` | ops-agent | Claude API | M3 | `sk-ant-test-placeholder` |
 | `OPS_AGENT_MODEL` | ops-agent | Model ID | no | `claude-sonnet-5-5` |
 | `OPS_AGENT_BUDGET_USD` | ops-agent | Hard spend cap; agent refuses calls once reached | no (default 20) | `20` |
 | `SERVICE_TOKEN` | app, automation, quant, ops-agent | Bearer token for internal HTTP calls | yes (services) | `local-dev-token` |
-| `QUANT_URL` / `OPS_AGENT_URL` | app, automation | Internal service URLs | M3 | `http://127.0.0.1:4100` |
+| `QUANT_URL` / `OPS_AGENT_URL` | app, automation | Internal service URLs (production `QUANT_URL`: the Railway `quant` service URL printed by `make deploy-quant`) | M3 | `http://127.0.0.1:4100` |
+| `QUANT_HOST` / `QUANT_PORT` | quant | HTTP bind address; on Railway the start command sets `QUANT_PORT` from Railway's `PORT` | no (default `0.0.0.0` / `4100`) | `4100` |
+| `MERIDIAN_DEMO_ALLOW_STALE_SPOT` | quant | Devnet demo only: price and quote from the last spot after hours (see `meridian_quant/demo.py`) | no | `1` |
 | `AUTOMATION_URL` | app (server) | Automation service base URL; `/api/market-open-times` proxies its `GET /markets` open-time index (P1-4). Unset: the UI shows "Open time unavailable" | no | `http://127.0.0.1:4000` |
 | `ALERT_WEBHOOK_URL` | automation, ops-agent, app (server) | POST JSON alerts (Discord/Slack-compatible) | no | `https://example.invalid/webhook` |
 | `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | CI deploy job only | Deploy the app with the Vercel CLI (IDs come from `vercel link`) | M2 | `test-vercel-token` |
@@ -55,6 +57,15 @@ On-chain parameters (staleness, spread, override delay) are in the Config accoun
 - Guards before any transaction: the RPC's genesis hash must be devnet's (hostname is irrelevant; mainnet, testnet, unknown and unreachable RPCs are refused); the program keypair must equal `declare_id!`, the built IDL address and `MERIDIAN_PROGRAM_ID` when set.
 - Output: `deployments/devnet.json` (public keys only; `--out <file>` to write elsewhere). On a re-run the on-chain Config, not the record, is the source of truth.
 - `--feeds <file>` pins real Switchboard feeds (`{ "AAPL": [{pubkey, hash}, {pubkey, hash}], ... }`), checked against `oracle/feeds/*` and for Switchboard ownership before anything is sent. Without it, feed fields are never touched.
+
+## Quant on Railway (M3-08b)
+`make deploy-quant` deploys the quant service (`python -m meridian_quant.mm.main`: `GET /fair-values` with bearer `SERVICE_TOKEN`, unauthenticated `GET /health`, and the market maker, all in one process) to Railway as the service `quant`. The operator runs it by hand; it is not part of CI. `make deploy-quant DEPLOY_ARGS=--dry-run` prints the service, config file, health path and the variable names (present or missing), with no network call.
+- Token: `RAILWAY_TOKEN` (project or account token). Optional: `RAILWAY_PROJECT_NAME` / `DEPLOY_PROJECT_NAME` (default `meridian`), `RAILWAY_QUANT_SERVICE_NAME` (default `quant`).
+- Required variables (set on the service; values never printed): `MARKET_MAKER_KEYPAIR` (secret), `MERIDIAN_PROGRAM_ID`, `USDC_MINT`, `SERVICE_TOKEN` (secret), `FINNHUB_API_KEY` (secret), `TIINGO_API_KEY` (secret), `SOLANA_RPC_URL` (secret: a provider URL carries its key), `SOLANA_CLUSTER`.
+- Optional: `PYTH_API_TOKEN` (secret; recommended, the primary spot source), `MERIDIAN_DEMO_ALLOW_STALE_SPOT`, `MERIDIAN_DEVNET_RPC_URL` (secret; takes precedence over `SOLANA_RPC_URL`), `SOLANA_WS_URL` (secret).
+- The command also sets `RAILPACK_CONFIG_FILE=services/quant/railpack.json`: the repo root holds `Cargo.toml`, so Railpack would otherwise build a Rust image. Build and start come from `services/quant/railway.json` (locked `uv sync` of `meridian_quant` only; `QUANT_PORT=$PORT`; health check `/health`; restart on failure).
+- After the first deploy, set the Vercel app's `QUANT_URL` to the printed URL and its `SERVICE_TOKEN` to the same value, so `/api/fair-values` reaches the service.
+- Spot and fair-value caching: spots are fetched at most once per ticker per 5 s (Pyth Pro for all tickers in one call, Finnhub per ticker as the fallback), and fair values are recomputed every 1.5 s in the background; every `/fair-values` request and the market maker read that cache. A value whose refresh failed, or that is more than 30 s old, is served with `stale: true` (and the market maker pulls its quotes); a market that never had a value is left out.
 
 ## Local services and ports
 | Service | Port | Start |

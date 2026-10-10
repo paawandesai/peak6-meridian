@@ -1,5 +1,5 @@
-// Deploys the app to Vercel and the automation service to Railway (M2-11).
-// Usage: tsx src/deploy-platform.ts <vercel|railway> [--dry-run]
+// Deploys the app to Vercel and the automation (M2-11) and quant (M3-08b) services to Railway.
+// Usage: tsx src/deploy-platform.ts <vercel|railway|railway-quant> [--dry-run]
 // Tokens come from the environment (GitLab CI variables), never from files or argv.
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
