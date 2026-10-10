@@ -12,7 +12,7 @@ describe("MarketsEmpty", () => {
     render(<MarketsEmpty />);
 
     expect(
-      screen.getByText(/No markets yet today; markets are created by 9:00 AM ET/)
+      screen.getByText(/No markets today\. Markets are created each trading day\./)
     ).toBeInTheDocument();
   });
 

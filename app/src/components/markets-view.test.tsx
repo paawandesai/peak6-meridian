@@ -17,6 +17,16 @@ vi.mock("./price-history-chart/price-history-chart", () => ({
   PriceHistoryChart: () => null,
 }));
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    prefetch: vi.fn(),
+  }),
+  usePathname: () => "/",
+}));
+
 beforeAll(() => {
   // TickerInsight renders DistributionChart (Recharts); jsdom needs ResizeObserver.
   vi.stubGlobal(

@@ -1,6 +1,5 @@
 "use client";
 
-import { Suspense } from "react";
 import { PageNotes } from "./markets/notes";
 import { LandingHeader } from "./markets/landing-header";
 import { TickerTabs } from "./markets/ticker-tabs";

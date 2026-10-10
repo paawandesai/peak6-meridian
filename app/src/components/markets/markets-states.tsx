@@ -5,13 +5,13 @@ type MarketsEmptyProps = {
 
 /**
  * Empty state for Markets page when no markets exist (P0-3).
- * Default message: "No markets yet today; markets are created by 9:00 AM ET".
+ * Default message: "No markets today. Markets are created each trading day." (UI-03 AC6).
  */
 export function MarketsEmpty({ message }: MarketsEmptyProps) {
   return (
     <div className="flex flex-col items-center justify-center px-mer-4 py-mer-8 text-center">
       <p className="text-mer-base text-mer-ink-muted">
-        {message ?? "No markets yet today; markets are created by 9:00 AM ET"}
+        {message ?? "No markets today. Markets are created each trading day."}
       </p>
     </div>
   );
@@ -19,10 +19,14 @@ export function MarketsEmpty({ message }: MarketsEmptyProps) {
 
 /**
  * Loading state for Markets page while fetching market data (P0-3).
+ * NFR-16: role="status" announces loading state to screen readers.
  */
 export function MarketsLoading() {
   return (
-    <div className="flex flex-col items-center justify-center px-mer-4 py-mer-8">
+    <div
+      role="status"
+      className="flex flex-col items-center justify-center px-mer-4 py-mer-8"
+    >
       <div className="h-8 w-8 animate-spin rounded-full border-4 border-mer-surface border-t-mer-primary" />
       <p className="mt-mer-3 text-mer-sm text-mer-ink-muted">Loading markets…</p>
     </div>

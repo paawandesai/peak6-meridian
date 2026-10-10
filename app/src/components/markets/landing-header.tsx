@@ -9,9 +9,6 @@ type Props = {
   readonly demoWalletButton?: ReactNode;
 };
 
-const CONNECT_COPY =
-  "Connecting costs nothing and moves no funds; each trade asks for one signature.";
-
 /**
  * Landing header (FR-21) for first-time visitors on Markets page.
  * - Short explanation of how Meridian works
@@ -37,8 +34,14 @@ export function LandingHeader({ demoWalletButton }: Props) {
             winning side pays $1.00 per contract; you know your max loss before you sign.
           </p>
           <div className="flex flex-wrap items-center gap-mer-2">
+            <button
+              onClick={() => setVisible(true)}
+              className="rounded-mer bg-mer-primary px-mer-3 py-mer-1.5 text-mer-sm font-medium text-white hover:bg-mer-primary-hover"
+            >
+              Connect wallet
+            </button>
             <p className="text-mer-xs text-mer-ink-muted">
-              Connecting asks for nothing and moves nothing. Each trade is one signature.
+              Connecting costs nothing and moves no funds; each trade asks for one signature.
             </p>
             {demoWalletButton}
           </div>

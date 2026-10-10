@@ -1,11 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+
+const mockSetVisible = vi.fn();
+const wallet = vi.hoisted(() => ({ publicKey: null as unknown }));
+
+vi.mock("@solana/wallet-adapter-react", () => ({
+  useWallet: () => wallet,
+}));
+
+vi.mock("@solana/wallet-adapter-react-ui", () => ({
+  useWalletModal: () => ({ setVisible: mockSetVisible }),
+}));
+
 import { LandingHeader } from "./landing-header";
 
 describe("LandingHeader", () => {
   beforeEach(() => {
-    localStorage.clear();
-    vi.clearAllMocks();
+    wallet.publicKey = null;
+    mockSetVisible.mockClear();
   });
 
   it("renders FR-21 copy", () => {
@@ -29,54 +41,33 @@ describe("LandingHeader", () => {
     expect(screen.getByText(/each trade asks for one signature/)).toBeInTheDocument();
   });
 
+  it("renders Connect wallet button when wallet not connected", () => {
+    render(<LandingHeader />);
+
+    expect(screen.getByRole("button", { name: /Connect wallet/i })).toBeInTheDocument();
+  });
+
+  it("opens wallet modal when Connect button clicked", () => {
+    render(<LandingHeader />);
+
+    const connectButton = screen.getByRole("button", { name: /Connect wallet/i });
+    fireEvent.click(connectButton);
+
+    expect(mockSetVisible).toHaveBeenCalledWith(true);
+  });
+
   it("renders demo wallet button when provided", () => {
-    render(
-      <LandingHeader demoWalletButton={<button>Try the demo wallet</button>} />
-    );
+    render(<LandingHeader demoWalletButton={<button>Try the demo wallet</button>} />);
 
     expect(screen.getByRole("button", { name: /Try the demo wallet/ })).toBeInTheDocument();
   });
 
-  it("shows dismiss button", () => {
+  it("hides when wallet is connected (FR-21, UI-03 AC7)", () => {
+    wallet.publicKey = { toBase58: () => "FakeWalletAddress" };
+
     render(<LandingHeader />);
-
-    expect(screen.getByRole("button", { name: /Dismiss landing header/ })).toBeInTheDocument();
-  });
-
-  it("dismisses when X button clicked", () => {
-    render(<LandingHeader />);
-
-    const dismissButton = screen.getByRole("button", { name: /Dismiss landing header/ });
-    fireEvent.click(dismissButton);
 
     expect(screen.queryByText(/Will META close/)).not.toBeInTheDocument();
-  });
-
-  it("persists dismissal in localStorage", () => {
-    render(<LandingHeader />);
-
-    const dismissButton = screen.getByRole("button", { name: /Dismiss landing header/ });
-    fireEvent.click(dismissButton);
-
-    expect(localStorage.getItem("meridian-landing-header-dismissed")).toBe("true");
-  });
-
-  it("stays dismissed on remount", () => {
-    localStorage.setItem("meridian-landing-header-dismissed", "true");
-
-    const { rerender } = render(<LandingHeader />);
-
-    expect(screen.queryByText(/Will META close/)).not.toBeInTheDocument();
-
-    rerender(<LandingHeader />);
-    expect(screen.queryByText(/Will META close/)).not.toBeInTheDocument();
-  });
-
-  it("shows header when not dismissed", () => {
-    localStorage.setItem("meridian-landing-header-dismissed", "false");
-
-    render(<LandingHeader />);
-
-    expect(screen.getByText(/Will META close/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Connect wallet/i })).not.toBeInTheDocument();
   });
 });

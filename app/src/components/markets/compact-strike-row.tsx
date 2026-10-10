@@ -29,11 +29,12 @@ export function CompactStrikeRow({
   const impliedPercent = yesPriceCents;
 
   return (
-    <button
-      onClick={onClick}
-      className="w-full border-b border-mer-rule px-mer-3 py-mer-2 text-left hover:bg-mer-surface-hover"
-    >
-      <div className="flex items-center justify-between gap-mer-2">
+    <div className="border-b border-mer-rule">
+      <button
+        onClick={onClick}
+        className="w-full px-mer-3 py-mer-2 text-left hover:bg-mer-surface-hover"
+      >
+        <div className="flex items-center justify-between gap-mer-2">
         {/* Strike */}
         <div className="flex-shrink-0 font-mer-medium text-mer-sm text-mer-ink">
           {formatStrike(market.strikeCents)}
@@ -69,8 +70,9 @@ export function CompactStrikeRow({
             {edgeCents}¢
           </div>
         )}
-      </div>
-    </button>
+        </div>
+      </button>
+    </div>
   );
 }
 
