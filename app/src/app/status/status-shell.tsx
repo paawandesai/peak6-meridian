@@ -116,7 +116,9 @@ function Page() {
         {statusData.status === "ready" && statusData.value.s === "error" ? (
           <p role="alert">Error: {statusData.value.error}</p>
         ) : null}
-        {statusData.status === "ready" && statusData.value.s === "ok" && statusData.value.markets ? (
+        {statusData.status === "ready" &&
+        statusData.value.s === "ok" &&
+        statusData.value.markets ? (
           <StatusView
             data={{
               markets: statusData.value.markets.map((m) => ({
@@ -136,7 +138,7 @@ function Page() {
                 statusData.value.markets.map((m) => [
                   m.address,
                   m.vaultBase === "0" ? null : BigInt(m.vaultBase),
-                ])
+                ]),
               ),
               facts: new Map(
                 statusData.value.markets.map((m) => [
@@ -147,7 +149,7 @@ function Page() {
                     settleSlot: m.settleSlot > 0 ? m.settleSlot : null,
                     oracleSlot: m.oracleAsOf > 0 ? BigInt(m.oracleAsOf) : null,
                   },
-                ])
+                ]),
               ),
             }}
           />

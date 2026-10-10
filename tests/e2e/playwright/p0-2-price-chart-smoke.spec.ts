@@ -49,7 +49,9 @@ test.describe("P0-2: Price history chart - Mobile (390x844)", () => {
 
     // Wait for either the chart or a status message
     await expect(
-      page.locator("text=/Loading price history|No price history|Price history unavailable|.h-48/").first()
+      page
+        .locator("text=/Loading price history|No price history|Price history unavailable|.h-48/")
+        .first(),
     ).toBeVisible({ timeout: 10000 });
 
     // Verify no blank box: either we have a status message OR the chart
@@ -100,16 +102,21 @@ test.describe("P0-2: Price history chart - Desktop (1280x800)", () => {
 
     // Wait for content
     await expect(
-      page.locator("text=/Loading price history|No price history|Price history unavailable|.h-48/").first()
+      page
+        .locator("text=/Loading price history|No price history|Price history unavailable|.h-48/")
+        .first(),
     ).toBeVisible({ timeout: 10000 });
   });
 
   test("chart has correct label", async ({ page }) => {
     await page.goto("/");
 
-    const summary = page.locator("summary").filter({
-      hasText: /Show price history.*Pyth price, last 7 days \(context only\)/
-    }).first();
+    const summary = page
+      .locator("summary")
+      .filter({
+        hasText: /Show price history.*Pyth price, last 7 days \(context only\)/,
+      })
+      .first();
     await expect(summary).toBeVisible();
   });
 });
@@ -126,7 +133,9 @@ test.describe("P0-2: Price history chart - Dark mode", () => {
 
     // Wait for chart or status
     await expect(
-      page.locator("text=/Loading price history|No price history|Price history unavailable|.h-48/").first()
+      page
+        .locator("text=/Loading price history|No price history|Price history unavailable|.h-48/")
+        .first(),
     ).toBeVisible({ timeout: 10000 });
 
     // Take a screenshot for manual verification if needed

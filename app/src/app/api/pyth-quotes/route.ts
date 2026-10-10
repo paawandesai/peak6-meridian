@@ -133,7 +133,10 @@ async function fetchPythPrice(
 }
 
 /** Fetches and caches quotes for all tickers. Shares in-flight requests and caches for 2s. */
-async function fetchAllQuotes(tickers: readonly Mag7Ticker[], apiToken: string): Promise<PythQuotesResponse> {
+async function fetchAllQuotes(
+  tickers: readonly Mag7Ticker[],
+  apiToken: string,
+): Promise<PythQuotesResponse> {
   // Fetch all tickers in parallel with 10s timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);

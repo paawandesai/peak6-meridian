@@ -130,9 +130,7 @@ describe("PriceHistoryChart", () => {
     render(<PriceHistoryChart ticker="META" nowSecs={1000000} />);
     fireEvent.click(screen.getByText(/Show price history/));
 
-    await waitFor(() =>
-      expect(screen.getByText(/Price history unavailable/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/Price history unavailable/)).toBeInTheDocument());
   });
 
   it("keeps last good data on subsequent fetch failures", async () => {
@@ -293,9 +291,7 @@ describe("PriceHistoryChart", () => {
     await waitFor(() => expect(mockSetData).toHaveBeenCalledTimes(1));
 
     const setDataCall = mockSetData.mock.calls[0]?.[0];
-    expect(setDataCall).toEqual([
-      { time: 1000000, open: 100, high: 101, low: 99, close: 100.5 },
-    ]);
+    expect(setDataCall).toEqual([{ time: 1000000, open: 100, high: 101, low: 99, close: 100.5 }]);
   });
 
   it("calls setData with lastGoodData on fetch failure", async () => {
@@ -353,7 +349,7 @@ describe("PriceHistoryChart", () => {
         nowSecs={1500000}
         strikes={[10000n, 11000n]}
         fairValueCents={10500}
-      />
+      />,
     );
     fireEvent.click(screen.getByText(/Show price history/));
 
@@ -373,7 +369,7 @@ describe("PriceHistoryChart", () => {
         nowSecs={1500001}
         strikes={[10000n, 11000n, 12000n]}
         fairValueCents={10600}
-      />
+      />,
     );
 
     // Old lines should be removed before new ones are created

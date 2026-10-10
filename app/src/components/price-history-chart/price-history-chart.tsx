@@ -127,7 +127,15 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
         if (cancelled) return;
         if (data.s !== "ok" || !data.t || !data.o || !data.h || !data.l || !data.c) {
           // Keep last good data if we have it
-          if (lastGoodData && lastGoodData.t && lastGoodData.o && lastGoodData.h && lastGoodData.l && lastGoodData.c && seriesRef.current) {
+          if (
+            lastGoodData &&
+            lastGoodData.t &&
+            lastGoodData.o &&
+            lastGoodData.h &&
+            lastGoodData.l &&
+            lastGoodData.c &&
+            seriesRef.current
+          ) {
             // Re-apply cached data to the series
             const { t, o, h, l, c } = lastGoodData;
             const candles = t.map((time, i) => ({
@@ -167,7 +175,15 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
         if (cancelled) return;
         console.error("Failed to fetch price history:", error);
         // Keep last good data if we have it
-        if (lastGoodData && lastGoodData.t && lastGoodData.o && lastGoodData.h && lastGoodData.l && lastGoodData.c && seriesRef.current) {
+        if (
+          lastGoodData &&
+          lastGoodData.t &&
+          lastGoodData.o &&
+          lastGoodData.h &&
+          lastGoodData.l &&
+          lastGoodData.c &&
+          seriesRef.current
+        ) {
           // Re-apply cached data to the series
           const { t, o, h, l, c } = lastGoodData;
           const candles = t.map((time, i) => ({

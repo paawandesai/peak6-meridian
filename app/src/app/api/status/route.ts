@@ -95,10 +95,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
     });
 
     if (!params.success) {
-      return NextResponse.json(
-        { s: "error", error: "Invalid query parameters" },
-        { status: 400 }
-      );
+      return NextResponse.json({ s: "error", error: "Invalid query parameters" }, { status: 400 });
     }
 
     // Lazy imports to avoid bundling anchor/client code during Next.js build
@@ -152,7 +149,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
           if (allMarkets.length === 0) {
             const now = new Date();
             const etDate = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-            tradingDate = etDate.getFullYear() * 10000 + (etDate.getMonth() + 1) * 100 + etDate.getDate();
+            tradingDate =
+              etDate.getFullYear() * 10000 + (etDate.getMonth() + 1) * 100 + etDate.getDate();
           } else {
             const dates = [...new Set(allMarkets.map((m) => m.tradingDate))].sort((a, b) => b - a);
             tradingDate = dates[0] ?? 0;
@@ -235,7 +233,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
         s: "error",
         error: error instanceof Error ? error.message : "Internal server error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

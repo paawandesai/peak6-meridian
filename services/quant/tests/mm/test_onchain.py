@@ -1,4 +1,5 @@
 """Tests for onchain.py HttpFairValueSource (M3-02 coverage)."""
+
 from unittest.mock import AsyncMock, patch
 
 import pytest

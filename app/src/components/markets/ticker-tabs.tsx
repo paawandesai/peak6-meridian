@@ -63,13 +63,18 @@ export function TickerTabs({ tickerGroups }: Props) {
     (sum, g) => sum + g.markets.filter((m) => !m.settled).length,
     0,
   );
-  const allInfo: TickerInfo = { ticker: "All", price: null, priceAsOf: null, activeCount: allCount };
+  const allInfo: TickerInfo = {
+    ticker: "All",
+    price: null,
+    priceAsOf: null,
+    activeCount: allCount,
+  };
   const allTickerInfo = [...tickerInfo, allInfo];
 
   // Determine selected ticker
   const selectedParam = searchParams.get("t");
   const defaultTicker: TickerOrAll = isMobile
-    ? tickerInfo.find((t) => t.activeCount > 0)?.ticker ?? TICKERS[0]
+    ? (tickerInfo.find((t) => t.activeCount > 0)?.ticker ?? TICKERS[0])
     : "All";
   const selected: TickerOrAll =
     selectedParam && [...TICKERS, "All"].includes(selectedParam as TickerOrAll)
@@ -153,9 +158,7 @@ export function TickerTabs({ tickerGroups }: Props) {
               <div className="flex flex-col items-start gap-mer-0.5">
                 <span className="font-mer-medium">{info.ticker}</span>
                 {info.price !== null && (
-                  <span className="text-mer-xs opacity-90">
-                    ${info.price.toFixed(2)}
-                  </span>
+                  <span className="text-mer-xs opacity-90">${info.price.toFixed(2)}</span>
                 )}
                 {info.activeCount > 0 && (
                   <span className="text-mer-xs opacity-75">

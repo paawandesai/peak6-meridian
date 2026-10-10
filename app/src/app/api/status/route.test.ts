@@ -213,7 +213,7 @@ describe("GET /api/status", () => {
       vaultRpcCount = 1; // getMultipleParsedAccounts for vaults (chunked if needed)
       // loadMarketFacts skips open markets (nowSecs < closeTs) per P1-6 optimization
       sigScanCount = (dateMarkets as typeof markets).filter(
-        (m) => m.settled || nowSecs >= Number(m.closeTs)
+        (m) => m.settled || nowSecs >= Number(m.closeTs),
       ).length;
       return {
         markets: dateMarkets,

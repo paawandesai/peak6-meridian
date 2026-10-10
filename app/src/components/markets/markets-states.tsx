@@ -23,10 +23,7 @@ export function MarketsEmpty({ message }: MarketsEmptyProps) {
  */
 export function MarketsLoading() {
   return (
-    <div
-      role="status"
-      className="flex flex-col items-center justify-center px-mer-4 py-mer-8"
-    >
+    <div role="status" className="flex flex-col items-center justify-center px-mer-4 py-mer-8">
       <div className="h-8 w-8 animate-spin rounded-full border-4 border-mer-surface border-t-mer-primary" />
       <p className="mt-mer-3 text-mer-sm text-mer-ink-muted">Loading markets…</p>
     </div>
