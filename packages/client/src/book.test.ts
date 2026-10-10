@@ -123,4 +123,21 @@ describe("fetchBookQuotes", () => {
     expect(quotes[marketA.toBase58()]).toEqual({ yesBid: 40, yesAsk: 44, yesMid: 42, noPrice: 58 });
     expect(quotes[marketB.toBase58()]).toBeNull();
   });
+
+  it("chunks fetches to stay under 100-key RPC limit (P0-4)", async () => {
+    // 150 markets → 150 book PDAs, should chunk into 2 calls of 99 and 51 keys
+    const markets = Array.from({ length: 150 }, () => Keypair.generate().publicKey);
+    const callSizes: number[] = [];
+    await fetchBookQuotes(
+      {
+        fetchMultiple: (addresses) => {
+          callSizes.push(addresses.length);
+          return Promise.resolve(addresses.map(() => null));
+        },
+      },
+      markets,
+    );
+    expect(callSizes).toEqual([99, 51]);
+    expect(callSizes.every((size) => size <= 99)).toBe(true);
+  });
 });
