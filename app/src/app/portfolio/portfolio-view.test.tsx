@@ -17,11 +17,15 @@ import type { PortfolioActions } from "./actions";
 import type { PortfolioSource } from "./data";
 import { AAPL, fill, held, MSFT, NVDA, OTHER, snapshot, WALLET } from "./fixtures";
 import { CONNECT_COPY, MARK_FOOTNOTE, PortfolioView } from "./portfolio-view";
+import { TestMarketProvider } from "@/components/test-market-context";
 import type { MarketDataSources } from "@/lib/market-data";
 import { reader, withReader } from "@/test-utils";
 
 const KEY = new PublicKey("11111111111111111111111111111112");
-const NOW = 1_999_990_000;
+/** Unix seconds for a UTC ISO string. */
+const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
+// Oct 8, 2026 15:00 ET - before the 16:00 ET session close
+const NOW = utc("2026-10-08T19:00:00Z");
 
 function setup(
   options: {
@@ -64,12 +68,14 @@ function setup(
         listMarkets: () => Promise.resolve(options.markets ?? [NVDA, AAPL, MSFT]),
         usdcBalance: () => Promise.resolve(1_250_000_000n),
       }),
-      <PortfolioView
-        source={source}
-        actions={actions}
-        marketSources={marketSources}
-        nowSecs={NOW}
-      />,
+      <TestMarketProvider>
+        <PortfolioView
+          source={source}
+          actions={actions}
+          marketSources={marketSources}
+          nowSecs={NOW}
+        />
+      </TestMarketProvider>,
     ),
   );
   return { source, actions };
@@ -90,7 +96,14 @@ const as = (events: ReturnType<typeof buyNvda>[]) =>
 
 describe("Portfolio page", () => {
   it("asks for a wallet first and opens the connect dialog", () => {
-    render(withReader(reader(), <PortfolioView />));
+    render(
+      withReader(
+        reader(),
+        <TestMarketProvider>
+          <PortfolioView />
+        </TestMarketProvider>,
+      ),
+    );
     expect(screen.getByText(CONNECT_COPY)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
     expect(modal.setVisible).toHaveBeenCalledWith(true);
@@ -102,7 +115,9 @@ describe("Portfolio page", () => {
     render(
       withReader(
         reader({ listMarkets: () => Promise.resolve([NVDA]) }),
-        <PortfolioView source={source} />,
+        <TestMarketProvider>
+          <PortfolioView source={source} />
+        </TestMarketProvider>,
       ),
     );
     expect(screen.getByRole("status")).toHaveTextContent("Loading portfolio");

@@ -62,7 +62,7 @@
 6. Approve transaction in wallet
 7. Show order confirmation
 
-**Overlay/Narration:** "Buy NO at 35¢ means you're betting YES stays under your price. Instant on-chain matching."
+**Overlay/Narration:** "Buy NO at 35¢ means you're betting the stock closes below the strike. Instant on-chain matching."
 
 **Dependencies:**
 - Trade page (!49 M2-06) ⏳
@@ -111,7 +111,7 @@
 2. Show settlement price appearing (e.g., "Settled: YES 68.42¢" from oracle)
 3. Show outcome badge (YES/NO winner)
 
-**Overlay/Narration:** "Friday 16:05 ET: Pyth oracle posts the official close, verified on-chain. RedStone as fallback. Market settles, outcome locked."
+**Overlay/Narration:** "Friday 16:05 ET: Pyth Pro posts the official close (e.g., $681.23), cross-checked with RedStone. Market settles, outcome locked."
 
 **Dependencies:**
 - Trade page (!49 M2-06) ⏳
@@ -128,7 +128,7 @@
 1. Click "Settle Funds" (if needed, separate step)
 2. Click "Redeem"
 3. Approve transaction
-4. Show USDC balance increase (e.g., +$68.42 for 100 YES contracts settled at 68.42¢)
+4. Show USDC balance increase (e.g., +$100.00 for 100 winning contracts at $1.00 per contract)
 
 **Overlay/Narration:** "Redeem your winners for USDC. Instant, on-chain."
 
