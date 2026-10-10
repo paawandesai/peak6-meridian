@@ -4,7 +4,8 @@
  * The program has no open gate; "open" is creation. Read-only; results never change once known,
  * so they are cached per address for the life of the page.
  */
-import { Connection, PublicKey } from "@solana/web3.js";
+import { type Connection, PublicKey } from "@solana/web3.js";
+import { sharedConnection } from "@/lib/rpc";
 
 import type { PublicConfig } from "./config";
 
@@ -43,7 +44,7 @@ export async function creationBlockTime(
 
 export function createOpenTimeSource(
   config: PublicConfig,
-  connection: SignaturesApi = new Connection(config.rpcUrl, "confirmed"),
+  connection: SignaturesApi = sharedConnection(config.rpcUrl),
 ): OpenTimeSource {
   const cache = new Map<string, number | null>();
   return async (addresses) => {

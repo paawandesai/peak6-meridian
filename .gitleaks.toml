@@ -37,11 +37,14 @@ commits = [
   "93e6a8e6710cdd2a4f14c575a29fa337183d9383", # MR !28 old head: fake KEY in market-data-server.test.ts
   "6d3fd0f3d822519e62283c574246b41296043902", # MR !27 old head: fake API keys in switchboard.test.ts
   "5eb5bbfab1b3ab4313e438057fef67e6be3fed5d", # MR !27 old head: public lookup-table address in a fixture
-  "4ebfd5030df352a8a4f96a2b70021927c2bddff8", # MR !86: 'sk-pyth-secret-12345' test fixture in client.test.ts (M3-10)
+  "5413bf8b39e129eb68a4ced830fc77f2af4b3dc9", # MR !82 (M2-15b): public RedStone signer Ethereum addresses
+  "2f4fe2f5b1208de5b5d4065844657a6282bcb19a", # MR !82 (M2-15b): test fixtures with fake Ethereum addresses
+  "4ebfd5030df352a8a4f96a2b70021927c2bddff8", # M3-10: fake Pyth API token in client.test.ts (test fixture)
+  "4c5449883a823725df74da14943e4c88d6862dd7", # M3-10: fake Pyth API token (rebased SHA, same content)
   "b246ad89c9f2472a86479a4c5421ac53ef606350", # MR !86: same fixture still present in property tests commit (M3-10)
-  "5413bf8b39e129eb68a4ced830fc77f2af4b3dc9", # MR !78: public RedStone signer address map (keyrock-1 line) in oracle-config.ts, pre-allowlist form
-  "22417ce499c7c845800c936890b7582041709e6d", # MR !85 (demo replay): fake Tiingo apiKey fixture in tiingo.test.ts, branch-only
-  "4c5449883a823725df74da14943e4c88d6862dd7", # MR !86 (Pyth): fake sensitiveToken fixture in client.test.ts, branch-only
+  "22417ce499c7c845800c936890b7582041709e6d", # M4-05/M4-08: fake Tiingo API key in test fixture
+  "5ffdc828f7ea8de7180ff58445a7df45fe891048", # M3-10: fake Pyth API token in oracle adapter (test fixture)
+  "3fee17916c7ea253f85af407b4f820363cfd92b3", # MR !86 (Pyth): 'sk-pyth-secret-12345' in client.test.ts (rebased, superseded)
 ]
 
 [[allowlists]]
@@ -57,11 +60,3 @@ regexes = [
   '''^0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202$''', # morpheus
   '''^0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE$''', # ciri
 ]
-
-[[allowlists]]
-description = """Fake fixture token in a since-deleted Pyth client test (commit 3fee179); not a real
-credential. Exempts only that exact literal in that one path."""
-condition = "AND"
-paths = ['''^services/automation/src/pyth/client\.test\.ts$''']
-regexTarget = "line"
-regexes = ['''sk-pyth-secret-12345''']
