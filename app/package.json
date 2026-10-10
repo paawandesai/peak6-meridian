@@ -41,5 +41,8 @@
     "postcss": "8.5.29",
     "tailwindcss": "4.3.3",
     "tsx": "4.23.15"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
