@@ -82,10 +82,11 @@ export function MarketsView({
   const ctx = { nowSecs: now, paused: cfg.paused, overrideDelaySecs: cfg.overrideDelaySecs };
   const activeDate = active[0]?.tradingDate;
   const showingOld = activeDate !== undefined && activeDate !== etTradingDate(now);
-  const needsSettleNote = active.some((m) => {
-    const s = marketStatus(m, now);
-    return s === "Closed" || s === "Settling" || s === "SettlementDelayed";
-  });
+  // Only when trading has stopped everywhere: an open market alongside a closed one keeps it hidden.
+  const statuses = active.map((m) => marketStatus(m, now));
+  const needsSettleNote =
+    !statuses.some((s) => s === "Open" || s === "ClosingSoon") &&
+    statuses.some((s) => s === "Closed" || s === "Settling" || s === "SettlementDelayed");
   const strikeData = (market: MarketRow): StrikeData => {
     const book = data.books[market.address];
     return {
