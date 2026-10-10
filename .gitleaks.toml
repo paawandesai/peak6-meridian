@@ -43,6 +43,9 @@ commits = [
   "2f4fe2f5b1208de5b5d4065844657a6282bcb19a", # M2-15b oracle-config.test.ts: public RedStone test address (rebased)
   "4ebfd5030df352a8a4f96a2b70021927c2bddff8", # MR !86: 'sk-pyth-secret-12345' test fixture in client.test.ts (M3-10)
   "b246ad89c9f2472a86479a4c5421ac53ef606350", # MR !86: same fixture still present in property tests commit (M3-10)
+  "5413bf8b39e129eb68a4ced830fc77f2af4b3dc9", # MR !78: public RedStone signer address map (keyrock-1 line) in oracle-config.ts, pre-allowlist form
+  "22417ce499c7c845800c936890b7582041709e6d", # MR !85 (demo replay): fake Tiingo apiKey fixture in tiingo.test.ts, branch-only
+  "4c5449883a823725df74da14943e4c88d6862dd7", # MR !86 (Pyth): fake sensitiveToken fixture in client.test.ts, branch-only
 ]
 
 [[allowlists]]
@@ -58,3 +61,11 @@ regexes = [
   '''^0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202$''', # morpheus
   '''^0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE$''', # ciri
 ]
+
+[[allowlists]]
+description = """Fake fixture token in a since-deleted Pyth client test (commit 3fee179); not a real
+credential. Exempts only that exact literal in that one path."""
+condition = "AND"
+paths = ['''^services/automation/src/pyth/client\.test\.ts$''']
+regexTarget = "line"
+regexes = ['''sk-pyth-secret-12345''']
