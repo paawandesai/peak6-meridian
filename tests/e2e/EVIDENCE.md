@@ -1,14 +1,26 @@
 # M2-06/UI-04 Evidence Collection (Issue #45)
 
-This directory contains evidence collection tests for deferred acceptance criteria from M2-06 AC5 and UI-04 AC5-AC6.
+This directory contains evidence collection infrastructure for deferred acceptance criteria from M2-06 AC5 and UI-04 AC5-AC6.
+
+## Collection Status
+
+**Collected and attached to #45 (comment 145423):**
+- ✓ Four-intent screenshots (Buy YES market, Sell YES limit, Buy NO market, Sell NO limit) - 390px mobile viewport
+- ✓ Lighthouse accessibility 100/100 on production build `/trade/{market}`
+
+**Pending:**
+- ⏳ Per-intent confirmation timing breakdown (send→confirmed ms, confirmed→UI ms)
+  - Test validates < 3s total per intent
+  - Detailed ms breakdown requires instrumented lifecycle run in configured test environment
+  - Blocked by test environment setup (lifecycle.ts env vars, validator+seed+build in flock)
 
 ## Requirements
 
 Evidence to be collected:
-- Four trade intents (Buy YES market, Sell YES limit, Buy NO market, Sell NO limit) with before/after screenshots
-- Confirmation timing < 3s for each trade
-- 390px viewport validation
-- Lighthouse accessibility report ≥ 90 for Trade page
+- Four trade intents (Buy YES market, Sell YES limit, Buy NO market, Sell NO limit) with before/after screenshots (✓ on #45)
+- Confirmation timing < 3s for each trade (test validates; detailed breakdown pending)
+- 390px viewport validation (✓ on #45)
+- Lighthouse accessibility report ≥ 90 for Trade page (✓ 100/100 on #45)
 
 ## Running Locally
 
