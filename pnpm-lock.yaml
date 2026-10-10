@@ -158,10 +158,44 @@ importers:
       '@solana/web3.js':
         specifier: 1.99.0
         version: 1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       fast-check:
         specifier: 4.10.2
         version: 4.10.2
+
+  scripts/demo:
+    dependencies:
+      '@coral-xyz/anchor':
+        specifier: 0.31.1
+        version: 0.31.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      '@meridian/client':
+        specifier: workspace:*
+        version: link:../../packages/client
+      '@solana/web3.js':
+        specifier: 1.99.0
+        version: 1.99.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
+      automation:
+        specifier: workspace:*
+        version: link:../../services/automation
+      luxon:
+        specifier: 3.7.2
+        version: 3.7.2
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/luxon':
+        specifier: 3.7.6
+        version: 3.7.6
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
 
   scripts/deploy:
     dependencies:

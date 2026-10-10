@@ -53,6 +53,10 @@ from .types import MarketState
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+# httpx/httpcore log every request URL at INFO; a dedicated RPC URL carries its API key in the
+# query string, so keep them at WARNING (CLAUDE.md: never log keys).
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
