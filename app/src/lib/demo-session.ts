@@ -90,6 +90,20 @@ export function isDemoMarket(market: Pick<MarketRow, "tradingDate">): boolean {
   return isDemoTradingDate(market.tradingDate);
 }
 
+/**
+ * Whether pages list a demo market by default (next to real session markets). A registered demo
+ * session is always listed, settled or not, so its traders can find and redeem positions. An
+ * unregistered non-trading-day market (a weekend test run, say) is listed only while unsettled;
+ * once settled it goes back behind the "Show test markets" toggle, where it was before.
+ */
+export function isListedDemoMarket(
+  market: Pick<MarketRow, "tradingDate" | "settled">,
+  registry: DemoRegistry = demoRegistry(),
+): boolean {
+  if (!isDemoMarket(market)) return false;
+  return !market.settled || findDemoSession(registry, market.tradingDate) !== undefined;
+}
+
 /** Validates registry text (JSON). Empty or missing text is an empty registry, not an error. */
 export function parseDemoRegistry(text: string | undefined): DemoRegistry {
   if (text === undefined || text.trim() === "") return { sessions: [], error: null };

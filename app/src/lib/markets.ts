@@ -1,6 +1,6 @@
 /** Market view model: status, grouping by ticker and display formatting. */
 import { strikeCentsToDollars } from "@meridian/client";
-import { isDemoMarket } from "./demo-session";
+import { isListedDemoMarket } from "./demo-session";
 import { sessionCloseTs } from "./time";
 
 /**
@@ -69,9 +69,10 @@ export function sessionMarketsOnly(markets: readonly MarketRow[]): MarketRow[] {
 
 /**
  * Partitions markets into listed and test markets (P0-1). `session` holds the markets every page
- * lists by default: real session markets plus demo-session markets (a `trading_date` NYSE is
- * closed on; they carry a DEMO badge and banner, see `demo-session.ts`). `test` holds the rest:
- * trading-day markets whose close is not the session close (`--close-in-secs`).
+ * lists by default: real session markets plus listed demo-session markets (a `trading_date` NYSE
+ * is closed on; they carry a DEMO badge and banner; see `isListedDemoMarket`). `test` holds the
+ * rest: markets whose close is not the session close (`--close-in-secs`), and settled
+ * non-trading-day markets that are not in the demo registry.
  */
 export function partitionMarkets(markets: readonly MarketRow[]): {
   readonly session: MarketRow[];
@@ -80,7 +81,7 @@ export function partitionMarkets(markets: readonly MarketRow[]): {
   const session: MarketRow[] = [];
   const test: MarketRow[] = [];
   for (const market of markets) {
-    if (isSessionMarket(market) || isDemoMarket(market)) {
+    if (isSessionMarket(market) || isListedDemoMarket(market)) {
       session.push(market);
     } else {
       test.push(market);

@@ -10,6 +10,7 @@ import {
   formatEtDateTime,
   isDemoMarket,
   isDemoTradingDate,
+  isListedDemoMarket,
   isValidYyyymmdd,
   parseDemoRegistry,
   type DemoRegistry,
@@ -255,5 +256,19 @@ describe("demo badge and listing", () => {
     expect(tests.map((m) => m.address)).toEqual(["test"]);
     expect(isDemoMarket(real)).toBe(false);
     expect(isDemoMarket(demo)).toBe(true);
+  });
+
+  it("keeps a registered demo session listed after settlement (so positions can be redeemed)", () => {
+    const settled = { tradingDate: 20261011, settled: true };
+    expect(isListedDemoMarket(settled, REGISTRY)).toBe(true);
+    expect(isListedDemoMarket({ ...settled, settled: false }, REGISTRY)).toBe(true);
+  });
+
+  it("returns a settled, unregistered non-trading-day market to the test list", () => {
+    expect(isListedDemoMarket({ tradingDate: 20261010, settled: true }, REGISTRY)).toBe(false);
+    expect(isListedDemoMarket({ tradingDate: 20261010, settled: false }, REGISTRY)).toBe(true);
+    expect(isListedDemoMarket({ tradingDate: 20261009, settled: false }, REGISTRY)).toBe(false);
+    const old = market({ address: "old", tradingDate: 20261010, closeTs: 1n, settled: true });
+    expect(partitionMarkets([old]).test.map((m) => m.address)).toEqual(["old"]);
   });
 });
