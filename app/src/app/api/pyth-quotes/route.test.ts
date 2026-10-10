@@ -95,4 +95,32 @@ describe("/api/pyth-quotes", () => {
     expect(body.quotes).toHaveLength(0);
     expect(body.unavailable).toContain("AAPL");
   });
+
+  it("keys cache by ticker set so different requests don't cross-contaminate", async () => {
+    // First request: NVDA only
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => pro(1314, "13000000", -5) });
+    const nvdaResponse = await GET(new Request("http://localhost/api/pyth-quotes?tickers=NVDA"));
+    const nvdaBody = await nvdaResponse.json();
+    expect(nvdaBody.quotes).toHaveLength(1);
+    expect(nvdaBody.quotes[0].ticker).toBe("NVDA");
+
+    // Second request: AAPL,MSFT (different ticker set, should not use NVDA cache)
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => pro(922, "22512345", -5) })
+      .mockResolvedValueOnce({ ok: true, json: async () => pro(1292, "41000000", -5) });
+    const multiResponse = await GET(
+      new Request("http://localhost/api/pyth-quotes?tickers=AAPL,MSFT"),
+    );
+    const multiBody = await multiResponse.json();
+    expect(multiBody.quotes).toHaveLength(2);
+    expect(multiBody.quotes.map((q: { ticker: string }) => q.ticker).sort()).toEqual([
+      "AAPL",
+      "MSFT",
+    ]);
+    // Should not leak NVDA into this response
+    expect(multiBody.quotes.some((q: { ticker: string }) => q.ticker === "NVDA")).toBe(false);
+  });
 });
