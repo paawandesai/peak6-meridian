@@ -11,6 +11,8 @@ from solana.rpc.async_api import AsyncClient
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 
+from meridian_quant.demo import demo_allow_stale_spot
+
 from .config import MMConfig
 from .inventory import InventoryTracker
 from .metrics import book_coverage
@@ -188,6 +190,8 @@ class MarketMakerLoop:
 
         # Check for stale spot data (> 10s old)
         for fv in fair_values:
+            if demo_allow_stale_spot():
+                break  # devnet demo only: quote from the last close (see meridian_quant.demo)
             age_secs = (now - fv.as_of).total_seconds()
             if age_secs > self.config.max_spot_age_secs or fv.stale:
                 logger.warning(f"Stale spot data for {fv.ticker}: {age_secs:.1f}s old")
