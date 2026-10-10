@@ -1,39 +1,202 @@
 <!-- OWNER: operator. -->
 # Meridian
 
-Binary 0DTE outcome markets on the MAG7 stocks, on Solana devnet. Each contract asks "Will TICKER close at or above STRIKE today?" and pays $1.00 test-USDC to YES or NO. Markets are created every trading morning, trade on an on-chain order book, settle from an oracle after the 4:00 PM ET close, and winners redeem. Devnet only; no real funds.
+Binary 0DTE outcome markets on the MAG7 stocks, on Solana devnet. Each contract asks "Will TICKER close at or above STRIKE today?" and pays $1.00 test-USDC to YES or NO. Markets are created every trading morning, trade on an on-chain order book, settle from an oracle after the 4:00 PM ET close, and winners redeem.
 
-Start here: [docs/brief.md](docs/brief.md) · [docs/architecture.md](docs/architecture.md) · [docs/domain.md](docs/domain.md) · [docs/status.md](docs/status.md)
+**Live on Solana devnet.** No real funds; test-USDC only.
+
+## Architecture
+
+Meridian combines an Anchor program with automation services and a Next.js frontend:
+- **On-chain program** (`programs/meridian`): Order book, minting, settlement, redemption
+- **Automation** (`services/automation`): Morning market creation, settlement orchestration
+- **Quant service** (`services/quant`): Fair-value pricing, market-making
+- **Ops agent** (`services/ops-agent`): Settlement oversight with Claude API
+- **Frontend** (`app/`): Markets, trading, portfolio, history, admin
+
+For details: [docs/architecture.md](docs/architecture.md) · [docs/domain.md](docs/domain.md) · [docs/brief.md](docs/brief.md)
+
+## Prerequisites
+
+**System requirements:** Linux (Ubuntu 24.04 recommended), ~10 GB disk, 8 GB RAM.
+
+**Install toolchain once:**
+```bash
+make toolchain  # Installs: Rust stable, Agave CLI 2.1.x, Anchor 0.31.1, Node 22, pnpm, uv
+```
+
+This installs all required build tools. See `Makefile` for exact versions.
 
 ## Quickstart (local)
-Linux, from the repo root:
+
+From the repo root:
 ```bash
-make toolchain        # once: Rust, Agave CLI, Anchor 0.31.1, Node 22, pnpm, uv
 cp .env.example .env
-make install
-make dev              # local validator + program + seeded markets + app on http://localhost:3000
-make e2e              # scripted full lifecycle: create → mint → trade (4 paths) → settle → redeem
+make install          # Install dependencies
+make build-local      # Build program with test oracle
+make dev              # Start validator + app on http://localhost:3000
 ```
-Commands and conventions: [CLAUDE.md](CLAUDE.md). Environment variables: [docs/environment.md](docs/environment.md).
+
+The local environment includes:
+- Solana test validator on `localhost:8899`
+- Next.js app on `http://localhost:3000`
+- Seeded test markets for MAG7 tickers
+
+To test the full lifecycle:
+```bash
+make e2e  # Create → mint → trade (4 paths) → settle → redeem
+```
 
 ## Devnet
-- **Program ID (re-keyed in D-053, deployed):** [`H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`](https://explorer.solana.com/address/H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm?cluster=devnet) (its keypair is held outside the repo; see [docs/decisions.md](docs/decisions.md)). Upgrade authority and admin: `6cp7ExvkgtdQuMyJXv26wg8Z2MBJT2idPdTkXx13F5Se`. The deployment record is `deployments/devnet.json`; the Config feeds are still placeholders until M2-02's live feeds are pinned.
-- **Test-USDC mint:** [`GKuoE1akZCNnA4ouVdB6P3ngSnanBM28oydPS54fSnT5`](https://explorer.solana.com/address/GKuoE1akZCNnA4ouVdB6P3ngSnanBM28oydPS54fSnT5?cluster=devnet) (6 decimals, mint authority = the faucet key `32eaD4Hp5WQ4UeD8S7eFVCVtxBvZuBpQzE4Byt7JLju7`). Config PDA: [`6Bf88kHFDDjdXG1BEdrj1edkLwWt9pEiKPFp6Ekhkoew`](https://explorer.solana.com/address/6Bf88kHFDDjdXG1BEdrj1edkLwWt9pEiKPFp6Ekhkoew?cluster=devnet) (automation authority `7JFyYPJyhJokQ3wMKHwJwb35MFj87snz52nTUS6qeEMy`).
-- **Frontend URL, how to get test-USDC:** _filled in when the app is deployed (M2)._
 
-Deploy (idempotent, refuses any cluster whose genesis hash is not devnet; needs the keypairs from D-053 (OQ-5), see [docs/environment.md](docs/environment.md#devnet-deploy)):
+**On-chain deployment:**
+- **Program ID:** `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`  
+  [View on Explorer](https://explorer.solana.com/address/H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm?cluster=devnet)
+- **Test-USDC mint:** `GKuoE1akZCNnA4ouVdB6P3ngSnanBM28oydPS54fSnT5`  
+  [View on Explorer](https://explorer.solana.com/address/GKuoE1akZCNnA4ouVdB6P3ngSnanBM28oydPS54fSnT5?cluster=devnet)
 
-```sh
-make deploy-devnet                                            # program, test-USDC mint, config
-make deploy-devnet DEPLOY_ARGS="--feeds deployments/feeds.devnet.json"   # pin real Switchboard feeds
+> **App deployment pending.** The frontend will be deployed after M4-03. Use `make dev` for local testing.
+
+**Deploy to devnet** (requires keypairs per [docs/environment.md](docs/environment.md)):
+```bash
+make deploy-devnet  # Deploys program, creates test-USDC mint, initializes config
 ```
 
-## Demo
-_Filled in as milestones ship._
-- **M1:** _pending_
-- **M2:** _pending_
-- **M3:** _pending_
-- **M4:** _pending_
+## Demo: Trading a Binary Contract
 
-## Risks and limitations
-See docs/risks.md (written in M4). No regulatory or compliance claims are made.
+> **Note:** App deployment pending M4-03. Use `make dev` for local testing.  
+> **Walkthrough with screenshots:** [docs/demo.md](docs/demo.md) (Buy YES screenshot pending !49 merge)
+
+To test locally, run `make dev` and visit `http://localhost:3000`:
+
+### 1. Get Test-USDC (local)
+1. The local validator auto-airdrops SOL on wallet connect
+2. Click "Get test-USDC" (header) to claim test USDC
+3. Approve the transaction in your wallet
+
+### 2. Navigate to Markets
+- Click "Markets" in the navigation
+- See today's strikes for AAPL, GOOGL, etc.
+- Fair values, edge (rich/cheap), and implied distribution are shown
+
+### 3. Buy YES
+**Example:** "Will AAPL close ≥ $230.00?"
+
+1. Click the $230 strike for AAPL
+2. On the Trade page, select **Buy YES**
+3. Enter quantity (e.g., 10 contracts)
+4. Review: "You pay $X.XX. You win $10.00 if AAPL closes ≥ $230.00"
+5. Click "Place Order"
+6. Sign transaction in wallet
+
+> _Trade page screenshot pending M2-06 (!49) merge._
+
+Your position appears in the Portfolio page.
+
+### 4. Trade Other Paths
+- **Sell YES:** Sell contracts you own
+- **Buy NO:** Bet the stock closes below strike (mints a pair, sells YES)
+- **Sell NO:** Exit a NO position (buys YES, redeems pair)
+
+### 5. Settlement & Redemption
+- Markets settle at 4:05 PM ET using Switchboard oracles
+- After settlement, visit Portfolio
+- Click "Redeem" on winning positions
+- Winners receive $1.00 per contract; losers get $0
+
+## Testing
+
+**Unit and integration tests:**
+```bash
+make test          # Rust, TypeScript, Python tests
+make test-security # Abuse-case tests (tests/security/)
+make coverage      # Coverage gate (80%+ for services)
+```
+
+**End-to-end:**
+```bash
+make e2e  # Full lifecycle on local validator
+```
+
+**Linting and typecheck:**
+```bash
+make lint
+make typecheck
+```
+
+**CI:** GitLab CI runs all checks on every push. Pipeline must be green to merge.
+
+## Project Structure
+
+```
+.
+├── programs/meridian/     # Anchor program (Rust)
+├── crates/meridian-book/  # Order book matching engine
+├── packages/client/       # TypeScript client SDK
+├── app/                   # Next.js frontend
+├── services/
+│   ├── automation/        # Market creation & settlement (TypeScript)
+│   ├── quant/             # Fair values & market maker (Python)
+│   └── ops-agent/         # Settlement oversight (Python + Claude)
+├── oracle/feeds/          # Switchboard feed definitions
+├── scripts/               # Deployment & lifecycle scripts
+├── tests/
+│   ├── e2e/               # End-to-end tests
+│   └── security/          # Abuse-case tests (AB-*)
+└── docs/                  # Architecture, domain, requirements
+```
+
+## Documentation
+
+- **[docs/brief.md](docs/brief.md)** - Project goals, scope, constraints
+- **[docs/architecture.md](docs/architecture.md)** - System design, components, data flows
+- **[docs/domain.md](docs/domain.md)** - Business rules, units, market lifecycle
+- **[docs/requirements.md](docs/requirements.md)** - Functional and non-functional requirements
+- **[docs/threat-model.md](docs/threat-model.md)** - Security analysis, attack surfaces
+- **[docs/decisions.md](docs/decisions.md)** - Key technical decisions and rationale
+- **[docs/status.md](docs/status.md)** - Implementation status, open questions
+- **[CLAUDE.md](CLAUDE.md)** - Conventions for LLM coding agents
+
+## Commands Reference
+
+| Command | Purpose |
+|---------|---------|
+| `make toolchain` | Install Rust, Anchor, Node, pnpm, uv (once per machine) |
+| `make install` | Install all project dependencies |
+| `make build-local` | Build program with test oracle feature |
+| `make build-devnet` | Build program for devnet (no test oracle) |
+| `make client` | Regenerate TypeScript client from IDL |
+| `make dev` | Run local validator + app |
+| `make test` | Run all tests |
+| `make test-security` | Run abuse-case tests |
+| `make coverage` | Check coverage thresholds |
+| `make e2e` | End-to-end lifecycle test |
+| `make lint` | Lint Rust, TypeScript, Python |
+| `make typecheck` | TypeScript type checking |
+| `make deploy-devnet` | Deploy to Solana devnet |
+
+See `make help` or `Makefile` for all targets.
+
+## Risks and Limitations
+
+**This is a devnet demo.** No real money. No regulatory compliance. No mainnet deployment.
+
+Known limitations:
+- Devnet only (test-USDC, no real funds)
+- Single admin keypair controls markets and settlement
+- Oracle outages halt settlement
+- No mainnet deployment planned
+
+See [docs/threat-model.md](docs/threat-model.md) for complete security analysis and [docs/brief.md](docs/brief.md) for project constraints.
+
+## License
+
+[TBD - Operator to add]
+
+## Contributing
+
+This is a demonstration project. Not accepting external contributions.
+
+## Support
+
+For questions about the architecture or codebase, see documentation in `docs/`.

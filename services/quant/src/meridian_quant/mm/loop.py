@@ -280,6 +280,8 @@ class MarketMakerLoop:
                     )
                 except Exception:
                     logger.exception(f"Failed to mint pairs for {market.market}")
+                    # Skip this market - can't quote without YES tokens (AC1)
+                    continue
 
             # Successfully synced this market's inventory
             synced_markets.append(market)

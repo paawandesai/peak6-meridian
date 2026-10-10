@@ -11,7 +11,7 @@ import logging
 import struct
 
 from solana.rpc.async_api import AsyncClient
-from solana.rpc.commitment import Confirmed
+from solana.rpc.commitment import Confirmed, Finalized
 from solders.instruction import AccountMeta, Instruction
 from solders.keypair import Keypair
 from solders.message import Message
@@ -480,7 +480,7 @@ class ChainOrderClient:
         # Missing accounts return value=None, not an exception
         yes_info = await self.rpc.get_account_info(user_yes)
         if yes_info.value is None:
-            # Create YES ATA
+            # Create YES ATA (use Finalized to ensure account fully indexed)
             create_yes_ix = create_associated_token_account(
                 self.payer.pubkey(), owner_pubkey, yes_mint
             )
@@ -488,15 +488,15 @@ class ChainOrderClient:
             msg = Message.new_with_blockhash([create_yes_ix], self.payer.pubkey(), blockhash)
             tx = Transaction([self.payer], msg, blockhash)
             sig = await self.rpc.send_transaction(tx)
-            await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
-            # Refetch to ensure account is indexed before mint_pair (best effort)
+            await self.rpc.confirm_transaction(sig.value, commitment=Finalized)
+            # Refetch to ensure account is indexed before mint_pair
             yes_info = await self.rpc.get_account_info(user_yes)
             if yes_info.value is None:
-                logger.warning(f"YES ATA creation confirmed but refetch returned None: {user_yes}")
+                logger.warning(f"YES ATA creation finalized but refetch returned None: {user_yes}")
 
         no_info = await self.rpc.get_account_info(user_no)
         if no_info.value is None:
-            # Create NO ATA
+            # Create NO ATA (use Finalized to ensure account fully indexed)
             create_no_ix = create_associated_token_account(
                 self.payer.pubkey(), owner_pubkey, no_mint
             )
@@ -504,11 +504,11 @@ class ChainOrderClient:
             msg = Message.new_with_blockhash([create_no_ix], self.payer.pubkey(), blockhash)
             tx = Transaction([self.payer], msg, blockhash)
             sig = await self.rpc.send_transaction(tx)
-            await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
-            # Refetch to ensure account is indexed before mint_pair (best effort)
+            await self.rpc.confirm_transaction(sig.value, commitment=Finalized)
+            # Refetch to ensure account is indexed before mint_pair
             no_info = await self.rpc.get_account_info(user_no)
             if no_info.value is None:
-                logger.warning(f"NO ATA creation confirmed but refetch returned None: {user_no}")
+                logger.warning(f"NO ATA creation finalized but refetch returned None: {user_no}")
 
         # IDL: user is signer but not writable
         accounts = [

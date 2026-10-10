@@ -1,0 +1,13 @@
+{
+  "account": {
+    "data": [
+      "IvEjY51+9M2qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqgFJ9rZcsd5rEOr3XnwDygKcMG0DV+kbUxGxdQhKWtVWiJg6AAAAAAAABQAAAAAAAAD+////QVPFagAAAABAU8VqAAAAAI46AAAAAAAACgAAAAAAAABO5ZMYAAAAAA==",
+      "base64"
+    ],
+    "owner": "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ",
+    "lamports": 1000000,
+    "executable": false,
+    "rentEpoch": 0,
+    "space": 133
+  }
+}
