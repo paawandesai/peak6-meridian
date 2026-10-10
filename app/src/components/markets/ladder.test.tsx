@@ -392,9 +392,36 @@ describe("fair value and edge (M3-03: AC per-strike)", () => {
     // Three strikes with distinct fair values
     const markets = [m(1), m(2), m(3)];
     mockFairValues.byMarket = {
-      [addr(1)]: { market: addr(1), fair_cents: 50, ticker: "NVDA", strike_cents: 18000, sigma: 0.3, spot: 18142, as_of: new Date(NOW * 1000).toISOString(), stale: false },
-      [addr(2)]: { market: addr(2), fair_cents: 45, ticker: "NVDA", strike_cents: 19000, sigma: 0.3, spot: 18142, as_of: new Date(NOW * 1000).toISOString(), stale: false },
-      [addr(3)]: { market: addr(3), fair_cents: 40, ticker: "NVDA", strike_cents: 20000, sigma: 0.3, spot: 18142, as_of: new Date(NOW * 1000).toISOString(), stale: false },
+      [addr(1)]: {
+        market: addr(1),
+        fair_cents: 50,
+        ticker: "NVDA",
+        strike_cents: 18000,
+        sigma: 0.3,
+        spot: 18142,
+        as_of: new Date(NOW * 1000).toISOString(),
+        stale: false,
+      },
+      [addr(2)]: {
+        market: addr(2),
+        fair_cents: 45,
+        ticker: "NVDA",
+        strike_cents: 19000,
+        sigma: 0.3,
+        spot: 18142,
+        as_of: new Date(NOW * 1000).toISOString(),
+        stale: false,
+      },
+      [addr(3)]: {
+        market: addr(3),
+        fair_cents: 40,
+        ticker: "NVDA",
+        strike_cents: 20000,
+        sigma: 0.3,
+        spot: 18142,
+        as_of: new Date(NOW * 1000).toISOString(),
+        stale: false,
+      },
     };
     renderView(markets, {
       sources: sources({
