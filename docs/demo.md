@@ -126,9 +126,9 @@ Shows:
 ## Settlement and Redemption
 
 After 4:00 PM ET close:
-1. Oracle fetches closing prices from Tiingo
+1. Oracle fetches closing prices from Pyth Pro (cross-checked with RedStone)
 2. Markets settle (YES wins if close ≥ strike, else NO wins)
-3. Winners can redeem tokens for $1.00 USDC each
+3. Winners redeem tokens for $1.00 USDC per contract
 4. Losers' tokens have zero value
 
 See [docs/domain.md](domain.md) for full trading rules and settlement mechanics.

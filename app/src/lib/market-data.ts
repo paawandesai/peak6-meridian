@@ -84,7 +84,8 @@ export async function pollPrices(
 
 /**
  * One book poll for `markets`; a market that cannot be read is `unavailable`, not guessed.
- * P0-4: accepts `cached` books for closed/settled markets to skip re-fetching them.
+ * P0-4: accepts `cached` books for closed/settled markets to skip re-fetching them. fetchBooks
+ * chunks the RPC calls internally (≤99 keys each) to stay under the 100-key limit.
  */
 export async function pollBooks(
   sources: Pick<MarketDataSources, "fetchBooks">,
@@ -136,6 +137,8 @@ export type MarketDataOptions = {
   readonly priceIntervalMs?: number;
   /** Book poll interval; 2 s meets NFR-01's 3 s and reduces RPC load (P0-4). */
   readonly bookIntervalMs?: number;
+  /** Whether to pause polling (for tests); defaults to checking document.visibilityState. */
+  readonly shouldPoll?: () => boolean;
 };
 
 /** Polls prices and books; `sources` defaults to the browser sources and is injectable for tests. */
@@ -147,6 +150,9 @@ export function useMarketData(
   const [data, setData] = useState<MarketData>(INITIAL_MARKET_DATA);
   const priceIntervalMs = options.priceIntervalMs ?? 5_000;
   const bookIntervalMs = options.bookIntervalMs ?? 2_000; // P0-4: 2s reduces RPC, still meets NFR-01's 3s
+  const shouldPoll =
+    options.shouldPoll ??
+    (() => typeof document === "undefined" || document.visibilityState === "visible");
   const marketKey = markets.map((market) => market.address).join(",");
   // Keyed by address list so a new array with the same markets does not restart polling.
   const marketsRef = useRef(markets);
@@ -184,11 +190,12 @@ export function useMarketData(
       if (!cancelled) setData(latest);
     };
     // A tick is skipped while the previous poll of the same kind is still in flight, so responses
-    // can never be applied out of order (an older read overwriting a newer one).
+    // can never be applied out of order (an older read overwriting a newer one). Also skip ticks
+    // when the document is hidden (P0-4 visibility pause).
     let pricesInFlight = false;
     let booksInFlight = false;
     const runPrices = async (): Promise<void> => {
-      if (pricesInFlight) return;
+      if (!shouldPoll() || pricesInFlight) return;
       pricesInFlight = true;
       try {
         const result = await pollPrices(active, latest);
@@ -199,7 +206,7 @@ export function useMarketData(
       }
     };
     const runBooks = async (): Promise<void> => {
-      if (booksInFlight) return;
+      if (!shouldPoll() || booksInFlight) return;
       booksInFlight = true;
       try {
         // Pass cached books so closed/settled markets are fetched once (P0-4)

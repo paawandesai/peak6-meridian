@@ -125,10 +125,6 @@ The operator or an AO worker creates the day's markets before 09:00 ET with the 
 
 Against a local validator: `SOLANA_CLUSTER=localnet` with a loopback `SOLANA_RPC_URL`, the markets seeded by `E2E_SEED_ONLY=1 ... pnpm --filter e2e run lifecycle` (use `E2E_CLOSE_IN_SECS` of about 420), then `--phase trade --fund direct` (the default `--fund faucet` needs `FAUCET_URL` and a running app; on a seeded local validator the admin is the mint authority, so set `FAUCET_KEYPAIR` to the admin keypair's JSON array), then `--phase redeem --local-settle` (the local oracle settles; the flag is refused on devnet). Unit tests: `pnpm --filter e2e run test`.
 
-### Test markets (P0-1)
-
-The shared devnet deployment holds **real markets only** (markets closing at the NYSE session close: 16:00 ET or 13:00 ET on early-close days). Test markets (created with `--close-in-secs`) are for e2e and rehearsals on a local validator only. The `create-markets` CLI refuses `--close-in-secs` on devnet (`SOLANA_CLUSTER=devnet`) unless `--allow-test-close` is explicitly passed. The app hides non-session markets by default behind "Show test markets (N)"; when shown, each carries a TEST badge and its own close time.
-
 ## Faucet (M2-09)
 
 - The server faucet (`POST /api/faucet`) mints test-USDC with `FAUCET_KEYPAIR`, which is the mint authority, and pays rent from its own SOL: about 0.004 SOL per claim (two 1-byte marker accounts plus the recipient's token account). Keep that key funded on devnet (`solana airdrop`, or a transfer from the admin key).

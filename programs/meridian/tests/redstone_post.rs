@@ -933,9 +933,9 @@ fn post_redstone_price_multi_datapoint_ticker_not_first() {
     // Build multi-datapoint payload with 3 feeds (tests ≥2 datapoints per AC6)
     // NVDA is SECOND to verify parser searches beyond first datapoint
     let data_points = &[
-        ("BTC", 50000_0000_0000u128),
-        ("NVDA", 2050_0000_0000u128), // Target ticker (not first)
-        ("ETH", 3000_0000_0000u128),
+        ("BTC", 5_000_000_000_000_u128),
+        ("NVDA", 205_000_000_000_u128), // Target ticker (not first)
+        ("ETH", 300_000_000_000_u128),
     ];
     let signing_signers = &signers[0..3];
     let payload = RedstonePayloadBuilder::build_multi_datapoint(
@@ -995,8 +995,7 @@ fn post_redstone_price_multi_datapoint_ticker_not_first() {
     let mut data = account.data.as_slice();
     let price = RedstonePrice::try_deserialize(&mut data).unwrap();
     assert_eq!(
-        price.value,
-        2050_0000_0000u128,
+        price.value, 2050_0000_0000u128,
         "Should store NVDA value, not BTC or ETH"
     );
     assert_eq!(price.symbol, ticker);
@@ -1112,8 +1111,7 @@ fn post_redstone_price_equal_timestamp_only_refreshes_slot() {
     let mut data_after_3 = account_after_3.data.as_slice();
     let price_after_3 = RedstonePrice::try_deserialize(&mut data_after_3).unwrap();
     assert_eq!(
-        price_after_3.value,
-        value_5_signers,
+        price_after_3.value, value_5_signers,
         "AB-13: equal timestamp must not overwrite value"
     );
     assert_eq!(

@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
+
 from meridian_quant.prices import PriceError
 from meridian_quant.pyth_prices import fetch_pyth_spot
 

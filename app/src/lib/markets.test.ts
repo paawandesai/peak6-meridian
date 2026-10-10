@@ -1,11 +1,8 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-import { formatStrike, formatTradingDate, groupByTicker, isSessionMarket, marketStatus } from "./markets";
+import { formatStrike, formatTradingDate, groupByTicker, marketStatus } from "./markets";
 import { market } from "@/test-utils";
-
-/** Unix seconds of an instant given in UTC. */
-const utc = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 
 describe("marketStatus", () => {
   it("is Open before close, Closed at/after close, Settled once settled", () => {
@@ -95,68 +92,5 @@ describe("formatters", () => {
 
   it("rejects a strike that is not whole dollars", () => {
     expect(() => formatStrike(68_050n)).toThrow();
-  });
-});
-
-describe("isSessionMarket (P0-1)", () => {
-  it("returns true for a market closing at the regular session close (16:00 ET)", () => {
-    // October 8, 2026 at 16:00 EDT = 20:00 UTC
-    const sessionMarket = market({
-      tradingDate: 20261008,
-      closeTs: BigInt(utc("2026-10-08T20:00:00Z")),
-    });
-    expect(isSessionMarket(sessionMarket)).toBe(true);
-  });
-
-  it("returns true for a market closing at an early-close session (13:00 ET)", () => {
-    // November 27, 2026 (day after Thanksgiving) at 13:00 EST = 18:00 UTC
-    const earlyCloseMarket = market({
-      tradingDate: 20261127,
-      closeTs: BigInt(utc("2026-11-27T18:00:00Z")),
-    });
-    expect(isSessionMarket(earlyCloseMarket)).toBe(true);
-  });
-
-  it("returns false for a test market (--close-in-secs) with a non-session close time", () => {
-    // October 8, 2026 at 15:00 ET (not the session close)
-    const testMarket = market({
-      tradingDate: 20261008,
-      closeTs: BigInt(utc("2026-10-08T19:00:00Z")),
-    });
-    expect(isSessionMarket(testMarket)).toBe(false);
-
-    // Another test market: 20:12 ET
-    const testMarket2 = market({
-      tradingDate: 20261008,
-      closeTs: BigInt(utc("2026-10-09T00:12:00Z")),
-    });
-    expect(isSessionMarket(testMarket2)).toBe(false);
-  });
-
-  it("returns false for a market on a weekend", () => {
-    // October 10, 2026 is a Saturday (no session)
-    const weekendMarket = market({
-      tradingDate: 20261010,
-      closeTs: BigInt(utc("2026-10-10T20:00:00Z")),
-    });
-    expect(isSessionMarket(weekendMarket)).toBe(false);
-  });
-
-  it("returns false for a market on an NYSE holiday", () => {
-    // January 1, 2026 is New Year's Day
-    const holidayMarket = market({
-      tradingDate: 20260101,
-      closeTs: BigInt(utc("2026-01-01T21:00:00Z")),
-    });
-    expect(isSessionMarket(holidayMarket)).toBe(false);
-  });
-
-  it("returns false for a market with a trading date outside supported years", () => {
-    // 2025 is not in SUPPORTED_YEARS
-    const unsupportedMarket = market({
-      tradingDate: 20251008,
-      closeTs: BigInt(utc("2025-10-08T20:00:00Z")),
-    });
-    expect(isSessionMarket(unsupportedMarket)).toBe(false);
   });
 });

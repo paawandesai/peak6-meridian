@@ -3,6 +3,7 @@
 from datetime import date
 
 import pytest
+
 from meridian_quant.config import QuantConfig, load_config
 
 

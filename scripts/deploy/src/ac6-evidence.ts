@@ -5,7 +5,7 @@
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { readFileSync } from "fs";
-import { createMeridianProgram, findConfigPda } from "@meridian/client";
+import { createMeridianProgram } from "@meridian/client";
 
 const DEVNET_RPC = "https://api.devnet.solana.com";
 const ADMIN_KEYPAIR_PATH = "/home/box/secrets/meridian-devnet/admin.json";
@@ -36,7 +36,7 @@ async function main() {
 
   const [oracleConfigPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("oracle_config")],
-    PROGRAM_ID
+    PROGRAM_ID,
   );
 
   console.log(`OracleConfig PDA: ${oracleConfigPda.toBase58()}\n`);
@@ -73,10 +73,13 @@ async function main() {
 
     const config = await program.account.oracleConfig.fetch(oracleConfigPda);
     console.log(`Verified: ${config.signers.length} signers, threshold ${config.signerThreshold}`);
-
-  } catch (error: any) {
-    console.error(`Failed:`, error.message || error);
-    if (error.logs) error.logs.forEach((log: string) => console.error(`  ${log}`));
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Failed:`, message);
+    if (typeof error === "object" && error !== null && "logs" in error) {
+      const logs = error.logs as unknown[];
+      logs.forEach((log) => console.error(`  ${String(log)}`));
+    }
     console.error("\nFull error:");
     console.error(error);
     process.exit(1);

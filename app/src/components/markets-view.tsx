@@ -5,12 +5,10 @@ import { useMarketSources } from "./markets/data-context";
 import { TickerLadder } from "./markets/ticker-ladder";
 import type { StrikeData } from "./markets/strike-row";
 import { useReader } from "./reader-context";
-import { useTestMarkets } from "./test-market-context";
 import { useAsync } from "./use-async";
 import { useNow } from "./use-now";
-import { TestMarketToggle } from "./ui";
 import { useMarketData, type MarketDataSources } from "@/lib/market-data";
-import { groupByTicker, marketStatus, partitionMarkets, type MarketRow } from "@/lib/markets";
+import { groupByTicker, marketStatus, type MarketRow } from "@/lib/markets";
 import { tradeHref } from "@/app/trade/_lib/href";
 import { usePythQuotes } from "@/lib/use-pyth-quotes";
 import { useFairValues } from "@/lib/fair-values";
@@ -39,7 +37,6 @@ export function MarketsView({
 }) {
   const reader = useReader();
   const ticking = useNow();
-  const { showTestMarkets, setShowTestMarkets } = useTestMarkets();
   // `null` until the clock has mounted (server render and first paint): the date-dependent parts
   // wait for it rather than treating a missing clock as the unix epoch.
   const clock = nowSecs ?? ticking;
@@ -50,11 +47,9 @@ export function MarketsView({
   const config = useAsync(() => reader.getConfig(), [reader]);
   const sources = useMarketSources();
   const all = state.status === "ready" ? state.value : [];
-  // P0-1: Filter to session markets only (test markets excluded by default, AC3-4)
-  const { session, test } = partitionMarkets(all);
-  // AC4: session and test markets are never mixed - render as separate lists
-  const allMarkets = [...session, ...test];
-  const data = useMarketData(allMarkets, sources.data ?? NO_SOURCES);
+  // Show ALL markets, not just active date — partition by open/closed status instead
+  // Show ALL markets, partitioned by status within each ticker group
+  const data = useMarketData(all, sources.data ?? NO_SOURCES);
   // M3-10: Fetch Pyth live quotes (D-055: Pyth Pro is primary demo price source)
   const pythQuotes = usePythQuotes();
   // M3-03: Fair values for edge calculation and distribution chart
@@ -64,8 +59,10 @@ export function MarketsView({
     return <p role="status">Loading markets…</p>;
   }
   if (state.status === "error") return <p role="alert">Could not load markets: {state.message}</p>;
+  if (state.value.length === 0)
+    return <p>No markets today. Markets are created each trading day.</p>;
 
-  // After the early returns above, clock is guaranteed to be a number.
+  // After the early return above, clock is guaranteed to be a number.
   const now = clock;
   const cfg =
     config.status === "ready" ? config.value : { paused: false, overrideDelaySecs: 3_600n };
@@ -81,73 +78,44 @@ export function MarketsView({
       fairRefreshFailed: fairValues.refreshFailed,
     };
   };
-
-  // Render ladder groups for a list of markets
-  const renderLadders = (markets: readonly MarketRow[]) => {
-    const groups = groupByTicker(markets);
-    return groups.map((group) => {
-      const open: MarketRow[] = [];
-      const closed: MarketRow[] = [];
-      for (const market of group.markets) {
-        const status = marketStatus(market, now);
-        if (status === "Open" || status === "ClosingSoon") {
-          open.push(market);
-        } else {
-          closed.push(market);
-        }
-      }
-      return (
-        <TickerLadder
-          key={group.ticker}
-          ticker={group.ticker}
-          openMarkets={[...open].sort((a, b) =>
-            a.strikeCents < b.strikeCents ? -1 : a.strikeCents > b.strikeCents ? 1 : 0,
-          )}
-          closedMarkets={[...closed].sort((a, b) =>
-            a.strikeCents < b.strikeCents ? -1 : a.strikeCents > b.strikeCents ? 1 : 0,
-          )}
-          pythQuote={pythQuotes.quotes[group.ticker]}
-          data={strikeData}
-          ctx={ctx}
-          {...(tradeHrefFn === undefined ? {} : { tradeHref: tradeHrefFn })}
-        />
-      );
-    });
-  };
-
+  const allGroups = groupByTicker(all);
   // Only when trading has stopped everywhere: an open market alongside a closed one keeps it hidden.
-  const sessionStatuses = session.map((m) => marketStatus(m, now));
+  const statuses = all.map((m) => marketStatus(m, now));
   const needsSettleNote =
-    !sessionStatuses.some((s) => s === "Open" || s === "ClosingSoon") &&
-    sessionStatuses.some((s) => s === "Closed" || s === "Settling" || s === "SettlementDelayed");
-
-  // AC3: Mount toggle before empty-state check so test markets can be revealed
-  const hasNoMarkets = session.length === 0 && (!showTestMarkets || test.length === 0);
-
+    !statuses.some((s) => s === "Open" || s === "ClosingSoon") &&
+    statuses.some((s) => s === "Closed" || s === "Settling" || s === "SettlementDelayed");
   return (
     <div className="space-y-mer-6">
       <Landing />
       <PageNotes showSettleNote={needsSettleNote} />
-      {test.length > 0 ? (
-        <TestMarketToggle
-          testMarketCount={test.length}
-          showTestMarkets={showTestMarkets}
-          onToggle={() => setShowTestMarkets(!showTestMarkets)}
-        />
-      ) : null}
-      {hasNoMarkets ? (
-        <p>No markets today. Markets are created each trading day.</p>
-      ) : (
-        <>
-          {session.length > 0 ? renderLadders(session) : null}
-          {showTestMarkets && test.length > 0 ? (
-            <div className="space-y-mer-4">
-              <h3 className="text-mer-lg font-semibold">Test Markets</h3>
-              {renderLadders(test)}
-            </div>
-          ) : null}
-        </>
-      )}
+      {allGroups.map((group) => {
+        const open: MarketRow[] = [];
+        const closed: MarketRow[] = [];
+        for (const market of group.markets) {
+          const status = marketStatus(market, now);
+          if (status === "Open" || status === "ClosingSoon") {
+            open.push(market);
+          } else {
+            closed.push(market);
+          }
+        }
+        return (
+          <TickerLadder
+            key={group.ticker}
+            ticker={group.ticker}
+            openMarkets={[...open].sort((a, b) =>
+              a.strikeCents < b.strikeCents ? -1 : a.strikeCents > b.strikeCents ? 1 : 0,
+            )}
+            closedMarkets={[...closed].sort((a, b) =>
+              a.strikeCents < b.strikeCents ? -1 : a.strikeCents > b.strikeCents ? 1 : 0,
+            )}
+            pythQuote={pythQuotes.quotes[group.ticker]}
+            data={strikeData}
+            ctx={ctx}
+            {...(tradeHrefFn === undefined ? {} : { tradeHref: tradeHrefFn })}
+          />
+        );
+      })}
     </div>
   );
 }

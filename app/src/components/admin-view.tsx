@@ -56,9 +56,7 @@ function PauseSection({
         Pause
       </h2>
       <p className="text-mer-sm" data-testid="pause-state">
-        <span className="font-medium">
-          {config.paused ? "Paused: " : "Running: "}
-        </span>
+        <span className="font-medium">{config.paused ? "Paused: " : "Running: "}</span>
         {config.paused
           ? "trading and minting stopped; cancel, withdraw and redeem still work"
           : "all actions available"}

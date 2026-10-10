@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 
 import httpx
+
 from meridian_quant.config import QuantConfig
 from meridian_quant.production_sources import ProductionSources
 from meridian_quant.server import MarketInfo

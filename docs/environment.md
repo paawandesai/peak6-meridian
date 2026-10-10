@@ -10,7 +10,8 @@
 | Name | Used by | Purpose | Req? | Example |
 |---|---|---|---|---|
 | `SOLANA_CLUSTER` | all | `localnet` or `devnet` | yes | `localnet` |
-| `SOLANA_RPC_URL` | all | RPC HTTP endpoint | yes | `http://127.0.0.1:8899` |
+| `SOLANA_RPC_URL` | all | RPC HTTP endpoint (server-only via P0-5 proxy; defaults to public devnet) | yes | `http://127.0.0.1:8899` |
+| `SOLANA_RPC_URL_FALLBACK` | app server (P0-5) | Optional fallback RPC; rotates to this on 429/5xx from primary | no | `https://devnet.helius-rpc.com` |
 | `SOLANA_WS_URL` | app, automation, quant | RPC websocket | yes | `ws://127.0.0.1:8900` |
 | `MERIDIAN_PROGRAM_ID` | all | Deployed program ID | yes | `Merid1an11111111111111111111111111111111111` |
 | `USDC_MINT` | all | Test-USDC mint | yes | `Usdc111111111111111111111111111111111111111` |
@@ -43,7 +44,8 @@
 | `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` | CI deploy job only | Deploy the app with the Vercel CLI (IDs come from `vercel link`) | M2 | `test-vercel-token` |
 | `RAILWAY_TOKEN` | CI deploy job only | Railway project token for deploying services | M2 | `test-railway-token` |
 | `FAULT_INJECT_SOURCE` | local demo only | Make one fixture source report a bad close; refused unless `SOLANA_CLUSTER=localnet` | no | `twelvedata` |
-| `NEXT_PUBLIC_CLUSTER` / `NEXT_PUBLIC_RPC_URL` / `NEXT_PUBLIC_PROGRAM_ID` / `NEXT_PUBLIC_USDC_MINT` | app (browser) | Public config only (never secrets) | yes | same as above |
+| `NEXT_PUBLIC_CLUSTER` / `NEXT_PUBLIC_PROGRAM_ID` / `NEXT_PUBLIC_USDC_MINT` | app (browser) | Public config only (never secrets) | yes | same as above |
+| `NEXT_PUBLIC_RPC_URL` | app (browser) | Client RPC endpoint; **production: points to `/api/rpc` proxy (P0-5), not directly to provider** | yes | `https://<app-domain>/api/rpc` |
 On-chain parameters (staleness, spread, override delay) are in the Config account, not env (see [domain.md](domain.md#settlement-rules)).
 
 ## Devnet deploy

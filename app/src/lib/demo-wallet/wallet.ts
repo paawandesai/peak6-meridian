@@ -1,11 +1,20 @@
 /**
  * Demo wallet: devnet-only Wallet Standard wallet (M4-07, D-055).
  * Auto-funded through /api/faucet, auto-signs without popups.
+ * Uses sharedConnection for one Connection app-wide (P0-4).
  */
 import bs58 from "bs58";
 import nacl from "tweetnacl";
-import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
+import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { load, reset, save } from "./storage";
+import { sharedConnection } from "@/lib/rpc";
+
+let rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || "";
+
+/** Set the RPC URL for the demo wallet (called by providers.tsx). */
+export function setDemoWalletRpcUrl(url: string): void {
+  rpcUrl = url;
+}
 
 type Wallet = {
   version: string;
@@ -57,7 +66,6 @@ export class DemoWallet implements Wallet {
   readonly #keypair: Keypair;
   readonly #listeners = new Set<(props: { accounts?: WalletAccount[] }) => void>();
   #accounts: WalletAccount[] = [];
-  #connection: Connection | null = null;
   #signatureCount = 0;
   #hasFunded = false;
 
@@ -200,13 +208,8 @@ export class DemoWallet implements Wallet {
     }
   }
 
-  #getConnection(): Connection {
-    if (!this.#connection) {
-      this.#connection = new Connection(
-        process.env.NEXT_PUBLIC_RPC_URL || "https://api.devnet.solana.com",
-      );
-    }
-    return this.#connection;
+  #getConnection() {
+    return sharedConnection(rpcUrl);
   }
 
   /** For e2e testing: count of signature requests since wallet creation. Reset with resetDemoWallet(). */
