@@ -29,7 +29,7 @@ import {
 } from "./env";
 import { type DemoMarketChain, parseTickers, runDemoMarkets } from "./markets";
 import { formatMarketsReport } from "./report";
-import { parseRegistry, serializeRegistry } from "./registry";
+import { parseRegistry, serializeRegistry, withProgramId } from "./registry";
 
 const httpGet: HttpGet = (url, init) =>
   fetch(url, { headers: { ...init.headers }, signal: init.signal });
@@ -103,6 +103,7 @@ async function main(): Promise<number> {
   const rpcUrl = rpcUrlOf(env);
   rpcUrlForErrors = rpcUrl;
   let chain: DemoMarketChain | undefined;
+  let programId: string | undefined;
   if (rpcUrl === undefined) {
     if (!dryRun) {
       throw new Error("set MERIDIAN_DEVNET_RPC_URL or SOLANA_RPC_URL");
@@ -117,7 +118,8 @@ async function main(): Promise<number> {
         ? Keypair.generate()
         : parseKeypair(env.AUTOMATION_KEYPAIR);
     const handle = await connectProgram({ rpcUrl, programId: env.MERIDIAN_PROGRAM_ID, signer });
-    console.log(`cluster ${handle.cluster} · program ${handle.program.programId.toBase58()}`);
+    programId = handle.program.programId.toBase58();
+    console.log(`cluster ${handle.cluster} · program ${programId}`);
     if (!dryRun) {
       const { automationAuthority } = await configKeys(handle.program);
       if (automationAuthority !== signer.publicKey.toBase58()) {
@@ -143,7 +145,10 @@ async function main(): Promise<number> {
     },
   );
   if (!dryRun) {
-    writeText(registryPath, serializeRegistry(report.registry));
+    if (programId === undefined) {
+      throw new Error("no program connected; refusing to write the demo-session registry");
+    }
+    writeText(registryPath, serializeRegistry(withProgramId(report.registry, programId)));
   }
   console.log(`\n${formatMarketsReport(report, dryRun)}`);
   console.log(

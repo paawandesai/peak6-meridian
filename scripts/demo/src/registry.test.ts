@@ -11,6 +11,7 @@ import {
   serializeRegistry,
   upsertSession,
   withAsOfCloses,
+  withProgramId,
 } from "./registry";
 
 const SUN: DemoSession = {
@@ -106,5 +107,42 @@ describe("withAsOfCloses", () => {
     const out = withAsOfCloses({ sessions: [SAT, SUN] }, "2026-10-11", { AAPL: 33_606 });
     expect(out.sessions[0]).toEqual(SAT);
     expect(out.sessions[1]?.asOfCloseCentsByTicker).toEqual({ AAPL: 33_606 });
+  });
+});
+
+describe("registry programId (AB-17)", () => {
+  const PROGRAM = "H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm";
+  const OTHER = "11111111111111111111111111111111";
+
+  it("is written first and round-trips", () => {
+    const text = serializeRegistry({ programId: PROGRAM, sessions: [SUN] });
+    expect(text.startsWith(`{\n  "programId": "${PROGRAM}",`)).toBe(true);
+    expect(parseRegistry(text, "r")).toEqual({ programId: PROGRAM, sessions: [SUN] });
+  });
+
+  it("survives upsertSession and withAsOfCloses", () => {
+    const start = { programId: PROGRAM, sessions: [SUN] };
+    expect(upsertSession(start, SAT).programId).toBe(PROGRAM);
+    expect(upsertSession(start, { ...SUN, tickers: ["MSFT"] }).programId).toBe(PROGRAM);
+    expect(withAsOfCloses(start, "2026-10-11", { AAPL: 33_651 }).programId).toBe(PROGRAM);
+  });
+
+  it("withProgramId stamps an unnamed registry and refuses a different program", () => {
+    expect(withProgramId({ sessions: [SUN] }, PROGRAM)).toEqual({
+      programId: PROGRAM,
+      sessions: [SUN],
+    });
+    expect(withProgramId({ programId: PROGRAM, sessions: [] }, PROGRAM).programId).toBe(PROGRAM);
+    expect(() => withProgramId({ programId: PROGRAM, sessions: [] }, OTHER)).toThrow(
+      /belongs to program H8SBU6m8/,
+    );
+  });
+
+  it("the committed registry names the devnet program", () => {
+    const committed = parseRegistry(
+      readFileSync(resolve(REPO_ROOT, "deployments/demo-sessions.json"), "utf8"),
+      "deployments/demo-sessions.json",
+    );
+    expect(committed.programId).toBe(PROGRAM);
   });
 });

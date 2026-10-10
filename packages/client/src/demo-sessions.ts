@@ -15,6 +15,8 @@ import { isTradingDay } from "./calendar";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TICKER = /^[A-Z]{1,8}$/;
+/** A base58 Solana public key (32 bytes encode to 32–44 characters). */
+const BASE58_PUBKEY = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 /** `YYYY-MM-DD` naming a real calendar date (`2026-02-30` is refused). */
 const isoDate = z
@@ -56,7 +58,11 @@ export type DemoSession = z.infer<typeof demoSessionSchema>;
 
 /** The whole registry file. At most one session per `tradingDate`. */
 export const demoSessionsSchema = z
-  .object({ sessions: z.array(demoSessionSchema) })
+  .object({
+    /** The program whose markets these sessions are (AB-17: every deployment record names it). */
+    programId: z.string().regex(BASE58_PUBKEY, "expected a base58 program id").optional(),
+    sessions: z.array(demoSessionSchema),
+  })
   .refine(
     (registry) =>
       new Set(registry.sessions.map((session) => session.tradingDate)).size ===

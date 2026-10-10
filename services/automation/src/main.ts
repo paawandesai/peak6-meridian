@@ -16,6 +16,7 @@ import { connectionOpenTimeRpc, createOpenTimeIndex } from "./openTimes";
 import { buildRuntime, readKeypairFile } from "./runtime";
 import { defaultCron } from "./scheduler";
 import { startService } from "./service";
+import { readOnlyWallet } from "./readOnlyWallet";
 import { RunState } from "./state";
 
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
@@ -50,15 +51,7 @@ async function main(): Promise<void> {
   // same resolved URL every other chain read here uses (parseEnv: MERIDIAN_DEVNET_RPC_URL first).
   const readConnection = new Connection(env.SOLANA_RPC_URL, "confirmed");
   const readOnly = createMeridianProgram(
-    new AnchorProvider(
-      readConnection,
-      {
-        publicKey: PublicKey.default,
-        signTransaction: () => Promise.reject(new Error("read-only")),
-        signAllTransactions: () => Promise.reject(new Error("read-only")),
-      },
-      { commitment: "confirmed" },
-    ),
+    new AnchorProvider(readConnection, readOnlyWallet(), { commitment: "confirmed" }),
     programId,
   );
   const openTimes = createOpenTimeIndex({

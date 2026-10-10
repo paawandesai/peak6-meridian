@@ -38,7 +38,7 @@ export function serializeRegistry(registry: DemoSessions): string {
   const sessions = [...registry.sessions].sort((a, b) =>
     a.tradingDate.localeCompare(b.tradingDate),
   );
-  return `${JSON.stringify(demoSessionsSchema.parse({ sessions }), null, 2)}\n`;
+  return `${JSON.stringify(demoSessionsSchema.parse({ programId: registry.programId, sessions }), null, 2)}\n`;
 }
 
 /**
@@ -71,7 +71,7 @@ export function upsertSession(registry: DemoSessions, next: DemoSession): DemoSe
   const existing = findDemoSession(registry, next.tradingDate);
   const others = registry.sessions.filter((s) => s.tradingDate !== next.tradingDate);
   if (existing === undefined) {
-    return { sessions: [...others, next] };
+    return { ...registry, sessions: [...others, next] };
   }
   const strikesByTicker: Record<string, number[]> = { ...existing.strikesByTicker };
   for (const [ticker, strikes] of Object.entries(next.strikesByTicker)) {
@@ -91,7 +91,7 @@ export function upsertSession(registry: DemoSessions, next: DemoSession): DemoSe
   if (Object.keys(prevCloses).length > 0) {
     merged.prevCloseCentsByTicker = prevCloses;
   }
-  return { sessions: [...others, merged] };
+  return { ...registry, sessions: [...others, merged] };
 }
 
 /** Records AS_OF closes learned later (demo-settle) on an existing session. */
@@ -101,6 +101,7 @@ export function withAsOfCloses(
   closes: Readonly<Record<string, number>>,
 ): DemoSessions {
   return {
+    ...registry,
     sessions: registry.sessions.map((session) =>
       session.tradingDate === tradingDate
         ? {
@@ -110,4 +111,17 @@ export function withAsOfCloses(
         : session,
     ),
   };
+}
+
+/**
+ * Stamps the program the sessions' markets live in (AB-17: a deployment record names its program).
+ * Refuses a registry that already names a different program: its sessions belong to that one.
+ */
+export function withProgramId(registry: DemoSessions, programId: string): DemoSessions {
+  if (registry.programId !== undefined && registry.programId !== programId) {
+    throw new Error(
+      `the demo-session registry belongs to program ${registry.programId}, not ${programId}`,
+    );
+  }
+  return { ...registry, programId };
 }
