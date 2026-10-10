@@ -1,142 +1,67 @@
-# M2-06/UI-04 Evidence Collection (Issue #45)
+# M2-06/UI-04 Evidence (Issue #45)
 
-This directory contains evidence collection infrastructure for deferred acceptance criteria from M2-06 AC5 and UI-04 AC5-AC6.
+Evidence for the ACs deferred from M2-06 AC5 and UI-04 AC5-AC6: the four trade intents run from the
+Trade UI on a **local validator** against a **production build** (`next build` + `next start`),
+with before/after screenshots, < 3 s confirmation timing, a 390 px viewport check and a Lighthouse
+accessibility audit of Trade.
 
-## Collection Status
+## Collected evidence (`tests/e2e/evidence/i45/`)
 
-**Collected and attached to #45 (comment 145423):**
-- ✓ Four-intent screenshots (Buy YES market, Sell YES limit, Buy NO market, Sell NO limit) - 390px mobile viewport
-- ✓ Lighthouse accessibility 100/100 on production build `/trade/{market}`
+Recorded 2026-10-10 on `main` at 20312f2 + this harness. Local validator (solana-test-validator 2.1.21,
+local-oracle build from `make build-local`), production app on port 3108, Chromium 390 x 844,
+injected test wallet (Playwright-only, see "Wallet" below).
 
-**Pending:**
-- ⏳ Per-intent confirmation timing breakdown (send→confirmed ms, confirmed→UI ms)
-  - Test validates < 3s total per intent
-  - Detailed ms breakdown requires instrumented lifecycle run in configured test environment
-  - Blocked by test environment setup (lifecycle.ts env vars, validator+seed+build in flock)
+| File | What |
+|---|---|
+| `buy-yes-market-{before,after}.png` | Buy YES, market (worst price 60¢), 5 contracts |
+| `sell-yes-limit-{before,after}.png` | Sell YES, limit 55¢, 5 contracts |
+| `buy-no-market-{before,after}.png` | Buy NO, market (worst price 55¢), 3 contracts |
+| `sell-no-limit-{before,after}.png` | Sell NO at a 30¢ limit price, 1 contract (see note) |
+| `timings.md`, `timings.json` | Per-intent click -> "Confirmed in slot N" and click -> book updated, in ms |
+| `viewport-390.png`, `viewport-390.json` | 390 px: all controls visible, `scrollWidth` = `clientWidth` = 390 |
+| `lighthouse-trade-{mobile,desktop}.report.{json,html}` | Lighthouse 12.8.2, accessibility only |
+| `lighthouse-summary.json` | URL and scores (mobile 100, desktop 100) |
 
-## Requirements
+Before screenshots show the resting maker order in the book and the simulated payoff above an
+enabled sign button; after screenshots show "Confirmed in slot N" and the book without the filled
+level. The "nothing would fill" line under the sign button in an after screenshot is the form
+re-simulating the same order against the now-empty book, not a failure of the confirmed trade.
 
-Evidence to be collected:
-- Four trade intents (Buy YES market, Sell YES limit, Buy NO market, Sell NO limit) with before/after screenshots (✓ on #45)
-- Confirmation timing < 3s for each trade (test validates; detailed breakdown pending)
-- 390px viewport validation (✓ on #45)
-- Lighthouse accessibility report ≥ 90 for Trade page (✓ 100/100 on #45)
+**Sell NO "limit":** domain.md defines Sell NO as `sell_no` = buy YES (IOC) + pair redeem, and the
+Trade panel disables "Limit" for Sell NO ("Sell NO fills now or not at all; the price is your worst
+price"). A Sell NO with a limit price is therefore the IOC order with the price field set (30¢ NO,
+i.e. pay at most 70¢ YES); that is what the spec signs.
 
-## Running Locally
+## Running it
 
-### Prerequisites
-- Local-oracle build in `target/deploy` (run `make build-local`)
-- Dependencies installed (`make install`)
-
-### Evidence Collection Tests
-
-```bash
-# Run evidence collection tests (screenshots + timing)
-pnpm --filter e2e run test:evidence
-```
-
-This runs `03-trade-evidence.spec.ts` which:
-- Captures before/after screenshots for each of the four trade intents
-- Measures and validates confirmation timing (< 3s)
-- Tests 390px viewport validation
-- Outputs screenshots to `tests/e2e/playwright-report/evidence/`
-- Prints timing summary to console
-
-### Lighthouse Accessibility Report
-
-The Lighthouse test requires a **production build** of the app running with a market available:
+Prerequisites: `make install`, `make build-local` (local-oracle `.so` and IDL in `target/`),
+Node 22, Playwright's Chromium (`make e2e-ui-browser`), ports 8899/8900/9900 and the app port free.
 
 ```bash
-# In one terminal: start validator and seed a market
 cd tests/e2e
-pnpm run lifecycle --cluster localnet --phase init-only
-# Note the market address from output
-
-# In another terminal: build and start production app
-cd app
-pnpm build
-NEXT_PUBLIC_CLUSTER=localnet NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 pnpm start
-
-# In a third terminal: run one-off Lighthouse accessibility audit
-npx lighthouse http://localhost:3000/trade/<market-address> \
-  --only-categories=accessibility \
-  --form-factor=mobile \
-  --output=html \
-  --output-path=./lighthouse-report.html
+E2E_APP_MODE=production E2E_APP_PORT=3108 E2E_LIGHTHOUSE=1 \
+  pnpm exec playwright test --config playwright-evidence.config.ts
 ```
 
-This generates a Lighthouse HTML report and validates accessibility ≥ 90. Quote the accessibility score in the MR or issue comment.
+- `global-setup.ts` starts `solana-test-validator`, runs the lifecycle seed with throwaway keypairs
+  in a temp dir (no `~/.config/solana/id.json` needed), then `next build` + `next start` when
+  `E2E_APP_MODE=production` (default `next dev`). Everything is torn down after the run.
+- The Trade page lists only session markets (close at the session's ET close, P0-1), so the spec
+  creates META's ladder for the next open session with the create-markets CLI (`--date`, no
+  `--close-in-secs`) and trades the $680 strike.
+- `E2E_LIGHTHOUSE=1` adds the one-off `npx --yes lighthouse@12.8.2` audit (mobile, then
+  `--preset=desktop`) with Playwright's Chromium. Nothing is added to `package.json`.
+- `E2E_EVIDENCE_DIR` overrides the output directory.
 
-## CI Integration
+## Wallet
 
-### Manual Evidence Collection Job
+The browser wallet is the Wallet Standard test wallet in `playwright/support/wallet.ts`, injected
+by Playwright (`page.addInitScript` + `page.exposeFunction`) so the app's real wallet-adapter path
+runs with no extension. Signing happens in the Node test process with a throwaway local keypair.
+No app code or `NEXT_PUBLIC_*` flag is involved, so nothing test-only can ship to Vercel.
 
-A CI job can be added to `.gitlab-ci.yml` to run evidence collection:
+## Acceptance criteria reference
 
-```yaml
-evidence:m2-06:
-  stage: e2e
-  needs: [build:local]
-  tags: [heavy]
-  resource_group: meridian-heavy
-  rules:
-    - when: manual
-      allow_failure: true
-  script:
-    - pnpm --filter e2e run test:evidence
-  artifacts:
-    when: always
-    paths:
-      - tests/e2e/playwright-report/evidence/
-    expire_in: 30 days
-```
-
-**Note:** `.gitlab-ci.yml` changes require Paawan review per operator rules.
-
-## Artifacts
-
-After running evidence collection, the following artifacts are generated:
-
-### Screenshots (tests/e2e/playwright-report/evidence/)
-- `buy-yes-before.png` - Trade form before Buy YES
-- `buy-yes-after.png` - Confirmation after Buy YES
-- `sell-yes-before.png` - Trade form before Sell YES  
-- `sell-yes-after.png` - Confirmation after Sell YES
-- `buy-no-before.png` - Trade form before Buy NO
-- `buy-no-after.png` - Confirmation after Buy NO
-- `sell-no-before.png` - Trade form before Sell NO
-- `sell-no-after.png` - Confirmation after Sell NO
-- `viewport-390px.png` - Trade page at 390px width
-
-### Timing Data
-Console output from test run includes:
-```
-=== Trade Confirmation Timings ===
-Buy YES: XXXms
-Sell YES: XXXms
-Buy NO: XXXms
-Sell NO: XXXms
-Average: XXXms
-```
-
-### Lighthouse Report
-- HTML report: `./lighthouse-report.html` (output from one-off `npx lighthouse` command)
-- Accessibility score quoted in issue/MR comment
-
-## Acceptance Criteria Reference
-
-Evidence collected using this infrastructure must meet:
-- **M2-06 AC5:** Four-intent run with screenshots, Lighthouse ≥ 90, 3s timing
-- **UI-04 AC5:** Four intents with before/after screenshots and < 3s confirmation
-- **UI-04 AC6:** 390px viewport validated
-
-## Attaching Evidence to Issue #45
-
-**This MR provides infrastructure only.** Evidence collection is a separate step.
-
-Once evidence is collected locally or in CI:
-1. Upload screenshot files to issue #45
-2. Paste timing summary showing all < 3s
-3. Attach Lighthouse HTML report and quote accessibility score ≥ 90
-4. Confirm production build was used
-5. Mark deferred M2-06 AC5 and UI-04 AC5-AC6 as complete in issue #45
+- **M2-06 AC5:** four intents succeed from the UI on the local validator, with screenshots.
+- **M2-06 AC4 / UI-04 AC5:** Lighthouse accessibility >= 90 on Trade; 390 px.
+- **UI-04 AC6:** a confirmed tx shows in the book within 3 s on the local validator (NFR-01).
