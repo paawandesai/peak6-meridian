@@ -1,0 +1,15 @@
+{
+  "source": "POST https://pyth-lazer.dourolabs.app/v1/price (formats [solana], channel fixed_rate@200ms, properties price/exponent/confidence), recorded 2026-10-10T20:40:00.108Z",
+  "ticker": "MSFT",
+  "feedId": 1292,
+  "closeTs": 1791576000,
+  "requestedTimestampUs": "1791576000000000",
+  "timestampUs": "1791576000000000",
+  "price": "53507502",
+  "exponent": -5,
+  "confidence": "6258",
+  "priceCents": "53508",
+  "confidenceBps": 1.16,
+  "signer": "80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c",
+  "solanaHex": "b9011a82c640c66eac58988ea41d06f613d91e07d4db5e0dc644b6121bc23eecd9cfee45ab20fa2feb71e2aeb30d47cf984351f7a248a16bc48420ef0cfebcdb92010c0280efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c280075d3c793007011cb6d5d060003010c0500000300ae7530030000000004fbff057218000000000000"
+}

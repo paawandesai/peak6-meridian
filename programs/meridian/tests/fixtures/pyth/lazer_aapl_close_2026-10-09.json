@@ -1,0 +1,15 @@
+{
+  "source": "POST https://pyth-lazer.dourolabs.app/v1/price (formats [solana], channel fixed_rate@200ms, properties price/exponent/confidence), recorded 2026-10-10T20:39:46.805Z",
+  "ticker": "AAPL",
+  "feedId": 922,
+  "closeTs": 1791576000,
+  "requestedTimestampUs": "1791576000000000",
+  "timestampUs": "1791576000000000",
+  "price": "33651000",
+  "exponent": -5,
+  "confidence": "8412",
+  "priceCents": "33651",
+  "confidenceBps": 2.49,
+  "signer": "80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c",
+  "solanaHex": "b9011a82ef76116bcf0ed89566fa60da1afe3148023d2f60a55023fb5a4a64d6d6bb983001da58d35ce5e5f6c1d894903cec316e66407fa82c249df847aafffcbd83d40e80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c280075d3c793007011cb6d5d060003019a0300000300387901020000000004fbff05dc20000000000000"
+}

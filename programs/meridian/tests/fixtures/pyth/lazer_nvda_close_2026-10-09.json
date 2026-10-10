@@ -1,0 +1,15 @@
+{
+  "source": "POST https://pyth-lazer.dourolabs.app/v1/price (formats [solana], channel fixed_rate@200ms, properties price/exponent/confidence), recorded 2026-10-10T20:40:01.339Z",
+  "ticker": "NVDA",
+  "feedId": 1314,
+  "closeTs": 1791576000,
+  "requestedTimestampUs": "1791576000000000",
+  "timestampUs": "1791576000000000",
+  "price": "22934253",
+  "exponent": -5,
+  "confidence": "5753",
+  "priceCents": "22934",
+  "confidenceBps": 2.5,
+  "signer": "80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c",
+  "solanaHex": "b9011a82e292e854714afdcbe7d2fa78248d447a6d8a48b250a9d5d80137886e0bafc7204c501e0741f319d826ca0568974b38dccc7d447528554a54a99a3293bda6c00780efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c280075d3c793007011cb6d5d06000301220500000300edf25d010000000004fbff057916000000000000"
+}

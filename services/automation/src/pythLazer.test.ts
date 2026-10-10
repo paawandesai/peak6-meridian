@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -14,7 +16,13 @@ import {
   signatureIsValid,
   type CloseRules,
 } from "./pythLazer";
-import { encodePythPayload, pythTestSigner, signedPythUpdate, signPythMessage } from "./testing";
+import {
+  encodePythPayload,
+  loadRecordedPythUpdate,
+  pythTestSigner,
+  signedPythUpdate,
+  signPythMessage,
+} from "./testing";
 
 /** Flips the low bit of one byte. */
 const flip = (bytes: Uint8Array, at: number): void => {
@@ -294,5 +302,62 @@ describe("fetchSignedPrice (Pyth Lazer REST, no network)", () => {
         init.signal.addEventListener("abort", () => reject(new Error("aborted")));
       });
     await expect(fetchSignedPrice({ ...params(hang), timeoutMs: 5 })).rejects.toThrow(/timed out/);
+  });
+});
+
+describe("Pyth's own signed Friday close (recorded 2026-10-09, all seven tickers)", () => {
+  /** Pyth Lazer's production signer (D-056). */
+  const PYTH_SIGNER = Buffer.from(
+    "80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c",
+    "hex",
+  );
+  const fixture = (ticker: string) =>
+    loadRecordedPythUpdate(
+      fileURLToPath(
+        new URL(
+          `../../../programs/meridian/tests/fixtures/pyth/lazer_${ticker.toLowerCase()}_close_2026-10-09.json`,
+          import.meta.url,
+        ),
+      ),
+    );
+
+  it.each(Object.keys(PYTH_FEED_IDS))(
+    "%s: Pyth's signature verifies and the update passes the settle_market rules",
+    (ticker) => {
+      const recorded = fixture(ticker);
+      const update = parseSolanaMessage(Uint8Array.from(Buffer.from(recorded.solanaHex, "hex")));
+      expect(Buffer.from(update.publicKey).equals(PYTH_SIGNER)).toBe(true);
+      expect(signatureIsValid(update)).toBe(true);
+      expect(update.parsed.feedId).toBe(PYTH_FEED_IDS[ticker]);
+      expect(update.parsed.timestampUs).toBe(BigInt(recorded.closeTs) * 1_000_000n);
+      expect(() =>
+        checkSignedClose(update, {
+          signer: PYTH_SIGNER,
+          feedId: recorded.feedId,
+          closeTs: recorded.closeTs,
+          closeWindowSecs: 30,
+          maxConfBps: 5,
+          nowSecs: recorded.closeTs + 300,
+        }),
+      ).not.toThrow();
+    },
+  );
+
+  it("AAPL closed at $336.51 with a 2.49 bps confidence: rejected at max_conf_bps 2", () => {
+    const recorded = fixture("AAPL");
+    const update = parseSolanaMessage(Uint8Array.from(Buffer.from(recorded.solanaHex, "hex")));
+    expect(priceCents(update.parsed)).toBe(33_651n);
+    expect(confidenceBps(update.parsed)).toBeCloseTo(2.49, 2);
+    const rules = {
+      signer: PYTH_SIGNER,
+      feedId: 922,
+      closeTs: recorded.closeTs,
+      closeWindowSecs: 30,
+      nowSecs: recorded.closeTs + 300,
+    };
+    expect(() => checkSignedClose(update, { ...rules, maxConfBps: 2 })).toThrow(/wider than 2 bps/);
+    expect(() =>
+      checkSignedClose(update, { ...rules, signer: signer.publicKey.toBytes(), maxConfBps: 5 }),
+    ).toThrow(/pinned/);
   });
 });
