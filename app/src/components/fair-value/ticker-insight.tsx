@@ -45,7 +45,12 @@ export function TickerInsightView({ market, ladder, books, fair, nowSecs }: View
         nowSecs={nowSecs}
       />
       <DistributionChart ticker={market.ticker} points={points} />
-      <PriceHistoryChart ticker={market.ticker} nowSecs={nowSecs} />
+      <PriceHistoryChart
+        ticker={market.ticker}
+        nowSecs={nowSecs}
+        strikes={ladder.map((m) => m.strikeCents)}
+        fairValueCents={marketFair?.fair_cents}
+      />
     </section>
   );
 }

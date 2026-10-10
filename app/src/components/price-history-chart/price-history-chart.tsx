@@ -16,6 +16,10 @@ type PythHistoryData = {
 type Props = {
   readonly ticker: string;
   readonly nowSecs: number;
+  /** Strike prices in cents (will be converted to dollars for display). */
+  readonly strikes?: readonly bigint[];
+  /** Fair value in cents (will be converted to dollars for display). */
+  readonly fairValueCents?: number;
 };
 
 async function fetchHistory(ticker: string, nowSecs: number): Promise<PythHistoryData> {
@@ -37,8 +41,8 @@ async function fetchHistory(ticker: string, nowSecs: number): Promise<PythHistor
   return response.json();
 }
 
-/** TradingView Lightweight Charts price history from Pyth Pro (M3-03). */
-export function PriceHistoryChart({ ticker, nowSecs }: Props) {
+/** TradingView Lightweight Charts price history from Pyth Pro with strike lines (M3-03). */
+export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "empty" | "error">("loading");
@@ -93,6 +97,35 @@ export function PriceHistoryChart({ ticker, nowSecs }: Props) {
         }));
 
         candlestickSeries.setData(candles);
+
+        // Add strike lines (horizontal price lines at each strike)
+        if (strikes && strikes.length > 0) {
+          strikes.forEach((strikeCents) => {
+            const priceInDollars = Number(strikeCents) / 100;
+            candlestickSeries.createPriceLine({
+              price: priceInDollars,
+              color: "#94a3b8",
+              lineWidth: 1,
+              lineStyle: 2, // dashed
+              axisLabelVisible: true,
+              title: `$${priceInDollars.toFixed(2)}`,
+            });
+          });
+        }
+
+        // Add fair value line if available
+        if (fairValueCents !== undefined && fairValueCents !== null) {
+          const fairInDollars = fairValueCents / 100;
+          candlestickSeries.createPriceLine({
+            price: fairInDollars,
+            color: "#3b82f6",
+            lineWidth: 2,
+            lineStyle: 0, // solid
+            axisLabelVisible: true,
+            title: `Fair $${fairInDollars.toFixed(2)}`,
+          });
+        }
+
         chart.timeScale().fitContent();
         setStatus("ready");
       })
@@ -116,7 +149,7 @@ export function PriceHistoryChart({ ticker, nowSecs }: Props) {
       chart.remove();
       chartRef.current = null;
     };
-  }, [ticker, nowSecs]);
+  }, [ticker, nowSecs, strikes, fairValueCents]);
 
   if (status === "loading") {
     return <p className="text-mer-sm text-mer-ink-muted">Loading price history…</p>;
