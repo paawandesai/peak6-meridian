@@ -129,6 +129,14 @@ Against a local validator: `SOLANA_CLUSTER=localnet` with a loopback `SOLANA_RPC
 
 The shared devnet deployment holds **real markets only** (markets closing at the NYSE session close: 16:00 ET or 13:00 ET on early-close days). Test markets (created with `--close-in-secs`) are for e2e and rehearsals on a local validator only. The `create-markets` CLI refuses `--close-in-secs` on devnet (`SOLANA_CLUSTER=devnet`) unless `--allow-test-close` is explicitly passed. The app hides non-session markets by default behind "Show test markets (N)"; when shown, each carries a TEST badge and its own close time.
 
+## Quant service on Railway (M3-08b)
+
+- Deploy (operator, by hand, never from CI): `make deploy-quant DEPLOY_ARGS=--dry-run` first (names only, exits 1 if a required variable or `RAILWAY_TOKEN` is missing), then `make deploy-quant`. Variables: [environment.md § Quant on Railway](environment.md#quant-on-railway-m3-08b).
+- The command waits for `GET /health` (200) and prints `quant URL: https://…`. Set the Vercel app's `QUANT_URL` to it (same `SERVICE_TOKEN` on both), then check `/api/fair-values` on the app.
+- The Railway service runs the market maker too. **Cutover:** once Railway's `/health` shows `book_coverage` above 0, stop the laptop market maker so only one MM quotes with `MARKET_MAKER_KEYPAIR`.
+- If `/health` never turns 200 the command prints the latest deployment status and a redacted log tail. A missing `PYTH_API_TOKEN` is not fatal (Finnhub only, logged once at start) but Finnhub's free tier is tight; set it.
+- Rollback: check out the previous good commit and run `make deploy-quant` again (it uploads the working tree), or point `QUANT_URL` back at the laptop service and restart the laptop MM.
+
 ## Faucet (M2-09)
 
 - The server faucet (`POST /api/faucet`) mints test-USDC with `FAUCET_KEYPAIR`, which is the mint authority, and pays rent from its own SOL: about 0.004 SOL per claim (two 1-byte marker accounts plus the recipient's token account). Keep that key funded on devnet (`solana airdrop`, or a transfer from the admin key).
