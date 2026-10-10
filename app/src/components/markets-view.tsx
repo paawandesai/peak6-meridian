@@ -12,6 +12,8 @@ import { useNow } from "./use-now";
 import { useMarketData, type MarketDataSources } from "@/lib/market-data";
 import { formatTradingDate, groupByTicker, marketStatus, type MarketRow } from "@/lib/markets";
 import { activeDateMarkets, etTradingDate } from "@/lib/time";
+import { tradeHref } from "@/app/trade/_lib/href";
+import { usePythQuotes } from "@/lib/use-pyth-quotes";
 
 /** Inert sources for pages without a data provider: nothing is live, so rows show "—". */
 const NO_SOURCES: MarketDataSources = {
@@ -43,17 +45,19 @@ function useOpenTimes(markets: readonly MarketRow[]): Record<string, number | nu
  */
 export function MarketsView({
   nowSecs,
-  tradeHref,
+  tradeHref: tradeHrefProp,
 }: {
   readonly nowSecs?: number;
-  /** Builds a strike's Trade link; absent until the Trade route exists (UI-04 turns it on). */
-  readonly tradeHref?: (market: MarketRow) => string;
+  readonly tradeHref?: ((market: MarketRow) => string) | null;
 }) {
   const reader = useReader();
   const ticking = useNow();
   // `null` until the clock has mounted (server render and first paint): the date-dependent parts
   // wait for it rather than treating a missing clock as the unix epoch.
   const clock = nowSecs ?? ticking;
+  // Use the prop if provided (for tests): undefined → default imported tradeHref, null → no links.
+  const tradeHrefFn =
+    tradeHrefProp === undefined ? tradeHref : tradeHrefProp === null ? undefined : tradeHrefProp;
   const state = useAsync(() => reader.listMarkets(), [reader]);
   const config = useAsync(() => reader.getConfig(), [reader]);
   const sources = useMarketSources();
@@ -61,6 +65,8 @@ export function MarketsView({
   const active = useMemo(() => (clock === null ? [] : activeDateMarkets(all, clock)), [all, clock]);
   const data = useMarketData(active, sources.data ?? NO_SOURCES);
   const openTimes = useOpenTimes(active);
+  // M3-10: Fetch Pyth live quotes (D-055: Pyth Pro is primary demo price source)
+  const pythQuotes = usePythQuotes();
 
   if (state.status === "loading" || clock === null) {
     return <p role="status">Loading markets…</p>;
@@ -103,10 +109,10 @@ export function MarketsView({
           markets={[...group.markets].sort((a, b) =>
             a.strikeCents < b.strikeCents ? -1 : a.strikeCents > b.strikeCents ? 1 : 0,
           )}
-          price={data.prices[group.ticker as keyof typeof data.prices]}
+          pythQuote={pythQuotes.quotes[group.ticker]}
           data={strikeData}
           ctx={ctx}
-          tradeHref={tradeHref}
+          {...(tradeHrefFn === undefined ? {} : { tradeHref: tradeHrefFn })}
         />
       ))}
     </div>

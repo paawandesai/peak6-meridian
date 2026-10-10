@@ -5,6 +5,7 @@ import { MarketsView } from "../markets-view";
 import { MarketSourcesProvider, type MarketSources } from "./data-context";
 import { MIDPOINT_NOTE, SETTLE_NOTE, CONNECT_COPY } from "./notes";
 import { market, reader, withReader } from "@/test-utils";
+import { PYTH_FEED_IDS } from "@/lib/pyth-quotes";
 
 const wallet = vi.hoisted(() => ({ publicKey: null as unknown }));
 vi.mock("@solana/wallet-adapter-react", async (importOriginal) => ({
@@ -65,13 +66,42 @@ const m = (n: number, over: Parameters<typeof market>[0] = {}) =>
     ...over,
   });
 
+/**
+ * Mock Pyth quotes API for tests (M3-10).
+ * Call this before rendering to provide Pyth price data.
+ */
+function mockPythQuotes(prices: { ticker: string; price_cents: number }[]) {
+  const publishTime = NOW - 2; // 2 seconds ago
+  const mockResponse = {
+    quotes: prices.map((p) => ({
+      ticker: p.ticker,
+      price_cents: p.price_cents,
+      conf_cents: Math.floor(p.price_cents * 0.001), // ~0.1% confidence
+      publish_time: publishTime,
+      feed_id: PYTH_FEED_IDS[p.ticker as keyof typeof PYTH_FEED_IDS] ?? "0x0",
+    })),
+    unavailable: [],
+    server_time: Date.now(),
+  };
+
+  global.fetch = vi.fn((url) => {
+    if (typeof url === "string" && url.includes("/api/pyth-quotes")) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+    }
+    return Promise.reject(new Error(`Unmocked fetch: ${url}`));
+  });
+}
+
 function renderView(
   markets: ReturnType<typeof market>[],
   opts: {
     sources?: MarketSources;
     now?: number;
     paused?: boolean;
-    tradeHref?: (x: ReturnType<typeof market>) => string;
+    tradeHref?: ((x: ReturnType<typeof market>) => string) | null;
   } = {},
 ) {
   const view = (
@@ -122,9 +152,8 @@ describe("active date scoping (AC1)", () => {
   });
 
   it("with the clock on the later date, each ladder has its own strike count and ONE live marker", async () => {
-    renderView([earlier(1), earlier(2), m(3), m(4), m(5)], {
-      sources: sources({ prices: [{ ticker: "NVDA", price_cents: 21_142 }] }),
-    });
+    mockPythQuotes([{ ticker: "NVDA", price_cents: 21_142 }]);
+    renderView([earlier(1), earlier(2), m(3), m(4), m(5)]);
     const section = await screen.findByRole("region", { name: "NVDA" });
     await vi.waitFor(() => expect(section).toHaveTextContent("$211.42"));
     expect(within(section).getByText(/^3 strikes/)).toBeInTheDocument(); // not 5: Oct 7 is excluded
@@ -155,8 +184,8 @@ describe("row link (AC2)", () => {
     expect(link).toHaveClass("after:absolute", "after:inset-0");
   });
 
-  it("renders no link and no Trade text until the Trade route exists", async () => {
-    renderView([m(1)]);
+  it("renders no link and no Trade text when tradeHref is null", async () => {
+    renderView([m(1)], { tradeHref: null });
     await screen.findAllByRole("row");
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.queryByText("Trade")).toBeNull();
@@ -319,23 +348,25 @@ describe("page notes and landing (AC7)", () => {
 });
 
 describe("live price (header line)", () => {
-  it("shows the live price with its as-of time and puts one decorative marker between the two strikes", async () => {
-    renderView([m(1), m(2), m(3)], {
-      sources: sources({ prices: [{ ticker: "NVDA", price_cents: 18_142 }] }),
-    });
+  it("shows the live Pyth price with freshness indicator and puts one decorative marker between strikes", async () => {
+    mockPythQuotes([{ ticker: "NVDA", price_cents: 18_142 }]);
+    renderView([m(1), m(2), m(3)]);
     const section = await screen.findByRole("region", { name: "NVDA" });
     await vi.waitFor(() => expect(section).toHaveTextContent("$181.42"));
-    expect(section).toHaveTextContent(/as of \d\d:\d\d:\d\d ET/);
+    // Check for Pyth badge and freshness (M3-10)
+    expect(section).toHaveTextContent(/\ds ago/); // e.g., "2s ago"
+    expect(section).toHaveTextContent("Pyth");
     const markers = section.querySelectorAll('[data-testid="live-marker"]');
     expect(markers).toHaveLength(1); // strikes 180 (n=1), 190 (n=2): $181.42 sits below the 190 strike
     expect(markers[0]?.getAttribute("aria-hidden")).toBe("true");
     expect(within(section).getAllByRole("row")).toHaveLength(4); // header + 3, the marker is not a row
   });
 
-  it("says the price is not live yet when there is none, and keeps the heading to the symbol", async () => {
+  it("shows loading placeholder when Pyth price is not yet available", async () => {
+    mockPythQuotes([]); // No quotes returned
     renderView([m(1)]);
     const section = await screen.findByRole("region", { name: "NVDA" });
-    expect(section).toHaveTextContent("price not live yet");
+    await vi.waitFor(() => expect(section).toHaveTextContent("Pyth price loading"));
     expect(within(section).getByRole("heading", { level: 2 })).toHaveTextContent(/^NVDA$/);
   });
 });

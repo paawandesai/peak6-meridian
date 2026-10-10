@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { AnchorProvider, BN, type Program, Wallet } from "@coral-xyz/anchor";
+import { AnchorProvider, type Program, Wallet } from "@coral-xyz/anchor";
 import {
+  BN,
   buildTrade,
   createMeridianProgram,
   findConfigPda,

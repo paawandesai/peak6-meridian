@@ -6,7 +6,8 @@ import {
   createMeridianProgram,
   fetchBookQuotes,
 } from "@meridian/client";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { PublicKey } from "@solana/web3.js";
+import { sharedConnection } from "@/lib/rpc";
 
 import type { PublicConfig } from "./config";
 
@@ -23,7 +24,7 @@ const readOnlyWallet = {
 
 /** One `getMultipleAccounts` call per poll, decoded by the generated client. */
 export function createBookSource(config: PublicConfig): BookSource {
-  const connection = new Connection(config.rpcUrl, "confirmed");
+  const connection = sharedConnection(config.rpcUrl);
   const provider = new AnchorProvider(connection, readOnlyWallet, { commitment: "confirmed" });
   const program = createMeridianProgram(provider, config.programId);
   const books = bookAccountApi(program);
