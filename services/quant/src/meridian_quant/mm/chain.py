@@ -538,17 +538,25 @@ class ChainOrderClient:
     async def settle_funds(self, market: str, owner: str) -> None:
         """Settle funds via settle_funds instruction (no args).
 
+        Skips if OpenOrders account doesn't exist (nothing to settle on first run).
+
         Args:
             market: Market PDA (base58 pubkey string)
         """
         market_pda = Pubkey.from_string(market)
         owner_pubkey = Pubkey.from_string(owner)
 
+        # Check if OpenOrders exists (created by first place_order; nothing to settle if not)
+        open_orders = derive_open_orders_pda(self.program_id, market_pda, owner_pubkey)
+        oo_info = await self.rpc.get_account_info(open_orders)
+        if oo_info.value is None:
+            # OpenOrders doesn't exist yet - nothing to settle
+            return
+
         # Build instruction data (no args beyond discriminator)
         data = DISCRIMINATOR_SETTLE_FUNDS
 
         # Account metas
-        open_orders = derive_open_orders_pda(self.program_id, market_pda, owner_pubkey)
         escrow_usdc = derive_escrow_usdc_pda(self.program_id, market_pda)
         escrow_yes = derive_escrow_yes_pda(self.program_id, market_pda)
         user_usdc = get_associated_token_address(self.usdc_mint, owner_pubkey)
