@@ -14,7 +14,10 @@ export const fairValueSchema = z.object({
   sigma: z.number().finite().nonnegative(),
   spot: z.union([z.string().regex(/^\d+(\.\d+)?$/), z.number().finite().nonnegative()]),
   as_of: z.iso.datetime({ offset: true }),
-  /** The service marks a value stale when its spot is older than 10 s. */
+  /**
+   * The service marks a value stale when its inputs are old; it keeps publishing the last value
+   * with `stale: true` rather than dropping the market, and the app shows it flagged, not hidden.
+   */
   stale: z.boolean(),
 });
 
@@ -61,6 +64,33 @@ export function edgeWord(edge: number): EdgeWord {
 export function edgeText(edge: number): string {
   const sign = edge > 0 ? "+" : edge < 0 ? "−" : "";
   return `Edge ${sign}${Math.abs(edge)}¢ (${edgeWord(edge)})`;
+}
+
+/** The value's `as_of` in unix seconds. */
+export function asOfSecs(value: FairValue): number {
+  return Math.floor(Date.parse(value.as_of) / 1000);
+}
+
+/** Seconds from `asOf` to `nowSecs` (never negative: a clock skewed ahead reads as 0). */
+export function ageSecs(asOf: number, nowSecs: number): number {
+  return Math.max(0, Math.floor(nowSecs) - asOf);
+}
+
+/** `42 s`, `3 min`, `2 h`: whole units, rounded down, so an age is never understated as fresher. */
+export function formatAge(secs: number): string {
+  if (secs < 60) return `${secs} s`;
+  if (secs < 3_600) return `${Math.floor(secs / 60)} min`;
+  return `${Math.floor(secs / 3_600)} h`;
+}
+
+/**
+ * The edge's tone, for colour only (the word is always written): a cheap YES (market under fair)
+ * reads in the YES colour (buying YES is the side with the edge), a rich YES in the NO colour.
+ */
+export type EdgeTone = "yes" | "no" | "neutral";
+
+export function edgeTone(edge: number): EdgeTone {
+  return edge < 0 ? "yes" : edge > 0 ? "no" : "neutral";
 }
 
 /** A value is stale when the service says so or its `as_of` is older than {@link STALE_AFTER_SECS}. */

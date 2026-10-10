@@ -20,9 +20,11 @@ export function emptyDistributionText(ticker: string): string {
 export function DistributionSection({
   ticker,
   points,
+  nowSecs,
 }: {
   readonly ticker: string;
   readonly points: readonly DistributionPoint[];
+  readonly nowSecs: number;
 }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -34,19 +36,19 @@ export function DistributionSection({
     <details
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
-      className="grid gap-mer-3 rounded-mer border border-mer-rule p-mer-3"
+      className="grid min-w-0 gap-mer-3 rounded-mer border border-mer-rule p-mer-3"
       data-testid="distribution-section"
     >
       <summary className="min-h-9 cursor-pointer text-mer-md font-semibold">
         Implied distribution: {ticker}{" "}
         <span className="text-mer-xs font-normal text-mer-ink-muted">
-          (YES price by strike = chance of closing at or above it)
+          (chance of closing in each strike range, market vs fair value)
         </span>
       </summary>
       {open ? (
         priced ? (
           <div className="pt-mer-3">
-            <DistributionChart ticker={ticker} points={points} />
+            <DistributionChart ticker={ticker} points={points} nowSecs={nowSecs} />
           </div>
         ) : (
           <p className="pt-mer-3 text-mer-sm text-mer-ink-muted" data-testid="distribution-empty">

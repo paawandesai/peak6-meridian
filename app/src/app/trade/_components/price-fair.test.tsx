@@ -47,6 +47,42 @@ describe("PriceFair (P0-7 AC3, US-15)", () => {
     expect(screen.getAllByTestId("fair-edge-missing")).toHaveLength(2);
   });
 
+  it("shows a stale value with a stale tag, never as unavailable (P0-FV)", () => {
+    const old = new Date((NOW - 40) * 1000).toISOString();
+    render(
+      <PriceFair
+        marketAddress={ADDR}
+        yesCents={38}
+        fair={{
+          status: "ready",
+          byMarket: { [ADDR]: fair({ fair_cents: 41, stale: true, as_of: old }) },
+          refreshFailed: false,
+        }}
+        nowSecs={NOW}
+      />,
+    );
+    expect(screen.getByTestId("fair-edge")).toHaveTextContent("Fair 41¢ · Edge −3¢ (cheap)");
+    expect(screen.getByTestId("stale-tag")).toHaveAttribute(
+      "title",
+      expect.stringContaining("40 s old"),
+    );
+    expect(screen.queryByTestId("fair-edge-missing")).toBeNull();
+  });
+
+  it("keeps the last values, tagged stale, after a failed refresh (P0-FV)", () => {
+    render(
+      <PriceFair
+        marketAddress={ADDR}
+        yesCents={38}
+        fair={{ ...ready(41), refreshFailed: true }}
+        nowSecs={NOW}
+      />,
+    );
+    expect(screen.getByTestId("fair-edge")).toHaveTextContent("Fair 41¢");
+    expect(screen.getByTestId("stale-tag")).toBeInTheDocument();
+    expect(screen.queryByTestId("fair-edge-missing")).toBeNull();
+  });
+
   it("says loading while the first read is in flight", () => {
     render(
       <PriceFair

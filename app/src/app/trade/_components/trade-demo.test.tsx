@@ -212,6 +212,8 @@ describe("a Buy NO fill shows in both views (P0-7 AC2)", () => {
 });
 
 describe("fair value, distribution and the vault chip on Trade (P0-7 AC3–AC5)", () => {
+  // Fresh on the page's clock (2 s old), so nothing is flagged stale unless a test says so.
+  const asOf = new Date((OPEN_NOW - 2) * 1000).toISOString();
   const insight: TradeInsight = {
     ladder: [NVDA_190, NVDA, NVDA_170],
     books: {
@@ -224,8 +226,8 @@ describe("fair value, distribution and the vault chip on Trade (P0-7 AC3–AC5)"
     fair: {
       status: "ready",
       byMarket: {
-        [NVDA.address]: fair({ market: NVDA.address, fair_cents: 62 }),
-        [NVDA_170.address]: fair({ market: NVDA_170.address, fair_cents: 70 }),
+        [NVDA.address]: fair({ market: NVDA.address, fair_cents: 62, as_of: asOf }),
+        [NVDA_170.address]: fair({ market: NVDA_170.address, fair_cents: 70, as_of: asOf }),
       },
       refreshFailed: false,
     },
@@ -251,6 +253,39 @@ describe("fair value, distribution and the vault chip on Trade (P0-7 AC3–AC5)"
         "$190———",
       ]);
     });
+  });
+
+  it("shows a stale fair value flagged, not hidden, in the distribution table (P0-FV)", async () => {
+    desktop();
+    const stale: TradeInsight = {
+      ...insight,
+      fair: {
+        ...insight.fair,
+        byMarket: {
+          ...insight.fair.byMarket,
+          [NVDA_170.address]: fair({
+            market: NVDA_170.address,
+            fair_cents: 70,
+            as_of: new Date((OPEN_NOW - 45) * 1000).toISOString(),
+            stale: true,
+          }),
+        },
+      },
+    };
+    renderDemo({ insight: stale });
+    const dist = await screen.findByTestId("distribution-table");
+    await waitFor(() => {
+      const rows = [...dist.querySelectorAll("tbody tr")] as HTMLElement[];
+      expect(rows[0]).toHaveTextContent("70¢stale");
+      expect(within(rows[0] as HTMLElement).getByTestId("stale-tag")).toHaveAttribute(
+        "title",
+        expect.stringMatching(/^Fair value as of \d\d:\d\d:\d\d ET, 45 s old$/),
+      );
+      // This strike's value is fresh: its row has no tag, nor does the price line.
+      expect(rows[1]).not.toHaveTextContent("stale");
+    });
+    expect(screen.getByTestId("fair-edge")).toHaveAttribute("data-stale", "false");
+    expect(screen.queryByTestId("fair-edge-missing")).toBeNull();
   });
 
   it("states plainly when the fair-value service has nothing", async () => {
