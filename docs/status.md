@@ -110,3 +110,22 @@ _Last updated: 2026-10-08 CT by orchestrator (M2 tickets MR !24: review fixes, O
 | ID | Severity | Status | Ticket |
 |---|---|---|---|
 | _none_ | | | M1-01 AB-16/17/22; M1-02 LiteSVM audit ignores accepted (D-047 / OQ-10); M1-03 AB-09/10; M1-11 AB-14/15/20 — no open findings |
+
+## Final Summary (M4-06)
+
+M1-M3 complete. M4 in progress (!62 fresh-clone, demo video pending). Code freeze Sun Oct 11 09:00 CT. Devnet program ID: `H8SBU6m8sGRvKudUGhroDP4oEMyvF9QDhVc9wTFESXSm`. App URL: `[TBD]`. Demo video: `[TBD]`.
+
+**Version tag:** `v1.0.0-devnet-submission` (to be pushed when all M4 deps merge)
+
+**Exit criteria status:**
+- [x] M1: Core lifecycle local - all tickets merged, tests passing
+- [x] M2: Devnet deployment - program live, automation running
+- [x] M3: Automation services - market-maker, fair-value, ops-agent deployed
+- [ ] M4: Polish and docs - !62 (fresh-clone), !67 (this MR), demo video in progress
+
+**Known limitations:**
+- See [docs/risks.md](risks.md) (merged in M4-02)
+
+**Outstanding work:**
+- Fresh-clone reproducibility verification (!62)
+- Demo video (#43)
