@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import { closeSets } from "./ticker-ladder";
 import type { MarketRow } from "@/lib/markets";
 
-const row = (strike: number, close: number): MarketRow =>
+const row = (strike: number, close: number, tradingDate = 20261010): MarketRow =>
   ({
     address: `${strike}-${close}`,
     strikeCents: BigInt(strike * 100),
     closeTs: BigInt(close),
+    tradingDate,
   }) as MarketRow;
 
 describe("closeSets", () => {
@@ -24,6 +25,16 @@ describe("closeSets", () => {
     expect(primary.map((m) => m.closeTs)).toEqual([200n, 200n]);
     expect(primary.map((m) => m.strikeCents)).toEqual([33_000n, 34_000n]);
     expect(others.map((s) => s[0]?.closeTs)).toEqual([100n, 300n]);
+  });
+
+  it("prefers today's at-the-money set over an earlier day's", () => {
+    const markets = [
+      row(290, 100, 20261009),
+      row(340, 100, 20261009),
+      row(330, 200),
+      row(340, 200),
+    ];
+    expect(closeSets(markets, 33_606n).primary[0]?.closeTs).toBe(200n);
   });
 
   it("falls back to the soonest set without a live price", () => {

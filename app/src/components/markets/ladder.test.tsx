@@ -283,9 +283,7 @@ describe("open time, close time and countdown to the next transition (D-050)", (
 describe("displayed price (AC7, AC4)", () => {
   const withBook = async (bid: number | null, ask: number | null) => {
     renderView([m(1)], { sources: sources({ books: { [addr(1)]: q(bid, ask) } }) });
-    await vi.waitFor(async () =>
-      expect((await rowFor("$180")).textContent).toMatch(/\d+¢/),
-    );
+    await vi.waitFor(async () => expect((await rowFor("$180")).textContent).toMatch(/\d+¢/));
     return rowFor("$180");
   };
 
@@ -326,8 +324,8 @@ describe("displayed price (AC7, AC4)", () => {
     renderView([m(1)]);
     const section = await screen.findByRole("region", { name: "NVDA" });
     const headers = within(section).getAllByRole("columnheader");
-    expect(headers.some(h => h.textContent === "YES")).toBe(true);
-    expect(headers.some(h => h.textContent === "NO")).toBe(true);
+    expect(headers.some((h) => h.textContent === "YES")).toBe(true);
+    expect(headers.some((h) => h.textContent === "NO")).toBe(true);
   });
 });
 

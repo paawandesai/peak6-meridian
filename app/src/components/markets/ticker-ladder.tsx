@@ -22,7 +22,8 @@ export function soonestOpenClose(markets: readonly MarketRow[], nowSecs: number)
 
 /**
  * Splits open markets into sets by close time and picks the primary set: the soonest set whose
- * strikes bracket the live price (at the money); otherwise the soonest set. Each set keeps
+ * strikes bracket the live price (at the money), preferring the latest trading day; otherwise
+ * the soonest set. Each set keeps
  * ascending strike order.
  */
 export function closeSets(
@@ -35,15 +36,20 @@ export function closeSets(
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([, rows]) => [...rows].sort((a, b) => (a.strikeCents < b.strikeCents ? -1 : 1)));
   if (sets.length === 0) return { primary: [], others: [] };
-  const atm =
-    live === null
-      ? -1
-      : sets.findIndex(
-          (rows) =>
-            (rows[0]?.strikeCents ?? 0n) <= live &&
-            live <= (rows[rows.length - 1]?.strikeCents ?? 0n),
-        );
-  const pick = atm === -1 ? 0 : atm;
+  const brackets = (rows: readonly MarketRow[]) =>
+    live !== null &&
+    (rows[0]?.strikeCents ?? 0n) <= live &&
+    live <= (rows[rows.length - 1]?.strikeCents ?? 0n);
+  // Prefer the latest trading day's at-the-money set (today's), then the soonest close.
+  const day = (rows: readonly MarketRow[]) => rows[0]?.tradingDate ?? 0;
+  let pick = 0;
+  let best = -1;
+  sets.forEach((rows, i) => {
+    if (brackets(rows) && day(rows) > best) {
+      best = day(rows);
+      pick = i;
+    }
+  });
   return { primary: sets[pick] ?? [], others: sets.filter((_, i) => i !== pick) };
 }
 
