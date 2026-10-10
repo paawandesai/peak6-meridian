@@ -19,35 +19,70 @@ const createMockMarket = (strikeCents: bigint): MarketRow => ({
 describe("CompactStrikeRow", () => {
   it("displays strike price", () => {
     const market = createMockMarket(18000n); // $180.00
-    render(<CompactStrikeRow market={market} yesPriceCents={58} fairValueCents={null} edgeCents={null} />);
+    render(
+      <CompactStrikeRow
+        market={market}
+        yesPriceCents={58}
+        fairValueCents={null}
+        edgeCents={null}
+      />,
+    );
 
     expect(screen.getByText("$180")).toBeInTheDocument();
   });
 
   it("displays YES price", () => {
     const market = createMockMarket(18000n);
-    render(<CompactStrikeRow market={market} yesPriceCents={58} fairValueCents={null} edgeCents={null} />);
+    render(
+      <CompactStrikeRow
+        market={market}
+        yesPriceCents={58}
+        fairValueCents={null}
+        edgeCents={null}
+      />,
+    );
 
     expect(screen.getByText("58¢")).toBeInTheDocument();
   });
 
   it("displays NO price as 100 - YES", () => {
     const market = createMockMarket(18000n);
-    render(<CompactStrikeRow market={market} yesPriceCents={58} fairValueCents={null} edgeCents={null} />);
+    render(
+      <CompactStrikeRow
+        market={market}
+        yesPriceCents={58}
+        fairValueCents={null}
+        edgeCents={null}
+      />,
+    );
 
     expect(screen.getByText("42¢")).toBeInTheDocument(); // 100 - 58
   });
 
   it("displays implied percent", () => {
     const market = createMockMarket(18000n);
-    render(<CompactStrikeRow market={market} yesPriceCents={58} fairValueCents={null} edgeCents={null} />);
+    render(
+      <CompactStrikeRow
+        market={market}
+        yesPriceCents={58}
+        fairValueCents={null}
+        edgeCents={null}
+      />,
+    );
 
     expect(screen.getByText("58%")).toBeInTheDocument();
   });
 
   it("renders probability bar with correct width", () => {
     const market = createMockMarket(18000n);
-    render(<CompactStrikeRow market={market} yesPriceCents={65} fairValueCents={null} edgeCents={null} />);
+    render(
+      <CompactStrikeRow
+        market={market}
+        yesPriceCents={65}
+        fairValueCents={null}
+        edgeCents={null}
+      />,
+    );
 
     const bar = screen.getByLabelText("65% probability");
     expect(bar).toHaveStyle({ width: "65%" });
@@ -56,12 +91,7 @@ describe("CompactStrikeRow", () => {
   it("shows positive edge chip when edge > 0", () => {
     const market = createMockMarket(18000n);
     render(
-      <CompactStrikeRow
-        market={market}
-        yesPriceCents={60}
-        fairValueCents={55}
-        edgeCents={5}
-      />
+      <CompactStrikeRow market={market} yesPriceCents={60} fairValueCents={55} edgeCents={5} />,
     );
 
     const chip = screen.getByText("+5¢");
@@ -72,12 +102,7 @@ describe("CompactStrikeRow", () => {
   it("shows negative edge chip when edge < 0", () => {
     const market = createMockMarket(18000n);
     render(
-      <CompactStrikeRow
-        market={market}
-        yesPriceCents={50}
-        fairValueCents={55}
-        edgeCents={-5}
-      />
+      <CompactStrikeRow market={market} yesPriceCents={50} fairValueCents={55} edgeCents={-5} />,
     );
 
     const chip = screen.getByText("-5¢");
@@ -88,12 +113,7 @@ describe("CompactStrikeRow", () => {
   it("shows neutral edge chip when edge = 0", () => {
     const market = createMockMarket(18000n);
     render(
-      <CompactStrikeRow
-        market={market}
-        yesPriceCents={55}
-        fairValueCents={55}
-        edgeCents={0}
-      />
+      <CompactStrikeRow market={market} yesPriceCents={55} fairValueCents={55} edgeCents={0} />,
     );
 
     const chip = screen.getByText("0¢");
@@ -109,7 +129,7 @@ describe("CompactStrikeRow", () => {
         yesPriceCents={58}
         fairValueCents={null}
         edgeCents={null}
-      />
+      />,
     );
 
     // Edge chip text would contain + or - prefix and ¢ suffix (e.g., "+5¢" or "-3¢" or "0¢")
@@ -128,7 +148,7 @@ describe("CompactStrikeRow", () => {
         fairValueCents={null}
         edgeCents={null}
         onClick={handleClick}
-      />
+      />,
     );
 
     fireEvent.click(screen.getByRole("button"));

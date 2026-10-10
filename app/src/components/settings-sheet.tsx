@@ -54,9 +54,7 @@ export function SettingsSheet() {
 
             <div className="space-y-mer-4">
               <div>
-                <label className="mb-mer-2 block text-mer-sm font-medium">
-                  Demo Mode
-                </label>
+                <label className="mb-mer-2 block text-mer-sm font-medium">Demo Mode</label>
                 <div className="rounded-mer border border-mer-control-border bg-mer-paper p-mer-3 text-mer-sm">
                   <div className="flex items-center justify-between">
                     <span className="font-medium">

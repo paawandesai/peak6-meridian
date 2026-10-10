@@ -2,12 +2,14 @@
 
 Tests fetch_open_markets and fetch_resting_orders deserialization with fixture data.
 """
+
 import struct
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from solana.rpc.async_api import AsyncClient
 from solders.account import Account
+from solders.keypair import Keypair
 from solders.pubkey import Pubkey
 from solders.rpc.responses import GetAccountInfoResp, RpcResponseContext
 
@@ -29,12 +31,23 @@ async def test_fetch_open_markets_with_mocked_rpc() -> None:
     strike_cents = struct.pack("<Q", 23000)  # u64
     trading_date = struct.pack("<I", 20261008)  # u32
     close_ts = struct.pack("<q", 1234567890)  # i64
-    pubkeys = b"\x00" * (32 * 6)  # 6 pubkeys (yes_mint, no_mint, vault, escrow_usdc, escrow_yes, book)
+    # 6 pubkeys (yes_mint, no_mint, vault, escrow_usdc, escrow_yes, book)
+    pubkeys = b"\x00" * (32 * 6)
     pairs_outstanding = struct.pack("<Q", 100)  # u64
     status = b"\x00"  # MarketStatus::Open = 0
     padding = b"\x00" * 50  # Ensure > 250 bytes total
 
-    market_data = market_disc + ticker + strike_cents + trading_date + close_ts + pubkeys + pairs_outstanding + status + padding
+    market_data = (
+        market_disc
+        + ticker
+        + strike_cents
+        + trading_date
+        + close_ts
+        + pubkeys
+        + pairs_outstanding
+        + status
+        + padding
+    )
 
     # Create mock account
     mock_account = MagicMock()
@@ -91,14 +104,13 @@ async def test_fetch_resting_orders_with_mocked_rpc() -> None:
     program_id = Pubkey.from_string("11111111111111111111111111111112")
     usdc_mint = Pubkey.from_string("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
 
-    from solders.keypair import Keypair
     payer = Keypair()
     client = ChainOrderClient(rpc, program_id, payer, usdc_mint)
 
     # Create fixture Book account data
     # Discriminator + bids + asks (each BookOrder is 64 bytes)
     book_disc = bytes([197, 178, 136, 149, 17, 94, 76, 216])
-    
+
     # One bid order: order_id(u64) + owner(32) + price(u8) + pad(7) + qty(u64) + seq(u64)
     order_id = struct.pack("<Q", 1)
     owner = bytes(Pubkey.from_string("3" * 44))  # 32 bytes, 44-char base58
@@ -106,15 +118,15 @@ async def test_fetch_resting_orders_with_mocked_rpc() -> None:
     pad = b"\x00" * 7
     qty = struct.pack("<Q", 10)
     seq = struct.pack("<Q", 1)
-    
+
     bid_order = order_id + owner + price + pad + qty + seq
-    
+
     # 32 bid slots (only first one filled)
     bids_data = bid_order + (b"\x00" * 64 * 31)
-    
+
     # 32 ask slots (empty)
     asks_data = b"\x00" * 64 * 32
-    
+
     book_data = book_disc + bids_data + asks_data
 
     # Mock get_account_info response
@@ -149,7 +161,6 @@ async def test_fetch_resting_orders_empty_book() -> None:
     program_id = Pubkey.from_string("11111111111111111111111111111112")
     usdc_mint = Pubkey.from_string("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
 
-    from solders.keypair import Keypair
     payer = Keypair()
     client = ChainOrderClient(rpc, program_id, payer, usdc_mint)
 

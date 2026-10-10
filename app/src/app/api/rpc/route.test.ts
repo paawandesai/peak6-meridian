@@ -255,7 +255,7 @@ describe("RPC Proxy - Rate Limiting (P0-5 AC)", () => {
           params: [],
           id: i,
         },
-        "192.168.1.1"
+        "192.168.1.1",
       );
 
       const response = await POST(req as never);
@@ -281,7 +281,7 @@ describe("RPC Proxy - Rate Limiting (P0-5 AC)", () => {
           params: [],
           id: `ratelimit-${i}`,
         },
-        testIp
+        testIp,
       );
       requests.push(POST(req as never));
     }
@@ -302,11 +302,11 @@ describe("RPC Proxy - Rate Limiting (P0-5 AC)", () => {
 
     const req1 = createRequest(
       { jsonrpc: "2.0", method: "getSlot", params: [], id: 1 },
-      "10.0.0.1"
+      "10.0.0.1",
     );
     const req2 = createRequest(
       { jsonrpc: "2.0", method: "getSlot", params: [], id: 2 },
-      "10.0.0.2"
+      "10.0.0.2",
     );
 
     const response1 = await POST(req1 as never);

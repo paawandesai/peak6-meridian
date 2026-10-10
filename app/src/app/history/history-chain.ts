@@ -90,10 +90,8 @@ export async function loadWalletEvents(
   const ooAddresses =
     extraAddresses.length > 0 ? extraAddresses : await findWalletOpenOrders(rpc, wallet, programId);
   // Fetch signatures with concurrency cap
-  const lists = await runWithConcurrency(
-    [wallet, ...ooAddresses],
-    CONCURRENCY_CAP,
-    (address) => rpc.getSignaturesForAddress(address, { limit }),
+  const lists = await runWithConcurrency([wallet, ...ooAddresses], CONCURRENCY_CAP, (address) =>
+    rpc.getSignaturesForAddress(address, { limit }),
   );
   const unique = new Map(lists.flat().map((entry) => [entry.signature, entry]));
   const signatures = [...unique.values()]

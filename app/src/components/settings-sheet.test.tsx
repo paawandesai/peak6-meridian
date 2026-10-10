@@ -110,8 +110,6 @@ describe("SettingsSheet (P1-1)", () => {
     const button = screen.getByLabelText("Settings");
     fireEvent.click(button);
 
-    expect(
-      screen.getByText(/Demo mode is configured at deployment time/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Demo mode is configured at deployment time/)).toBeInTheDocument();
   });
 });

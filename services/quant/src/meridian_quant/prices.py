@@ -61,7 +61,7 @@ def _get(client: httpx.Client, url: str, headers: dict[str, str], params: dict[s
     return response.content
 
 
-def fetch_spot(
+def fetch_spot(  # noqa: PLR0913 - replay options are keyword-only
     client: httpx.Client,
     ticker: str,
     finnhub_key: str,
@@ -127,7 +127,7 @@ def fetch_spot(
     )
 
 
-def fetch_daily_closes(
+def fetch_daily_closes(  # noqa: PLR0913 - replay options are keyword-only
     client: httpx.Client,
     ticker: str,
     tiingo_key: str,

@@ -107,13 +107,15 @@ describe("concurrency cap", () => {
     const oo5 = new PublicKey(new Uint8Array(32).fill(14));
     const calls: string[] = [];
     const rpc = {
-      getProgramAccounts: vi.fn().mockResolvedValue([
-        { pubkey: oo1 },
-        { pubkey: oo2 },
-        { pubkey: oo3 },
-        { pubkey: oo4 },
-        { pubkey: oo5 },
-      ]),
+      getProgramAccounts: vi
+        .fn()
+        .mockResolvedValue([
+          { pubkey: oo1 },
+          { pubkey: oo2 },
+          { pubkey: oo3 },
+          { pubkey: oo4 },
+          { pubkey: oo5 },
+        ]),
       getSignaturesForAddress: vi.fn(async (addr: PublicKey) => {
         calls.push(addr.toBase58());
         return [];
