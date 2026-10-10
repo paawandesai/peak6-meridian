@@ -5,7 +5,7 @@ import { PortfolioFilters, type PortfolioTotals } from "./portfolio-filters";
 const baseTotals: PortfolioTotals = {
   usdcBalance: 1_000_000_000n, // $1,000.00
   redeemableNow: 250_000_000n, // $250.00
-  unrealizedCents: 12345n, // +$123.45
+  unrealizedCents: 123_450_000n, // +$123.45 (in USDC base units)
   realizedCents: 0n,
 };
 
@@ -14,20 +14,19 @@ describe("PortfolioFilters", () => {
     const onTabChange = vi.fn();
     render(<PortfolioFilters activeTab="open" onTabChange={onTabChange} totals={baseTotals} />);
 
-    expect(screen.getByText(/USDC:/)).toBeInTheDocument();
-    expect(screen.getByText("$1,000.00")).toBeInTheDocument();
-    expect(screen.getByText(/Redeemable:/)).toBeInTheDocument();
+    expect(screen.getByText("1,000.00 test-USDC")).toBeInTheDocument();
+    expect(screen.getByText(/Redeemable now/)).toBeInTheDocument();
     expect(screen.getByText("$250.00")).toBeInTheDocument();
-    expect(screen.getByText(/Unrealized:/)).toBeInTheDocument();
+    expect(screen.getByText(/Unrealized/)).toBeInTheDocument();
     expect(screen.getByText("+$123.45")).toBeInTheDocument();
   });
 
   it("shows negative unrealized P&L in red", () => {
-    const totals: PortfolioTotals = { ...baseTotals, unrealizedCents: -5000n };
+    const totals: PortfolioTotals = { ...baseTotals, unrealizedCents: -50_000_000n }; // -$50.00
     const onTabChange = vi.fn();
     render(<PortfolioFilters activeTab="open" onTabChange={onTabChange} totals={totals} />);
 
-    const pnlElement = screen.getByText("-$50.00");
+    const pnlElement = screen.getByText("−$50.00");
     expect(pnlElement).toHaveClass("text-mer-loss");
   });
 
@@ -44,7 +43,10 @@ describe("PortfolioFilters", () => {
     const onTabChange = vi.fn();
     render(<PortfolioFilters activeTab="open" onTabChange={onTabChange} totals={totals} />);
 
-    const pnlElement = screen.getByText("$0.00");
+    // Find the Unrealized span and check its nested mer-num span
+    const unrealizedSpan = screen.getByText(/Unrealized/).closest("span");
+    expect(unrealizedSpan).toBeInTheDocument();
+    const pnlElement = unrealizedSpan?.querySelector(".mer-num");
     expect(pnlElement).not.toHaveClass("text-mer-gain");
     expect(pnlElement).not.toHaveClass("text-mer-loss");
   });
@@ -89,6 +91,6 @@ describe("PortfolioFilters", () => {
     const onTabChange = vi.fn();
     render(<PortfolioFilters activeTab="open" onTabChange={onTabChange} totals={totals} />);
 
-    expect(screen.getByText("$1,234,567.89")).toBeInTheDocument();
+    expect(screen.getByText("1,234,567.89 test-USDC")).toBeInTheDocument();
   });
 });

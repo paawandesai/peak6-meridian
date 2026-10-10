@@ -3,6 +3,7 @@
 import { useWallet } from "@solana/wallet-adapter-react";
 
 import { Countdown, DemoWalletCTA } from "./ui";
+import { DEMO_WALLET_NAME } from "@/lib/demo-wallet";
 import { UsdcBalance } from "./usdc-balance";
 import { WalletButton } from "./wallet-button";
 import type { AppConfig } from "@/lib/chain";
@@ -87,9 +88,9 @@ export function AppHeader({
   const { publicKey, select } = useWallet();
 
   const handleDemoConnect = () => {
-    // Connect to burner wallet (demo wallet adapter)
+    // Connect to demo wallet (demo wallet adapter)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    select("burner" as any);
+    select(DEMO_WALLET_NAME as any);
   };
 
   return (

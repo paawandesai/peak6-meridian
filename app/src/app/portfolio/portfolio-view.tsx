@@ -543,7 +543,7 @@ export function PortfolioView(props: PortfolioViewProps) {
 
   const portfolioTotals: PortfolioTotals = {
     usdcBalance: model.totals.usdc,
-    redeemableNow: model.totals.redeemable * 10_000n, // cents to USDC base units
+    redeemableNow: model.totals.redeemable, // already in USDC base units
     unrealizedCents: model.totals.unrealized, // already in USDC base units
     realizedCents: model.totals.realized, // already in USDC base units
   };
