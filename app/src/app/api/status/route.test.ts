@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { type MarketInvariant } from "./route";
 
 /**
  * Tests for GET /api/status (P1-6).
