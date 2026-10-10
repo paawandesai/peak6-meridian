@@ -34,7 +34,8 @@ export function openOrdersAddresses(
 /**
  * Finds all OpenOrders accounts owned by `wallet` using one getProgramAccounts call with an owner
  * memcmp filter. This avoids scanning every market's potential OpenOrders PDA when most don't exist.
- * OpenOrders account layout: 8-byte discriminator, then 32-byte owner pubkey at offset 8.
+ * OpenOrders account layout: 8-byte discriminator + OpenOrders::INIT_SPACE (32+32+8+8+1+1) = 90 bytes.
+ * Owner pubkey is at offset 8 (first field after discriminator).
  */
 export async function findWalletOpenOrders(
   rpc: Pick<Connection, "getProgramAccounts">,
@@ -45,7 +46,7 @@ export async function findWalletOpenOrders(
     const accounts = await rpc.getProgramAccounts(programId, {
       commitment: "confirmed",
       filters: [
-        { dataSize: 73 }, // OpenOrders account size
+        { dataSize: 90 }, // 8 + OpenOrders::INIT_SPACE (see place_order.rs/buy_no.rs/sell_no.rs)
         { memcmp: { offset: 8, bytes: wallet.toBase58() } }, // owner field at offset 8
       ],
     });

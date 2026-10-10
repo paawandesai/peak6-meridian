@@ -82,7 +82,7 @@ describe("findWalletOpenOrders", () => {
       programId,
       expect.objectContaining({
         filters: [
-          { dataSize: 73 },
+          { dataSize: 90 }, // 8 + OpenOrders::INIT_SPACE = 8 + (32+32+8+8+1+1)
           { memcmp: { offset: 8, bytes: maker.toBase58() } },
         ],
       }),
@@ -143,11 +143,12 @@ describe("concurrency cap", () => {
     // Production call: no extraAddresses parameter
     await loadWalletEvents(rpc, maker, programId);
 
-    // Should have called gPA to find OpenOrders
+    // Should have called gPA to find OpenOrders with correct filters
     expect(rpc.getProgramAccounts).toHaveBeenCalledWith(
       programId,
       expect.objectContaining({
         filters: expect.arrayContaining([
+          { dataSize: 90 }, // 8 + OpenOrders::INIT_SPACE
           { memcmp: { offset: 8, bytes: maker.toBase58() } },
         ]),
       }),
