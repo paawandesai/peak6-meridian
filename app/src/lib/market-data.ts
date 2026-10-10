@@ -82,7 +82,10 @@ export async function pollPrices(
   }
 }
 
-/** One book poll for `markets`; a market that cannot be read is `unavailable`, not guessed. */
+/**
+ * One book poll for `markets`; a market that cannot be read is `unavailable`, not guessed.
+ * P0-4: fetchBooks chunks the RPC calls internally (≤99 keys each) to stay under the 100-key limit.
+ */
 export async function pollBooks(
   sources: Pick<MarketDataSources, "fetchBooks">,
   markets: readonly MarketRow[],
