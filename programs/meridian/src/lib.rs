@@ -10,11 +10,8 @@ pub mod errors;
 pub mod events;
 pub mod instructions;
 pub mod oracle;
-<<<<<<< HEAD
 pub mod pyth;
-=======
 pub mod redstone;
->>>>>>> 6adf1c1 (feat(program): RedStone parser and verifier structure (M2-15))
 pub mod state;
 
 pub use instructions::*;
