@@ -12,6 +12,10 @@ import { useReader } from "@/components/reader-context";
 import { useAsync } from "@/components/use-async";
 import { useNow } from "@/components/use-now";
 import { loadPublicConfig } from "@/lib/config";
+import { dedupe } from "@/lib/rpc";
+
+/** Status data cached for 30 s to limit RPC load on refresh. */
+const STATUS_CACHE_MS = 30_000;
 
 function Page() {
   const reader = useReader();
@@ -20,10 +24,11 @@ function Page() {
   const config = useMemo(() => loadPublicConfig(), []);
   const markets = useAsync(() => reader.listMarkets(), [reader]);
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
-  const data = useAsync(
-    async () => loadStatusData(connection, await reader.listMarkets(), config.programId),
+  const loadStatusCached = useMemo(
+    () => dedupe(() => loadStatusData(connection, reader.listMarkets(), config.programId), STATUS_CACHE_MS),
     [reader, connection, config],
   );
+  const data = useAsync(() => loadStatusCached(), [loadStatusCached]);
   return (
     <>
       <AppHeader
