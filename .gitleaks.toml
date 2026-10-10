@@ -61,3 +61,11 @@ regexes = [
   '''^0x51Ce04Be4b3E32572C4Ec9135221d0691Ba7d202$''', # morpheus
   '''^0xDD682daEC5A90dD295d14DA4b0bec9281017b5bE$''', # ciri
 ]
+
+[[allowlists]]
+description = """Fake fixture token in a since-deleted Pyth client test (commit 3fee179); not a real
+credential. Exempts only that exact literal in that one path."""
+condition = "AND"
+paths = ['''^services/automation/src/pyth/client\.test\.ts$''']
+regexTarget = "line"
+regexes = ['''sk-pyth-secret-12345''']
