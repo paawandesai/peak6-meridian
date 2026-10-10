@@ -130,30 +130,30 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
       return NextResponse.json(data);
     }
 
-    // Determine trading date (RPC happens here only on cache miss)
-    let tradingDate: number;
-    if (params.data.date) {
-      tradingDate = parseDateParam(params.data.date);
-    } else {
-      // Get active date (most recent trading date)
-      const allMarkets = await reader.listMarkets();
-      if (allMarkets.length === 0) {
-        const now = new Date();
-        const etDate = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
-        tradingDate = etDate.getFullYear() * 10000 + (etDate.getMonth() + 1) * 100 + etDate.getDate();
-      } else {
-        const dates = [...new Set(allMarkets.map((m) => m.tradingDate))].sort((a, b) => b - a);
-        tradingDate = dates[0] ?? 0;
-      }
-    }
-
-    // Fetch data
+    // Fetch data (determine date and load markets in one RPC call)
     const fetchPromise = (async (): Promise<StatusResponse> => {
       try {
         const USDC_BASE_PER_CONTRACT = 1_000_000n;
 
-        // Load all markets and filter to this trading date
+        // Load all markets (single RPC, reused for both date determination and filtering)
         const allMarkets = await reader.listMarkets();
+
+        // Determine trading date from param or active date
+        let tradingDate: number;
+        if (params.data.date) {
+          tradingDate = parseDateParam(params.data.date);
+        } else {
+          // Active date = most recent trading date
+          if (allMarkets.length === 0) {
+            const now = new Date();
+            const etDate = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+            tradingDate = etDate.getFullYear() * 10000 + (etDate.getMonth() + 1) * 100 + etDate.getDate();
+          } else {
+            const dates = [...new Set(allMarkets.map((m) => m.tradingDate))].sort((a, b) => b - a);
+            tradingDate = dates[0] ?? 0;
+          }
+        }
+
         const dateMarkets = allMarkets.filter((m) => m.tradingDate === tradingDate);
 
         if (dateMarkets.length === 0) {

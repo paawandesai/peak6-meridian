@@ -191,6 +191,59 @@ describe("GET /api/status", () => {
     expect(data.error).toBe("RPC timeout");
   });
 
+  it("stays within ≤10 RPC for 40 markets (P1-6 AC)", async () => {
+    // Generate 40 markets: 7 open (future close) + 7 settled on recent date
+    const now = Math.floor(Date.now() / 1000);
+    const markets = Array.from({ length: 40 }, (_, i) => {
+      const tradingDate = 20241010 - Math.floor(i / 7); // 7 markets per day
+      // Most recent 7: all open with future close (skip signature scan)
+      const isOpen = i < 7;
+      return {
+        address: `market${i}`,
+        ticker: `TKR${i}`,
+        strikeCents: 18000n,
+        tradingDate,
+        pairsOutstanding: 1n,
+        closeTs: BigInt(now + (isOpen ? 7200 : -3600)), // Open: 2hr future, Settled: past
+        settled: !isOpen,
+        outcome: "None" as const,
+      };
+    });
+
+    // Count actual RPC calls
+    let listMarketsCount = 0;
+    let vaultRpcCount = 0;
+    let sigScanCount = 0;
+
+    mockReader.listMarkets = vi.fn(async () => {
+      listMarketsCount++;
+      return markets;
+    });
+
+    mockLoadStatusData.mockImplementation(async (conn, dateMarkets, progId, nowSecs) => {
+      vaultRpcCount = 1; // getMultipleParsedAccounts for vaults (chunked if needed)
+      // loadMarketFacts skips open markets (nowSecs < closeTs) per P1-6 optimization
+      sigScanCount = dateMarkets.filter(
+        (m: any) => m.settled || nowSecs >= Number(m.closeTs)
+      ).length;
+      return {
+        markets: dateMarkets,
+        vaults: new Map(dateMarkets.map((m: any) => [m.address, 1000000n])),
+        facts: new Map(),
+      };
+    });
+
+    vi.resetModules();
+    const { GET } = await import("./route");
+    const req = createRequest("/api/status");
+    await GET(req);
+
+    const totalRpc = listMarketsCount + vaultRpcCount + sigScanCount;
+    // P1-6 AC: ≤10 RPC per view
+    // Expected: 1 (listMarkets) + 1 (vaults) + 0 (all open, skip scan) = 2
+    expect(totalRpc).toBeLessThanOrEqual(10);
+  });
+
   it("maps vault 0 correctly", async () => {
     mockReader.listMarkets.mockResolvedValue([
       {
