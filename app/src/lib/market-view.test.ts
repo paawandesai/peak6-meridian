@@ -173,7 +173,6 @@ describe("nextTransition (countdown to the next state change, D-050)", () => {
     nextTransition(m, status, now, 3_600n);
 
   it("counts down to each next boundary", () => {
-    expect(at("Open", close - 5_000)).toEqual({ label: "Closing soon in", secondsLeft: 4_100 });
     expect(at("Closed", close + 60)).toEqual({ label: "Settlement starts in", secondsLeft: 240 });
     expect(at("Settling", close + 400)).toEqual({
       label: "Settlement delayed in",
@@ -185,7 +184,8 @@ describe("nextTransition (countdown to the next state change, D-050)", () => {
     });
   });
 
-  it("has none for Closing soon (the badge counts down), a reached override, and Settled", () => {
+  it("has none for Open (badge shows close time), Closing soon (badge counts down), reached override, and Settled", () => {
+    expect(at("Open", close - 5_000)).toBeNull();
     expect(at("ClosingSoon", close - 100)).toBeNull();
     expect(at("SettlementDelayed", close + 3_600)).toBeNull();
     expect(at("Settled", close + 10)).toBeNull();

@@ -50,12 +50,12 @@ describe("FairEdge staleness (M3-03 AC2)", () => {
 });
 
 describe("FairEdge with no value", () => {
-  it("says loading, then unavailable, and never prints a number", () => {
+  it("says loading when loading, returns null when unavailable (probability shown in dedicated column)", () => {
     const a = render(<FairEdge {...base} status="loading" yesCents={62} fair={undefined} />);
     expect(screen.getByRole("status")).toHaveTextContent("Fair value loading…");
     a.unmount();
-    render(<FairEdge {...base} status="unavailable" yesCents={62} fair={undefined} />);
-    expect(screen.getByText("Fair value unavailable")).toBeInTheDocument();
+    const { container } = render(<FairEdge {...base} status="unavailable" yesCents={62} fair={undefined} />);
+    expect(container.textContent).toBe("");
     expect(screen.queryByText(/¢/)).toBeNull();
   });
 });

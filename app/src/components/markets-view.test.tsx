@@ -8,6 +8,10 @@ const NOW = 1_800_000_000;
 /** The ET trading date of `NOW` (2027-01-15 ET): UI-03 AC1 scopes the page to the active date. */
 const TODAY = 20270115;
 
+vi.mock("./price-history-chart/price-history-chart", () => ({
+  PriceHistoryChart: () => null,
+}));
+
 beforeAll(() => {
   // TickerInsight renders DistributionChart (Recharts); jsdom needs ResizeObserver.
   vi.stubGlobal(
@@ -85,13 +89,15 @@ describe("MarketsView", () => {
     expect(tables.length).toBeGreaterThan(0);
     const marketTable = tables.at(0);
     if (!marketTable) throw new Error("Expected market table");
+    // The open set is the main table; closed and settled markets sit in a collapsed "Closed" table.
     const rows = within(marketTable).getAllByRole("row").slice(1);
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveTextContent("$220");
     expect(rows[0]).toHaveTextContent("Open");
     expect(rows[0]).toHaveTextContent("3");
-    expect(rows[1]).toHaveTextContent("Closed");
-    expect(rows[2]).toHaveTextContent("Settled");
+    const closedRows = tables.flatMap((t) => within(t).queryAllByRole("row").slice(1)).slice(1);
+    expect(closedRows[0]).toHaveTextContent("Closed");
+    expect(closedRows[1]).toHaveTextContent("Settled");
 
     const nvda = screen.getByRole("region", { name: "NVDA" });
     expect(within(nvda).getByText("1,200")).toBeInTheDocument();
