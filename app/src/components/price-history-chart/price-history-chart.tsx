@@ -151,26 +151,19 @@ export function PriceHistoryChart({ ticker, nowSecs, strikes, fairValueCents }: 
     };
   }, [ticker, nowSecs, strikes, fairValueCents]);
 
-  if (status === "loading") {
-    return <p className="text-mer-sm text-mer-ink-muted">Loading price history…</p>;
-  }
-
-  if (status === "empty") {
-    return (
-      <p className="text-mer-sm text-mer-ink-muted">No price history available for {ticker}.</p>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <p className="text-mer-sm text-mer-ink-muted">Could not load price history for {ticker}.</p>
-    );
-  }
-
   return (
     <div>
       <h3 className="mb-2 text-mer-sm font-semibold">{ticker} Price History (7 days)</h3>
-      <div ref={containerRef} className="w-full" />
+      {status === "loading" && (
+        <p className="text-mer-sm text-mer-ink-muted">Loading price history…</p>
+      )}
+      {status === "empty" && (
+        <p className="text-mer-sm text-mer-ink-muted">No price history available for {ticker}.</p>
+      )}
+      {status === "error" && (
+        <p className="text-mer-sm text-mer-ink-muted">Could not load price history for {ticker}.</p>
+      )}
+      <div ref={containerRef} className="w-full" style={{ display: status === "ready" ? "block" : "none" }} />
     </div>
   );
 }
