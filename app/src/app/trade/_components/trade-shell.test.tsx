@@ -17,6 +17,7 @@ vi.mock("@/components/providers", () => ({
   Providers: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@/components/wallet-button", () => ({ WalletButton: () => null }));
+vi.mock("@/components/fair-value/ticker-insight", () => ({ TickerInsight: () => null }));
 vi.mock("@/components/faucet-button", () => ({ FaucetButton: () => null }));
 vi.mock("@/lib/market-data", () => ({
   useMarketData: () => ({ status: "ready", prices: {}, pricesUnavailable: [], books: {} }),

@@ -1,5 +1,3 @@
-"use client";
-
 import { AppShell } from "@/components/app-shell";
 import { MarketsView } from "@/components/markets-view";
 

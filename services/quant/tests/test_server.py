@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+
 from meridian_quant.prices import PriceError, Spot
 from meridian_quant.server import STALE_AFTER_SECS, MarketInfo, Service, handle_request, make_server
 
@@ -109,6 +110,32 @@ def test_routing() -> None:
     svc = service()
     assert handle_request(svc, "GET", "/other", AUTH)[0] == 404
     assert handle_request(svc, "POST", "/fair-values", AUTH)[0] == 405
+
+
+def test_health_endpoint_is_unauthenticated() -> None:
+    """GET /health returns basic health without requiring auth (M3-02, M3-04/M3-09)."""
+    svc = service()
+    # /health does not require authorization
+    status, body = handle_request(svc, "GET", "/health", None)
+    assert status == 200
+    data = json.loads(body)
+    assert data == {"service": "quant", "status": "ok"}
+    # POST not allowed
+    assert handle_request(svc, "POST", "/health", None)[0] == 405
+
+
+def test_health_includes_book_coverage_when_mm_loop_present() -> None:
+    """GET /health includes book_coverage when MM loop is injected (M3-02 AC4)."""
+
+    # Mock MM loop with book_coverage property
+    class FakeMMLoop:
+        book_coverage = 0.75
+
+    svc = Service(sources=FakeSources(), token="test-token", mm_loop=FakeMMLoop())
+    status, body = handle_request(svc, "GET", "/health", None)
+    assert status == 200
+    data = json.loads(body)
+    assert data == {"service": "quant", "status": "ok", "book_coverage": 0.75}
 
 
 def test_empty_token_is_refused() -> None:

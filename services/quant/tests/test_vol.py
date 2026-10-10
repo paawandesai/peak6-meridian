@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+
 from meridian_quant.vol import SIGMA_FLOOR, VolError, realized_vol
 
 
