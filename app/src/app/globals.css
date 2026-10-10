@@ -21,6 +21,7 @@
   --mer-loss: #b42318; /* −P&L, fail */
   --mer-warn: #8a5a00; /* closing soon, stale, override pending */
   --mer-focus: #1e5bb8; /* 2px focus ring + 2px offset */
+  --mer-pyth: #6c3fb5; /* Pyth badge (violet, AA 5.0:1 on white) */
   /* space (4px base) */
   --mer-space-1: 4px;
   --mer-space-2: 8px;
@@ -55,6 +56,7 @@
     --mer-loss: #f28b82;
     --mer-warn: #e8c26a;
     --mer-focus: #7faef5;
+    --mer-pyth: #a68dd9; /* Pyth badge in dark mode (lighter violet) */
   }
 }
 
@@ -74,6 +76,7 @@
   --color-mer-loss: var(--mer-loss);
   --color-mer-warn: var(--mer-warn);
   --color-mer-focus: var(--mer-focus);
+  --color-mer-pyth: var(--mer-pyth);
   --spacing-mer-1: var(--mer-space-1);
   --spacing-mer-2: var(--mer-space-2);
   --spacing-mer-3: var(--mer-space-3);

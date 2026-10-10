@@ -21,7 +21,7 @@ use meridian::errors::MeridianError;
 use solana_sdk::instruction::Instruction;
 
 /// Every instruction of the local build, in architecture.md order.
-const EXPECTED_INSTRUCTIONS: [&str; 17] = [
+const EXPECTED_INSTRUCTIONS: [&str; 19] = [
     "initialize_config",
     "update_config",
     "create_strike_market",
@@ -39,6 +39,8 @@ const EXPECTED_INSTRUCTIONS: [&str; 17] = [
     "unpause",
     "local_oracle_set",
     "version",
+    "set_oracle_config",
+    "post_redstone_price",
 ];
 
 /// Instruction names from the IDL written by `anchor build`.
@@ -97,6 +99,8 @@ fn every_stub_is_covered_by_this_test() {
         "add_strike",
         "mint_pair",
         "redeem",
+        "set_oracle_config",
+        "post_redstone_price",
         "pause",
         "unpause",
         "place_order",

@@ -31,6 +31,8 @@ export type MarketRow = {
   /** Settle price with 18 fractional digits (`0n` until settled). */
   readonly settlePriceScaled: bigint;
   readonly pairsOutstanding: bigint;
+  /** Unix timestamp of settlement; `0n` until settled. */
+  readonly settledAt: bigint;
 };
 
 export type TickerGroup = { readonly ticker: string; readonly markets: readonly MarketRow[] };

@@ -1,11 +1,11 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "corepack enable && pnpm install --frozen-lockfile --filter automation..."
+    "builder": "RAILPACK",
+    "buildCommand": "corepack pnpm install --frozen-lockfile --filter automation..."
   },
   "deploy": {
-    "startCommand": "pnpm --filter automation start",
+    "startCommand": "cd services/automation && ./node_modules/.bin/tsx src/main.ts",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }

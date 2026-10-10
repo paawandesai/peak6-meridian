@@ -18,7 +18,7 @@
 use anchor_lang::prelude::*;
 
 use crate::errors::MeridianError;
-use crate::state::{BPS_DENOMINATOR, STRIKE_CENTS_TO_SCALED};
+use crate::state::{RedstonePrice, BPS_DENOMINATOR, STRIKE_CENTS_TO_SCALED, SYMBOL_LEN};
 
 /// Switchboard On-Demand program on mainnet-beta.
 pub const SWITCHBOARD_MAINNET_PID: Pubkey = pubkey!("SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv");
@@ -143,6 +143,69 @@ pub fn read_close(
         close_ts,
         max_staleness_slots,
     )
+}
+
+/// Reads and validates a RedStone price (M2-15, D-054 § Settlement rules).
+///
+/// Checks:
+/// - Account is this program's PDA for the ticker
+/// - Package timestamp ≥ close_ts and ≤ close_ts + max_package_delay_secs
+/// - Posted ≤ max_staleness_slots before current slot
+///
+/// Returns price as 18-digit oracle value (RedStone stores 8 decimals, scaled to 18).
+pub fn read_redstone_price(
+    redstone_price: &Account<RedstonePrice>,
+    ticker: &[u8; SYMBOL_LEN],
+    clock: &Clock,
+    close_ts: i64,
+    max_package_delay_secs: i64,
+    max_staleness_slots: u64,
+) -> Result<CloseReading> {
+    // Verify PDA for this ticker
+    require!(
+        redstone_price.symbol == *ticker,
+        MeridianError::RedStoneWrongPricePda
+    );
+
+    // Package timestamp must be ≥ close_ts
+    let close_ts_ms = close_ts
+        .checked_mul(1_000)
+        .ok_or(MeridianError::MathOverflow)?;
+    require!(
+        redstone_price.package_timestamp_ms >= close_ts_ms,
+        MeridianError::OracleBeforeClose
+    );
+
+    // Package timestamp must be ≤ close_ts + max_package_delay_secs
+    let delay_ms = max_package_delay_secs
+        .checked_mul(1_000)
+        .ok_or(MeridianError::MathOverflow)?;
+    let max_timestamp_ms = close_ts_ms
+        .checked_add(delay_ms)
+        .ok_or(MeridianError::MathOverflow)?;
+    require!(
+        redstone_price.package_timestamp_ms <= max_timestamp_ms,
+        MeridianError::RedStonePackageTooLate
+    );
+
+    // Posted slot must be ≤ max_staleness_slots before current slot
+    let age = clock
+        .slot
+        .checked_sub(redstone_price.posted_slot)
+        .ok_or(MeridianError::OracleInvalidValue)?;
+    require!(age <= max_staleness_slots, MeridianError::OracleStale);
+
+    // Convert RedStone value (8 decimals, u128) to oracle scale (18 decimals, i128)
+    let value_i128 =
+        i128::try_from(redstone_price.value).map_err(|_| MeridianError::MathOverflow)?;
+    let value_scaled = value_i128
+        .checked_mul(10i128.pow(10))
+        .ok_or(MeridianError::MathOverflow)?;
+
+    Ok(CloseReading {
+        value_scaled,
+        slot: redstone_price.posted_slot,
+    })
 }
 
 #[cfg(feature = "local-oracle")]

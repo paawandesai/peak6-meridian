@@ -87,6 +87,30 @@ pub enum MeridianError {
     #[msg("Override is not allowed before close_ts + override_delay_secs")]
     OverrideTooEarly,
 
+    // ---- RedStone oracle (M2-15, D-054; AB-03, AB-04) -----------------------------------------
+    #[msg("RedStone payload is malformed or oversized")]
+    RedStoneMalformedPayload,
+    #[msg("RedStone signature verification failed")]
+    RedStoneInvalidSignature,
+    #[msg("RedStone signer threshold not met")]
+    RedStoneInsufficientSigners,
+    #[msg("RedStone package timestamp is after close_ts + max_package_delay_secs")]
+    RedStonePackageTooLate,
+    #[msg("RedStone package timestamp is older than the stored value")]
+    RedStonePackageOlderThanStored,
+    #[msg("RedStone price account is not the expected PDA for this ticker")]
+    RedStoneWrongPricePda,
+    #[msg("RedStone feed_id does not match the canonical feed_id for this ticker")]
+    RedStoneFeedIdMismatch,
+
+    // ---- Oracle configuration (M2-15) ---------------------------------------------------------
+    #[msg("Too many signers: maximum is 8")]
+    OracleTooManySigners,
+    #[msg("Signer threshold must be at least 1")]
+    OracleThresholdTooLow,
+    #[msg("Signer threshold cannot exceed the signer count")]
+    OracleThresholdTooHigh,
+
     // ---- redeem (domain.md § Glossary: pair redeem, winner redeem; AB-02) ---------------------
     #[msg("Pair redeem needs equal YES and NO quantities before settlement")]
     PairQuantityMismatch,

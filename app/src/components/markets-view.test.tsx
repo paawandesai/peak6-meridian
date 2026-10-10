@@ -1,10 +1,24 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { MarketsView } from "./markets-view";
 import { market, reader, withReader } from "@/test-utils";
 
 const NOW = 1_800_000_000;
+/** The ET trading date of `NOW` (2027-01-15 ET): UI-03 AC1 scopes the page to the active date. */
+const TODAY = 20270115;
+
+beforeAll(() => {
+  // TickerInsight renders DistributionChart (Recharts); jsdom needs ResizeObserver.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    },
+  );
+});
 
 describe("MarketsView", () => {
   it("shows a loading state while markets are fetched", () => {
@@ -14,7 +28,7 @@ describe("MarketsView", () => {
 
   it("shows an empty state", async () => {
     render(withReader(reader(), <MarketsView />));
-    expect(await screen.findByText(/No markets yet/)).toBeInTheDocument();
+    expect(await screen.findByText(/No markets today/)).toBeInTheDocument();
   });
 
   it("shows the error message when the fetch fails", async () => {
@@ -29,10 +43,34 @@ describe("MarketsView", () => {
 
   it("lists markets grouped by ticker with strike, status and pairs outstanding", async () => {
     const markets = [
-      market({ address: "a", ticker: "NVDA", strikeCents: 15_000n, pairsOutstanding: 1_200n }),
-      market({ address: "b", ticker: "AAPL", strikeCents: 22_000n, pairsOutstanding: 3n }),
-      market({ address: "c", ticker: "AAPL", strikeCents: 23_000n, closeTs: BigInt(NOW - 1) }),
-      market({ address: "d", ticker: "AAPL", strikeCents: 24_000n, settled: true }),
+      market({
+        address: "a",
+        ticker: "NVDA",
+        tradingDate: TODAY,
+        strikeCents: 15_000n,
+        pairsOutstanding: 1_200n,
+      }),
+      market({
+        address: "b",
+        ticker: "AAPL",
+        tradingDate: TODAY,
+        strikeCents: 22_000n,
+        pairsOutstanding: 3n,
+      }),
+      market({
+        address: "c",
+        ticker: "AAPL",
+        tradingDate: TODAY,
+        strikeCents: 23_000n,
+        closeTs: BigInt(NOW - 1),
+      }),
+      market({
+        address: "d",
+        ticker: "AAPL",
+        tradingDate: TODAY,
+        strikeCents: 24_000n,
+        settled: true,
+      }),
     ];
     render(
       withReader(
@@ -42,7 +80,12 @@ describe("MarketsView", () => {
     );
 
     const aapl = await screen.findByRole("region", { name: "AAPL" });
-    const rows = within(aapl).getAllByRole("row").slice(1);
+    // Query the market table specifically (has "Strike" header); TickerInsight adds a distribution table.
+    const tables = within(aapl).getAllByRole("table");
+    expect(tables.length).toBeGreaterThan(0);
+    const marketTable = tables.at(0);
+    if (!marketTable) throw new Error("Expected market table");
+    const rows = within(marketTable).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(3);
     expect(rows[0]).toHaveTextContent("$220");
     expect(rows[0]).toHaveTextContent("Open");
@@ -52,9 +95,29 @@ describe("MarketsView", () => {
 
     const nvda = screen.getByRole("region", { name: "NVDA" });
     expect(within(nvda).getByText("1,200")).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
-      "AAPL",
-      "NVDA",
-    ]);
+    // Ticker headings (TickerInsight is on Trade page only, not Markets page).
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(headings).toContain("AAPL");
+    expect(headings).toContain("NVDA");
+  });
+
+  it("links each strike to its Trade page (UI-04 AC8)", async () => {
+    const markets = [
+      market({ address: "addr1", ticker: "NVDA", strikeCents: 15_000n }),
+      market({ address: "addr2", ticker: "AAPL", strikeCents: 22_000n }),
+      market({ address: "addr3", ticker: "AAPL", strikeCents: 23_000n }),
+    ];
+    render(
+      withReader(
+        reader({ listMarkets: () => Promise.resolve(markets) }),
+        <MarketsView nowSecs={NOW} />,
+      ),
+    );
+
+    const strikeLinks = await screen.findAllByRole("link");
+    expect(strikeLinks).toHaveLength(3);
+    expect(strikeLinks[0]).toHaveAttribute("href", "/trade/addr2");
+    expect(strikeLinks[1]).toHaveAttribute("href", "/trade/addr3");
+    expect(strikeLinks[2]).toHaveAttribute("href", "/trade/addr1");
   });
 });

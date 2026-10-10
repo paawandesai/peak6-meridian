@@ -24,6 +24,10 @@ const feedSchema = z.strictObject({
   placeholder: z.boolean(),
 });
 
+const ethereumAddressHex = z
+  .string()
+  .regex(/^0x[0-9a-fA-F]{40}$/, "must be 0x-prefixed 40-char hex Ethereum address");
+
 /**
  * The deployment record: public keys and public feed data only. Everything but the program ID
  * is optional so a write-ahead record (program ID + mint, written before the mint is created)
@@ -40,6 +44,10 @@ export const deploymentRecordSchema = z.strictObject({
   faucet: base58.optional(),
   upgradeAuthority: base58.optional(),
   feeds: z.record(z.string(), z.tuple([feedSchema, feedSchema])).optional(),
+  oracleConfigPda: base58.optional(),
+  oracleSigners: z.array(ethereumAddressHex).optional(),
+  oracleSignerThreshold: z.number().int().positive().optional(),
+  oracleMaxPackageDelaySecs: z.number().int().positive().optional(),
 });
 
 export type DeploymentRecord = z.infer<typeof deploymentRecordSchema>;

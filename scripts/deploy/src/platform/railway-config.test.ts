@@ -18,6 +18,8 @@ describe("services/automation/railway.json", () => {
   });
 
   it("starts the automation service", () => {
-    expect(config.deploy.startCommand).toBe("pnpm --filter automation start");
+    expect(config.deploy.startCommand).toBe(
+      "cd services/automation && ./node_modules/.bin/tsx src/main.ts",
+    );
   });
 });
