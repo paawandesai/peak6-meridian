@@ -12,6 +12,14 @@ const ENV = {
 };
 
 describe("parseEnv", () => {
+  it("prefers MERIDIAN_DEVNET_RPC_URL over SOLANA_RPC_URL when set", () => {
+    const url = "https://devnet.example/rpc";
+    expect(parseEnv({ ...ENV, MERIDIAN_DEVNET_RPC_URL: url }).SOLANA_RPC_URL).toBe(url);
+    expect(parseEnv({ ...ENV, MERIDIAN_DEVNET_RPC_URL: " " }).SOLANA_RPC_URL).toBe(
+      ENV.SOLANA_RPC_URL,
+    );
+  });
+
   it("fills defaults and treats empty optionals as unset", () => {
     expect(
       parseEnv({ ...ENV, ALERT_WEBHOOK_URL: "", MERIDIAN_PROGRAM_ID: "", PORT: "" }),

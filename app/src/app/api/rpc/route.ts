@@ -174,10 +174,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Rate limiting check
   if (!checkRateLimit(ip)) {
     console.warn(`[rpc-proxy] Rate limit exceeded for IP: ${ip}`);
-    return NextResponse.json(
-      { error: "Rate limit exceeded. Try again later." },
-      { status: 429 }
-    );
+    return NextResponse.json({ error: "Rate limit exceeded. Try again later." }, { status: 429 });
   }
 
   let body: { jsonrpc?: string; method?: string; params?: unknown[]; id?: unknown };
@@ -186,7 +183,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch {
     return NextResponse.json(
       { jsonrpc: "2.0", error: { code: -32700, message: "Parse error" }, id: null },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -196,7 +193,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!method || typeof method !== "string") {
     return NextResponse.json(
       { jsonrpc: "2.0", error: { code: -32600, message: "Invalid Request" }, id: id ?? null },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -205,7 +202,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.warn(`[rpc-proxy] Disallowed method: ${method} from IP: ${ip}`);
     return NextResponse.json(
       { jsonrpc: "2.0", error: { code: -32601, message: "Method not allowed" }, id },
-      { status: 403 }
+      { status: 403 },
     );
   }
 
@@ -215,7 +212,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.warn(`[rpc-proxy] ${keysError} in ${method} from IP: ${ip}`);
     return NextResponse.json(
       { jsonrpc: "2.0", error: { code: -32602, message: keysError }, id },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -240,7 +237,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Get RPC URL from environment
-  const rpcUrl = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+  const rpcUrl =
+    process.env.MERIDIAN_DEVNET_RPC_URL?.trim() ||
+    process.env.SOLANA_RPC_URL ||
+    "https://api.devnet.solana.com";
   const fallbackUrl = process.env.SOLANA_RPC_URL_FALLBACK;
 
   const makeRequest = async (url: string): Promise<unknown> => {
@@ -253,11 +253,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!response.ok) {
       // Log with redacted URL
       console.error(
-        `[rpc-proxy] RPC request failed: ${response.status} ${response.statusText} to ${redactRpcUrl(url)}`
+        `[rpc-proxy] RPC request failed: ${response.status} ${response.statusText} to ${redactRpcUrl(url)}`,
       );
 
       // If 429 or 5xx and fallback available, throw to try fallback
-      if ((response.status === 429 || response.status >= 500) && fallbackUrl && url !== fallbackUrl) {
+      if (
+        (response.status === 429 || response.status >= 500) &&
+        fallbackUrl &&
+        url !== fallbackUrl
+      ) {
         throw new Error(`Primary RPC failed: ${response.status}`);
       }
 
@@ -304,7 +308,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         return NextResponse.json({ jsonrpc: "2.0", result, id });
       } catch (fallbackError) {
         console.error(
-          `[rpc-proxy] Fallback RPC also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+          `[rpc-proxy] Fallback RPC also failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
         );
       }
     }
@@ -317,7 +321,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const errorMessage = primaryError instanceof Error ? primaryError.message : "Unknown error";
     return NextResponse.json(
       { jsonrpc: "2.0", error: { code: -32000, message: errorMessage }, id },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
