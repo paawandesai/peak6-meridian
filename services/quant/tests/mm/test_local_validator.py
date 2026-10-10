@@ -29,7 +29,16 @@ from meridian_quant.mm.loop import MarketMakerLoop
 from meridian_quant.mm.types import FairValue
 
 
+def _solana_available() -> bool:
+    """Check if solana and solana-test-validator are available."""
+    return shutil.which("solana") is not None and shutil.which("solana-test-validator") is not None
+
+
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not _solana_available(),
+    reason="solana CLI not available (test:js-py runs without Solana toolchain)",
+)
 async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
     """AC1: One _run_once leaves two-sided MM quotes on every open strike.
 
