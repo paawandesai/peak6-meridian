@@ -54,6 +54,7 @@ export class DemoWallet implements Wallet {
   readonly #listeners = new Set<(props: { accounts?: WalletAccount[] }) => void>();
   #accounts: WalletAccount[] = [];
   #connection: Connection | null = null;
+  #signatureCount = 0;
 
   constructor(keypair: Keypair) {
     this.#keypair = keypair;
@@ -111,6 +112,7 @@ export class DemoWallet implements Wallet {
     },
     "solana:signAndSendTransaction": {
       signAndSendTransaction: async (...inputs) => {
+        this.#signatureCount += inputs.length;
         const connection = this.#getConnection();
         const results: { signature: Uint8Array }[] = [];
         for (const { transaction } of inputs) {
@@ -169,6 +171,11 @@ export class DemoWallet implements Wallet {
     }
     return this.#connection;
   }
+
+  /** For e2e testing: count of signature requests since wallet creation. Reset with resetDemoWallet(). */
+  get signatureCount(): number {
+    return this.#signatureCount;
+  }
 }
 
 export function createOrLoadDemoWallet(): Wallet {
@@ -190,12 +197,16 @@ export function registerDemoWallet(): void {
   const cluster = process.env.NEXT_PUBLIC_CLUSTER;
   if (cluster !== "devnet") return;
 
-  const wallet = createOrLoadDemoWallet();
+  const wallet = createOrLoadDemoWallet() as DemoWallet;
   const w = window as unknown as {
     dispatchEvent: (e: Event) => void;
     addEventListener: (type: string, listener: (e: Event) => void) => void;
+    __demoWallet?: DemoWallet;
   };
   const callback = (api: { register: (wallet: Wallet) => void }) => api.register(wallet);
+
+  // Expose for e2e testing (signature count verification)
+  w.__demoWallet = wallet;
 
   // Listen for app-ready in case the app loads after registration
   w.addEventListener("wallet-standard:app-ready", (event) => {

@@ -36,11 +36,13 @@ test.describe("Demo wallet (M4-07 AC9)", () => {
     // Format: "You pay $X.XX for N contracts. You win $Y.YY (profit $Z.ZZ) if TICKER closes above/below strike today. Max loss $X.XX."
     await expect(page.getByText(/You pay.*for.*contracts.*You win.*profit/i)).toBeVisible();
 
-    // Click sign button - demo wallet auto-signs and sends (AC9: one signature request)
+    // AC9: Click sign button - demo wallet auto-signs and sends exactly one signature request
     await signButton(page).click();
 
-    // Assert transaction confirmed (AC9: this confirms exactly one transaction was signed and sent)
+    // AC9: Assert exactly one signature request was made and transaction confirmed
     await expect(confirmedStatus(page)).toBeVisible({ timeout: 10000 });
+    const sigCount = await page.evaluate(() => (window as any).__demoWallet?.signatureCount ?? 0);
+    expect(sigCount, "AC9: exactly one auto-signed transaction").toBe(1);
   });
 
   test("demo wallet not offered on non-devnet", async ({ page }) => {
