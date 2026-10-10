@@ -45,12 +45,15 @@ cd app
 pnpm build
 NEXT_PUBLIC_CLUSTER=localnet NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 pnpm start
 
-# In a third terminal: run Lighthouse with the market URL
-cd tests/e2e
-LIGHTHOUSE_URL=http://localhost:3000/trade/<market-address> pnpm run lighthouse
+# In a third terminal: run one-off Lighthouse accessibility audit
+npx lighthouse http://localhost:3000/trade/<market-address> \
+  --only-categories=accessibility \
+  --form-factor=mobile \
+  --output=html \
+  --output-path=./lighthouse-report.html
 ```
 
-This generates a Lighthouse report in `tests/e2e/playwright-report/lighthouse/` and validates accessibility ≥ 90.
+This generates a Lighthouse HTML report and validates accessibility ≥ 90. Quote the accessibility score in the MR or issue comment.
 
 ## CI Integration
 
