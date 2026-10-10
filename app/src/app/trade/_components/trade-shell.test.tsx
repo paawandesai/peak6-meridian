@@ -117,7 +117,9 @@ describe("TradeShell", () => {
     render(
       withReader(
         reader({ getConfig: () => Promise.reject(new Error("no config")) }),
-        <TradeShell address={ROW.address} />,
+        <TestMarketProvider>
+          <TradeShell address={ROW.address} />
+        </TestMarketProvider>,
       ),
     );
     await waitFor(() =>
