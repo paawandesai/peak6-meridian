@@ -3,9 +3,13 @@ import * as fc from "fast-check";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ageSecs,
+  asOfSecs,
   edgeCents,
   edgeText,
+  edgeTone,
   edgeWord,
+  formatAge,
   fairValueSchema,
   fairValuesSchema,
   fetchFairValues,
@@ -47,6 +51,53 @@ describe("edge (M3-03 AC1)", () => {
         },
       ),
     );
+  });
+});
+
+describe("edgeTone (P0-FV: colour by side, the word still written)", () => {
+  it("is the YES colour for cheap, NO for rich, neutral at fair", () => {
+    expect(edgeTone(-3)).toBe("yes");
+    expect(edgeTone(4)).toBe("no");
+    expect(edgeTone(0)).toBe("neutral");
+  });
+
+  it("agrees with the written word for every market and fair price (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 100 }),
+        fc.integer({ min: 1, max: 99 }),
+        (market, fairC) => {
+          const edge = edgeCents(market, fairC);
+          const expected = { cheap: "yes", rich: "no", fair: "neutral" }[edgeWord(edge)];
+          expect(edgeTone(edge)).toBe(expected);
+          // Antisymmetric: swapping market and fair flips the sign and the side.
+          expect(edgeCents(fairC, market) + edge).toBe(0);
+        },
+      ),
+    );
+  });
+});
+
+describe("fair value age (P0-FV stale tag)", () => {
+  it("reads as_of in unix seconds", () => {
+    expect(asOfSecs(fair({ as_of: new Date(NOW * 1000).toISOString() }))).toBe(NOW);
+    expect(asOfSecs(fair({ as_of: "2026-10-08T14:00:00.900-04:00" }))).toBe(
+      Math.floor(Date.parse("2026-10-08T18:00:00Z") / 1000),
+    );
+  });
+
+  it("is never negative and rounds down", () => {
+    expect(ageSecs(NOW, NOW - 5)).toBe(0);
+    expect(ageSecs(NOW - 42, NOW + 0.9)).toBe(42);
+  });
+
+  it("formats seconds, minutes and hours in whole units, rounded down", () => {
+    expect(formatAge(0)).toBe("0 s");
+    expect(formatAge(59)).toBe("59 s");
+    expect(formatAge(60)).toBe("1 min");
+    expect(formatAge(3_599)).toBe("59 min");
+    expect(formatAge(3_600)).toBe("1 h");
+    expect(formatAge(7_300)).toBe("2 h");
   });
 });
 
