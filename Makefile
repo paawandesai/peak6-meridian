@@ -14,7 +14,7 @@ PIP_AUDIT_VERSION := 2.10.1
 
 .PHONY: help toolchain install install-rust install-js install-py build-local build-devnet \
 	client lint lint-rust lint-js-py check-links typecheck test test-rust-unit test-js-py-unit test-security \
-	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet test-deploy-devnet e2e e2e-ui e2e-ui-browser dev demo-ops
+	test-rust-security test-js-py-security test-rust-build coverage audit eval-live deploy-devnet migrate-config test-deploy-devnet e2e e2e-ui e2e-ui-browser dev demo-ops
 
 # CI memory caps (set by .gitlab-ci.yml; empty locally): e.g. VITEST_FLAGS=--maxWorkers=2,
 # PNPM_R_FLAGS=--workspace-concurrency=1.
@@ -134,6 +134,13 @@ eval-live:
 ## Extra flags: make deploy-devnet DEPLOY_ARGS="--feeds deployments/feeds.devnet.json".
 deploy-devnet:
 	pnpm --filter deploy run deploy-devnet $(DEPLOY_ARGS)
+
+## M3-10b: grow the v1 Config account to the current layout with the admin-only migrate_config,
+## then verify every old byte is unchanged. Devnet or localnet only (genesis-hash checked).
+## Needs SOLANA_RPC_URL and ADMIN_KEYPAIR_PATH; DRY_RUN=1 simulates and sends nothing. Optional
+## PYTH_LAZER_SIGNER / PYTH_FEED_IDS / PYTH_MAX_AGE_SECS pin the Pyth fields in the same call.
+migrate-config:
+	pnpm --filter deploy run migrate-config
 
 ## End-to-end smoke on a local validator.
 ## Playwright browser install (CI e2e:ui job). Downloads Chromium for @playwright/test.

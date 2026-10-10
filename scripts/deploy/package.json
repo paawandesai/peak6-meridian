@@ -10,7 +10,8 @@
     "coverage": "vitest run --coverage",
     "test:deploy": "vitest run --config vitest.deploy.config.ts",
     "deploy-devnet": "tsx --env-file-if-exists=../../.env src/deploy-devnet.ts",
-    "deploy-platform": "tsx --env-file-if-exists=../../.env src/deploy-platform.ts"
+    "deploy-platform": "tsx --env-file-if-exists=../../.env src/deploy-platform.ts",
+    "migrate-config": "tsx --env-file-if-exists=../../.env ../migrate-config.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "0.31.1",
