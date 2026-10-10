@@ -80,7 +80,8 @@ fn post_redstone_price_stays_under_cu_limit() {
         .unwrap();
 
     let ticker = symbol("NVDA");
-    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
+    let timestamp_ms = BASE_CLOSE_TS * 1000 + 1000; // In-window (1s after close)
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, timestamp_ms);
     for signer in signers_test {
         builder = builder.add_signer(signer);
     }
@@ -272,7 +273,8 @@ fn redstone_payload_fits_in_transaction() {
 
     // Generate 5-signer payload
     let signers_test: Vec<TestSigner> = (0..5).map(|_| TestSigner::generate()).collect();
-    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, 1700000000000);
+    let timestamp_ms = BASE_CLOSE_TS * 1000 + 1000; // In-window (1s after close)
+    let mut builder = RedstonePayloadBuilder::new("NVDA", 2000_0000_0000, timestamp_ms);
     for signer in signers_test {
         builder = builder.add_signer(signer);
     }
