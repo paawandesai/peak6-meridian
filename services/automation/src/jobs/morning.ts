@@ -49,6 +49,8 @@ export interface MorningDeps {
   readonly demoCloseInSecs: number;
   /** Solana cluster ("localnet", "devnet", or RPC URL). */
   readonly cluster: string;
+  /** Told each creation signature as it lands (the open-time index, P1-4); must not throw. */
+  readonly onCreated?: (signature: string) => void;
 }
 
 export interface MorningResult {
@@ -242,6 +244,7 @@ async function processTicker(
         strikeCents: planned.key.strikeCents.toString(),
         signature,
       });
+      deps.onCreated?.(signature);
     });
     return { ok: true, created: report.created.length, existed: report.skipped.length };
   } catch (error) {

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadAutomationKey } from "./config";
 import { fetchPrevClose } from "./prevCloses";
 import { type CronLike } from "./scheduler";
+import type { OpenTimeIndex } from "./openTimes";
 import { startService, type RunningService } from "./service";
 import { fakeSourcesHttp } from "./testing/fakeHttp";
 import {
@@ -35,6 +36,7 @@ async function start(options: {
   settlementCrashes?: boolean;
   /** Defaults to 07:00 ET on a trading day: before the 08:00 trigger, so no catch-up runs. */
   clockStart?: Date;
+  openTimes?: OpenTimeIndex;
 }) {
   const cronFake = fakeCron();
   const alerter = new RecordingAlerter();
@@ -85,6 +87,7 @@ async function start(options: {
     cron: cronFake.cron,
     alerter,
     log: logger.log,
+    ...(options.openTimes === undefined ? {} : { openTimes: options.openTimes }),
   });
   running.push(service);
   return { service, alerter, chain, logger, builtWith, clock, ...cronFake };
@@ -432,5 +435,77 @@ describe("degraded mode: automation key missing or invalid (AC5b)", () => {
         problem: "AUTOMATION_KEYPAIR is not set",
       });
     }
+  });
+});
+
+describe("GET /markets: the open-time index (P1-4)", () => {
+  function fakeIndex() {
+    const noted: string[] = [];
+    let backfills = 0;
+    let stops = 0;
+    const index: OpenTimeIndex = {
+      refresh: () => Promise.resolve(),
+      refreshIfStale: () => Promise.resolve(),
+      backfill: () => {
+        backfills += 1;
+        return Promise.resolve();
+      },
+      stop: () => {
+        stops += 1;
+      },
+      noteCreated: (signature) => void noted.push(signature),
+      snapshot: () => ({
+        ready: true,
+        asOf: "2026-10-06T12:00:00.000Z",
+        markets: [{ market: "M1", openedAt: 1_791_288_000, signature: "c1" }],
+      }),
+    };
+    return { index, noted, backfills: () => backfills, stops: () => stops };
+  }
+
+  async function markets(service: RunningService, token: string | null = TOKEN) {
+    return fetch(`http://127.0.0.1:${String(service.port)}/markets`, {
+      headers: token === null ? {} : { authorization: `Bearer ${token}` },
+    });
+  }
+
+  it("serves the index behind the token and backfills it at startup", async () => {
+    const key = Keypair.generate();
+    const fake = fakeIndex();
+    const t = await start({ loaded: key, configured: key, openTimes: fake.index });
+    expect(fake.backfills()).toBe(1);
+    expect((await markets(t.service, null)).status).toBe(401);
+    const response = await markets(t.service);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      ready: true,
+      as_of: "2026-10-06T12:00:00.000Z",
+      markets: [{ market: "M1", opened_at: 1_791_288_000, signature: "c1" }],
+    });
+    await t.service.stop();
+    expect(fake.stops()).toBe(1);
+  });
+
+  it("is served in degraded mode too (the index needs no signer)", async () => {
+    const fake = fakeIndex();
+    const t = await start({ loaded: null, configured: Keypair.generate(), openTimes: fake.index });
+    expect(t.service.degraded).toBe("automation key missing or invalid");
+    expect((await markets(t.service)).status).toBe(200);
+  });
+
+  it("hands every creation of the morning job to the index", async () => {
+    const key = Keypair.generate();
+    const fake = fakeIndex();
+    const t = await start({ loaded: key, configured: key, openTimes: fake.index });
+    await t.clock.sleep(3_600_000); // 08:00 ET
+    await t.scheduled.find((s) => s.name === "morning")?.task();
+    expect(t.chain.createCalls).toHaveLength(38);
+    expect(fake.noted).toEqual(t.chain.createCalls.map((_, i) => `sig-${String(i + 1)}`));
+  });
+
+  it("is 404 when the service runs without an index", async () => {
+    const key = Keypair.generate();
+    const t = await start({ loaded: key, configured: key });
+    expect((await markets(t.service)).status).toBe(404);
   });
 });
