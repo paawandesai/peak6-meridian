@@ -24,6 +24,12 @@ const envSchema = z.object({
   // Local validator only: the Config admin that signs the test-only local oracle.
   ADMIN_KEYPAIR_PATH: z.preprocess(emptyToUndefined, z.string().optional()),
   PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).max(65_535).default(4000)),
+  // Demo mode: short-close markets for quick lifecycle demonstration (devnet only).
+  DEMO_MODE: z.preprocess(emptyToUndefined, z.enum(["replay", "live"]).default("live")),
+  DEMO_CLOSE_IN_SECS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().min(300).max(14_400).default(3600),
+  ),
 });
 
 export type ServiceEnv = z.infer<typeof envSchema>;

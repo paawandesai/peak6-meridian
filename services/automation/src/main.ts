@@ -80,6 +80,9 @@ async function main(): Promise<void> {
             TOKEN_PROGRAM_ID,
             SystemProgram.programId,
           ),
+          demoMode: env.DEMO_MODE,
+          demoCloseInSecs: env.DEMO_CLOSE_IN_SECS,
+          cluster,
         },
         // Settlement is permissionless: the loaded key is only the fee payer here (AB-19).
         settlement: createSettlementJob({

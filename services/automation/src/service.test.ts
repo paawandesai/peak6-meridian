@@ -69,6 +69,9 @@ async function start(options: {
           marketOps: chain,
           prevClose: (ticker, date) =>
             fetchPrevClose({ http, tiingoApiKey: "k", twelveDataApiKey: "k" }, ticker, date),
+          demoMode: "live" as const,
+          demoCloseInSecs: 3600,
+          cluster: "devnet",
         },
         settlement:
           options.settlementCrashes === true
@@ -95,6 +98,9 @@ function signerDeps(signer: Keypair) {
       sleep: () => Promise.resolve(),
       marketOps: new FakeChain(),
       prevClose: () => Promise.reject(new Error("unused")),
+      demoMode: "live" as const,
+      demoCloseInSecs: 3600,
+      cluster: "devnet",
     },
     settlement: noopSettlementJob(signer),
   };

@@ -409,6 +409,9 @@ async function main(): Promise<void> {
       },
       state: new RunState(),
       log: silentLogger,
+      demoMode: "live",
+      demoCloseInSecs: 3600,
+      cluster: "localnet",
     });
     if (result.status !== "ok" || result.created !== 0 || result.existed !== first.created) {
       throw new Error(`morning job re-run: ${JSON.stringify(result)}`);
