@@ -293,12 +293,57 @@ export async function deployRailway(
     throw new Error(redactSecrets(message, secrets));
   }
   const url = `https://${domain}`;
-  await checkHealth(
-    deps,
-    url,
-    collected.values.SERVICE_TOKEN ?? "",
-    options.healthAttempts ?? 3,
-    options.healthIntervalMs ?? 120_000,
-  );
+  try {
+    await checkHealth(
+      deps,
+      url,
+      collected.values.SERVICE_TOKEN ?? "",
+      options.healthAttempts ?? 3,
+      options.healthIntervalMs ?? 120_000,
+    );
+  } catch (error) {
+    await logRecentDeployLogs(deps, gql, target, serviceId, secrets);
+    throw error;
+  }
   return { url };
+}
+
+/** On a failed health check, prints the latest deployment's status and runtime log tail (redacted). */
+async function logRecentDeployLogs(
+  deps: PlatformDeps,
+  gql: Gql,
+  target: Target,
+  serviceId: string,
+  secrets: readonly string[],
+): Promise<void> {
+  try {
+    const data = await gql(
+      "deployments",
+      `query($input: DeploymentListInput!) { deployments(input: $input, first: 1) { edges { node { id status } } } }`,
+      {
+        input: {
+          projectId: target.projectId,
+          environmentId: target.environmentId,
+          serviceId,
+        },
+      },
+    );
+    const latest = edges(data.deployments)[0];
+    if (latest === undefined || typeof latest.id !== "string") return;
+    deps.log(`railway: latest deployment ${latest.id} status ${String(latest.status)}`);
+    const logs = await gql(
+      "deploymentLogs",
+      `query($id: String!) { deploymentLogs(deploymentId: $id, limit: 80) { message } }`,
+      { id: latest.id },
+    );
+    const lines = Array.isArray(logs.deploymentLogs) ? logs.deploymentLogs : [];
+    for (const line of lines) {
+      const message = asRecord(line).message;
+      if (typeof message === "string") deps.log(redactSecrets(`railway log: ${message}`, secrets));
+    }
+  } catch (error) {
+    deps.log(
+      `railway: could not read deployment logs (${error instanceof Error ? error.message : "error"})`,
+    );
+  }
 }

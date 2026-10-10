@@ -59,6 +59,7 @@ export type MarketAccountApi = {
         status: object;
         outcome: object;
         settlePriceScaled: { toString(): string };
+        settledAt: { toString(): string };
       };
     }[]
   >;
@@ -83,6 +84,7 @@ export async function fetchMarkets(accounts: MarketAccountApi): Promise<MarketRo
     outcome: decodeOutcome(account.outcome),
     settlePriceScaled: BigInt(account.settlePriceScaled.toString()),
     pairsOutstanding: BigInt(account.pairsOutstanding.toString()),
+    settledAt: BigInt(account.settledAt.toString()),
   }));
 }
 
