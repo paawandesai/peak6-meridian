@@ -3,7 +3,7 @@
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { useMemo } from "react";
 
-import { loadWalletEvents, openOrdersAddresses } from "./history-chain";
+import { loadWalletEvents } from "./history-chain";
 import { HistoryView } from "./history-view";
 import { AppHeader } from "@/components/app-header";
 import { FaucetButton } from "@/components/faucet-button";
@@ -24,13 +24,8 @@ function Page() {
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
   const events = useAsync(async () => {
     if (publicKey === null) return [];
-    const all = await reader.listMarkets();
-    return loadWalletEvents(
-      connection,
-      publicKey,
-      config.programId,
-      openOrdersAddresses(all, publicKey, config.programId),
-    );
+    // P0-4: use gPA to find wallet's OpenOrders (don't pre-compute all PDAs)
+    return loadWalletEvents(connection, publicKey, config.programId);
   }, [reader, connection, publicKey, config]);
   return (
     <>
