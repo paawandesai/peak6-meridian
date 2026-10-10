@@ -71,7 +71,7 @@ function renderView(
     sources?: MarketSources;
     now?: number;
     paused?: boolean;
-    tradeHref?: (x: ReturnType<typeof market>) => string;
+    tradeHref?: ((x: ReturnType<typeof market>) => string) | null;
   } = {},
 ) {
   const view = (
@@ -155,8 +155,8 @@ describe("row link (AC2)", () => {
     expect(link).toHaveClass("after:absolute", "after:inset-0");
   });
 
-  it("renders no link and no Trade text until the Trade route exists", async () => {
-    renderView([m(1)]);
+  it("renders no link and no Trade text when tradeHref is null", async () => {
+    renderView([m(1)], { tradeHref: null });
     await screen.findAllByRole("row");
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.queryByText("Trade")).toBeNull();
