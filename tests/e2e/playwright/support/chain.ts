@@ -282,6 +282,8 @@ export async function settleLocally(
       market: market.market,
       feedTiingo: feed(0),
       feedTwelveData: feed(1),
+      redstonePrice: null,
+      oracleConfig: null,
       payer: chain.admin.publicKey,
     })
     .rpc({ commitment: "confirmed" });
