@@ -24,3 +24,7 @@ __pycache__/
 
 # CI cache directory (see scripts/ci/link-cache.sh)
 .ci-cache/
+
+# Playwright output (M2-13)
+playwright-report/
+test-results/
