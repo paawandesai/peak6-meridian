@@ -18,7 +18,8 @@ import {
 } from "./platform";
 
 const API = "https://backboard.railway.com/graphql/v2";
-export const CONFIG_FILE = "services/automation/railway.json";
+// Railway resolves the config-as-code path from the repo root and expects a leading slash.
+export const CONFIG_FILE = "/services/automation/railway.json";
 
 export type RailwayOptions = {
   readonly token: string;
@@ -65,7 +66,15 @@ function makeGql(deps: PlatformDeps, headers: Record<string, string>, secrets: s
     );
     const body = asRecord(result.body);
     if (result.status !== 200 || Array.isArray(body.errors)) {
-      throw new Error(`railway: ${label} failed (status ${result.status})`);
+      const messages = Array.isArray(body.errors)
+        ? body.errors
+            .map((error) => asRecord(error).message)
+            .filter((message): message is string => typeof message === "string")
+        : [];
+      const detail = messages.length === 0 ? "" : `: ${messages.join("; ")}`;
+      throw new Error(
+        redactSecrets(`railway: ${label} failed (status ${result.status})${detail}`, secrets),
+      );
     }
     return asRecord(body.data);
   };
