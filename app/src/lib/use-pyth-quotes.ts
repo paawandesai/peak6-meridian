@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { pythQuotesResponseSchema, type PythQuote, type Mag7Ticker } from "./pyth-quotes";
+import { isDocumentVisible } from "./visibility";
 
 export type PythQuotesByTicker = Record<string, PythQuote>;
 
@@ -63,11 +64,15 @@ export function usePythQuotes(tickers?: readonly Mag7Ticker[]): UsePythQuotesRes
         if (!cancelled) {
           setLoading(false);
           // Schedule next poll
-          timeoutId = setTimeout(() => {
-            void fetchQuotes();
-          }, POLL_INTERVAL_MS);
+          timeoutId = setTimeout(tick, POLL_INTERVAL_MS);
         }
       }
+    }
+
+    // A hidden tab skips the fetch and checks again next interval (P1-2).
+    function tick(): void {
+      if (isDocumentVisible()) void fetchQuotes();
+      else timeoutId = setTimeout(tick, POLL_INTERVAL_MS);
     }
 
     // Start polling

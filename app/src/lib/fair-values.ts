@@ -22,6 +22,7 @@ export {
   STALE_AFTER_SECS,
 } from "./fair-values-core";
 import { fetchFairValues, type FairValue, REFRESH_MS } from "./fair-values-core";
+import { isDocumentVisible } from "./visibility";
 
 export type FairValues = {
   readonly status: "loading" | "ready" | "unavailable";
@@ -90,7 +91,10 @@ export function useFairValues(
       );
     };
     void run();
-    const timer = setInterval(() => void run(), intervalMs);
+    // A hidden tab skips ticks (P1-2), like the account feed and the other pollers.
+    const timer = setInterval(() => {
+      if (isDocumentVisible()) void run();
+    }, intervalMs);
     return () => {
       cancelled = true;
       clearInterval(timer);
