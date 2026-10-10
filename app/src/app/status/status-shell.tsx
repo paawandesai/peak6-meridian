@@ -25,7 +25,11 @@ function Page() {
   const markets = useAsync(() => reader.listMarkets(), [reader]);
   const appConfig = useAsync(() => reader.getConfig(), [reader]);
   const loadStatusCached = useMemo(
-    () => dedupe(() => loadStatusData(connection, reader.listMarkets(), config.programId), STATUS_CACHE_MS),
+    () =>
+      dedupe(async () => {
+        const markets = await reader.listMarkets();
+        return loadStatusData(connection, markets, config.programId);
+      }, STATUS_CACHE_MS),
     [reader, connection, config],
   );
   const data = useAsync(() => loadStatusCached(), [loadStatusCached]);

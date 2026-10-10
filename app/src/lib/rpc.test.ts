@@ -97,8 +97,8 @@ describe("getMultipleChunked", () => {
     };
     const result = await getMultipleChunked(connection, keys);
     expect(result).toHaveLength(150);
-    expect(result[0]).toEqual({ data: keys[0]!.toBase58() });
-    expect(result[149]).toEqual({ data: keys[149]!.toBase58() });
+    expect(result[0]).toEqual({ data: keys.at(0)?.toBase58() });
+    expect(result[149]).toEqual({ data: keys.at(149)?.toBase58() });
   });
 
   it("handles empty key list", async () => {

@@ -117,6 +117,8 @@ export type MarketDataOptions = {
   readonly priceIntervalMs?: number;
   /** Book poll interval; 1 s keeps a confirmed order visible well within NFR-01's 3 s. */
   readonly bookIntervalMs?: number;
+  /** Whether to pause polling (for tests); defaults to checking document.visibilityState. */
+  readonly shouldPoll?: () => boolean;
 };
 
 /** Polls prices and books; `sources` defaults to the browser sources and is injectable for tests. */
@@ -128,6 +130,9 @@ export function useMarketData(
   const [data, setData] = useState<MarketData>(INITIAL_MARKET_DATA);
   const priceIntervalMs = options.priceIntervalMs ?? 5_000;
   const bookIntervalMs = options.bookIntervalMs ?? 1_000;
+  const shouldPoll =
+    options.shouldPoll ??
+    (() => typeof document === "undefined" || document.visibilityState === "visible");
   const marketKey = markets.map((market) => market.address).join(",");
   // Keyed by address list so a new array with the same markets does not restart polling.
   const marketsRef = useRef(markets);
@@ -165,11 +170,12 @@ export function useMarketData(
       if (!cancelled) setData(latest);
     };
     // A tick is skipped while the previous poll of the same kind is still in flight, so responses
-    // can never be applied out of order (an older read overwriting a newer one).
+    // can never be applied out of order (an older read overwriting a newer one). Also skip ticks
+    // when the document is hidden (P0-4 visibility pause).
     let pricesInFlight = false;
     let booksInFlight = false;
     const runPrices = async (): Promise<void> => {
-      if (pricesInFlight) return;
+      if (!shouldPoll() || pricesInFlight) return;
       pricesInFlight = true;
       try {
         const result = await pollPrices(active, latest);
@@ -180,7 +186,7 @@ export function useMarketData(
       }
     };
     const runBooks = async (): Promise<void> => {
-      if (booksInFlight) return;
+      if (!shouldPoll() || booksInFlight) return;
       booksInFlight = true;
       try {
         const books = await pollBooks(active, marketsRef.current);
