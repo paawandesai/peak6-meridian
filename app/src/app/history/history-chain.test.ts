@@ -126,4 +126,37 @@ describe("concurrency cap", () => {
     // Calls should be made (wallet is first, then the 5 OO addresses)
     expect(calls[0]).toBe(maker.toBase58());
   });
+
+  it("production call (no extraAddresses) uses gPA and does not scan non-existent PDAs", async () => {
+    const oo1 = new PublicKey(new Uint8Array(32).fill(20));
+    const oo2 = new PublicKey(new Uint8Array(32).fill(21));
+    const sigCalls: string[] = [];
+    const rpc = {
+      getProgramAccounts: vi.fn().mockResolvedValue([{ pubkey: oo1 }, { pubkey: oo2 }]),
+      getSignaturesForAddress: vi.fn(async (addr: PublicKey) => {
+        sigCalls.push(addr.toBase58());
+        return [];
+      }),
+      getTransactions: vi.fn().mockResolvedValue([]),
+    } as unknown as HistoryRpc;
+
+    // Production call: no extraAddresses parameter
+    await loadWalletEvents(rpc, maker, programId);
+
+    // Should have called gPA to find OpenOrders
+    expect(rpc.getProgramAccounts).toHaveBeenCalledWith(
+      programId,
+      expect.objectContaining({
+        filters: expect.arrayContaining([
+          { memcmp: { offset: 8, bytes: maker.toBase58() } },
+        ]),
+      }),
+    );
+
+    // Should scan wallet + only the 2 OpenOrders that exist (not all potential market PDAs)
+    expect(rpc.getSignaturesForAddress).toHaveBeenCalledTimes(3);
+    expect(sigCalls).toContain(maker.toBase58());
+    expect(sigCalls).toContain(oo1.toBase58());
+    expect(sigCalls).toContain(oo2.toBase58());
+  });
 });
