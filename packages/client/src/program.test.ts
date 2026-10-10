@@ -29,6 +29,8 @@ const INTERFACE = [
   "unpause",
   "local_oracle_set",
   "version",
+  "set_oracle_config",
+  "post_redstone_price",
 ];
 
 function offlineProvider(): AnchorProvider {
