@@ -61,9 +61,53 @@ def _get(client: httpx.Client, url: str, headers: dict[str, str], params: dict[s
     return response.content
 
 
-def fetch_spot(client: httpx.Client, ticker: str, finnhub_key: str) -> Spot:
-    """Latest price from Finnhub; `c == 0` / `t == 0` (unknown symbol) is an error."""
+def fetch_spot(
+    client: httpx.Client,
+    ticker: str,
+    finnhub_key: str,
+    *,
+    demo_mode: str = "live",
+    demo_replay_date: date | None = None,
+    tiingo_key: str | None = None,
+) -> Spot:
+    """Latest price from Finnhub (live mode) or historical Tiingo EOD (replay mode).
+
+    In replay mode, uses Tiingo EOD close for demo_replay_date as the spot price.
+    Requires tiingo_key when demo_mode="replay".
+    """
     ticker = _check_ticker(ticker)
+
+    # Demo replay: use Tiingo EOD close for the replay date as "spot"
+    if demo_mode == "replay":
+        if demo_replay_date is None:
+            raise PriceError("demo_replay_date required when demo_mode=replay")
+        if tiingo_key is None:
+            raise PriceError("tiingo_key required for replay mode")
+
+        symbol = quote(ticker.lower(), safe="")
+        body = _get(
+            client,
+            f"https://api.tiingo.com/tiingo/daily/{symbol}/prices",
+            {"Authorization": f"Token {tiingo_key}"},
+            {
+                "startDate": demo_replay_date.isoformat(),
+                "endDate": demo_replay_date.isoformat(),
+            },
+        )
+        try:
+            bars = [_TiingoBar.model_validate(item) for item in _json_list(body)]
+        except (ValidationError, ValueError):
+            raise PriceError(f"{ticker}: malformed replay EOD") from None
+        if not bars or bars[0].close <= 0:
+            raise PriceError(f"{ticker}: no replay price for {demo_replay_date}")
+        # Use the replay date's close as the "spot" with the date's midnight timestamp
+        return Spot(
+            ticker=ticker,
+            price=bars[0].close,
+            as_of=datetime.combine(demo_replay_date, datetime.min.time(), tzinfo=UTC),
+        )
+
+    # Live mode: Finnhub quote
     body = _get(
         client,
         "https://finnhub.io/api/v1/quote",
@@ -71,26 +115,48 @@ def fetch_spot(client: httpx.Client, ticker: str, finnhub_key: str) -> Spot:
         {"symbol": ticker},
     )
     try:
-        quote = _FinnhubQuote.model_validate_json(body)
+        finnhub_quote = _FinnhubQuote.model_validate_json(body)
     except ValidationError:
         raise PriceError(f"{ticker}: malformed quote") from None
-    if quote.c <= 0 or quote.t <= 0:
+    if finnhub_quote.c <= 0 or finnhub_quote.t <= 0:
         raise PriceError(f"{ticker}: no price")
-    return Spot(ticker=ticker, price=quote.c, as_of=datetime.fromtimestamp(quote.t, tz=UTC))
+    return Spot(
+        ticker=ticker,
+        price=finnhub_quote.c,
+        as_of=datetime.fromtimestamp(finnhub_quote.t, tz=UTC),
+    )
 
 
 def fetch_daily_closes(
-    client: httpx.Client, ticker: str, tiingo_key: str, today: date
+    client: httpx.Client,
+    ticker: str,
+    tiingo_key: str,
+    today: date,
+    *,
+    demo_mode: str = "live",
+    demo_replay_date: date | None = None,
 ) -> list[Decimal]:
-    """Daily closes, oldest first, ending at or before `today`."""
+    """Daily closes, oldest first, ending at or before `today`.
+
+    In replay mode, fetches closes before demo_replay_date (for historical volatility).
+    """
     symbol = quote(_check_ticker(ticker).lower(), safe="")
+
+    # Demo replay: fetch closes before the replay date for volatility calculation
+    end_date = today
+    if demo_mode == "replay":
+        if demo_replay_date is None:
+            raise PriceError("demo_replay_date required when demo_mode=replay")
+        # End one day before the replay date to avoid using "future" data
+        end_date = demo_replay_date - timedelta(days=1)
+
     body = _get(
         client,
         f"https://api.tiingo.com/tiingo/daily/{symbol}/prices",
         {"Authorization": f"Token {tiingo_key}"},
         {
-            "startDate": (today - timedelta(days=CLOSE_LOOKBACK_DAYS)).isoformat(),
-            "endDate": today.isoformat(),
+            "startDate": (end_date - timedelta(days=CLOSE_LOOKBACK_DAYS)).isoformat(),
+            "endDate": end_date.isoformat(),
         },
     )
     try:

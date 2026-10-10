@@ -86,3 +86,104 @@ def test_tiingo_path_uses_the_quoted_lowercase_symbol() -> None:
 
     fetch_daily_closes(client(httpx.MockTransport(handler)), "NVDA", "k", date(2026, 10, 8))
     assert seen[0].url.path == "/tiingo/daily/nvda/prices"
+
+
+def test_spot_replay_mode_uses_tiingo_eod_for_replay_date() -> None:
+    """In replay mode, fetch_spot uses Tiingo EOD close for the replay date as the spot price."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=[{"date": "2024-10-08T00:00:00.000Z", "close": 175.50}])
+
+    spot = fetch_spot(
+        client(httpx.MockTransport(handler)),
+        "AAPL",
+        "finnhub-key",
+        demo_mode="replay",
+        demo_replay_date=date(2024, 10, 8),
+        tiingo_key="tiingo-key",
+    )
+    assert spot.ticker == "AAPL"
+    assert spot.price == Decimal("175.50")
+    assert spot.as_of == datetime(2024, 10, 8, 0, 0, 0, tzinfo=UTC)
+    # Should use Tiingo, not Finnhub
+    assert len(seen) == 1
+    assert seen[0].url.path == "/tiingo/daily/aapl/prices"
+    assert "tiingo-key" in seen[0].headers.get("Authorization", "")
+
+
+def test_spot_replay_mode_requires_tiingo_key() -> None:
+    with pytest.raises(PriceError, match="tiingo_key required"):
+        fetch_spot(
+            client(),
+            "AAPL",
+            "finnhub-key",
+            demo_mode="replay",
+            demo_replay_date=date(2024, 10, 8),
+            tiingo_key=None,
+        )
+
+
+def test_spot_replay_mode_requires_replay_date() -> None:
+    with pytest.raises(PriceError, match="demo_replay_date required"):
+        fetch_spot(
+            client(),
+            "AAPL",
+            "finnhub-key",
+            demo_mode="replay",
+            demo_replay_date=None,
+            tiingo_key="k",
+        )
+
+
+def test_spot_replay_mode_rejects_no_data() -> None:
+    with pytest.raises(PriceError, match="no replay price"):
+        fetch_spot(
+            client(json=[]),
+            "AAPL",
+            "finnhub-key",
+            demo_mode="replay",
+            demo_replay_date=date(2024, 10, 8),
+            tiingo_key="k",
+        )
+
+
+def test_daily_closes_replay_mode_fetches_before_replay_date() -> None:
+    """In replay mode, fetch_daily_closes ends one day before the replay date."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json=[
+                {"date": "2024-10-05T00:00:00.000Z", "close": 173.0},
+                {"date": "2024-10-07T00:00:00.000Z", "close": 174.5},
+            ],
+        )
+
+    closes = fetch_daily_closes(
+        client(httpx.MockTransport(handler)),
+        "AAPL",
+        "tiingo-key",
+        date(2024, 10, 8),
+        demo_mode="replay",
+        demo_replay_date=date(2024, 10, 8),
+    )
+    assert closes == [Decimal("173.0"), Decimal("174.5")]
+    # Should fetch data ending Oct 7 (one day before Oct 8 replay date)
+    params = dict(seen[0].url.params)
+    assert params["endDate"] == "2024-10-07"
+
+
+def test_daily_closes_replay_mode_requires_replay_date() -> None:
+    with pytest.raises(PriceError, match="demo_replay_date required"):
+        fetch_daily_closes(
+            client(),
+            "AAPL",
+            "k",
+            date(2024, 10, 8),
+            demo_mode="replay",
+            demo_replay_date=None,
+        )
