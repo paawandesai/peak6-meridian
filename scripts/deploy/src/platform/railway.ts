@@ -4,6 +4,8 @@
  * services/automation/railway.json, uploads with the Railway CLI, and checks `/health` with the
  * bearer token. Variable values and tokens never reach logs or errors.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   assertComplete,
   childEnv,
@@ -210,6 +212,27 @@ export async function checkHealth(
   );
 }
 
+/**
+ * Railway rejects `railwayConfigFile` now that Config as Code is deprecated, so the settings in
+ * railway.json (still the source of truth) are applied directly as service instance fields.
+ */
+export function serviceSettings(repoRoot: string): Json {
+  const config = asRecord(JSON.parse(readFileSync(join(repoRoot, CONFIG_FILE), "utf8")));
+  const build = asRecord(config.build);
+  const deploy = asRecord(config.deploy);
+  const input: Json = {};
+  if (typeof build.builder === "string") input.builder = build.builder;
+  if (typeof build.buildCommand === "string") input.buildCommand = build.buildCommand;
+  if (typeof deploy.startCommand === "string") input.startCommand = deploy.startCommand;
+  if (typeof deploy.restartPolicyType === "string") {
+    input.restartPolicyType = deploy.restartPolicyType;
+  }
+  if (typeof deploy.restartPolicyMaxRetries === "number") {
+    input.restartPolicyMaxRetries = deploy.restartPolicyMaxRetries;
+  }
+  return input;
+}
+
 export async function deployRailway(
   deps: PlatformDeps,
   options: RailwayOptions,
@@ -241,7 +264,7 @@ export async function deployRailway(
     `mutation($serviceId: String!, $environmentId: String!, $input: ServiceInstanceUpdateInput!) {
        serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input)
      }`,
-    { serviceId, environmentId: target.environmentId, input: { railwayConfigFile: CONFIG_FILE } },
+    { serviceId, environmentId: target.environmentId, input: serviceSettings(options.repoRoot) },
   );
   const domain = await ensureDomain(gql, target, serviceId);
 
