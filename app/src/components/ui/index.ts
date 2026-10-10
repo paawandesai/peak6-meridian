@@ -1,6 +1,7 @@
 export { AsOf, BANNER_AFTER_SECS, STALE_AFTER_SECS } from "./as-of";
 export { Cents } from "./cents";
 export { Countdown } from "./countdown";
+export { FairValueEdge, type FairValueEdgeProps } from "./fair-value-edge";
 export { PayoffSentence } from "./payoff-sentence";
 export { Pnl } from "./pnl";
 export { SideLabel } from "./side-label";
