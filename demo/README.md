@@ -20,28 +20,32 @@
 
 ## Storyboard (9 Required Elements)
 
-### Shot 1: Wallet Connect (0:00-0:08, ~8s) ✅ READY
+### Shot 1: Wallet Connect (0:00-0:08, ~8s) ⏳ PENDING !83
 **Page:** `/` (landing)  
 **Actions:**
 1. Click "Connect Wallet" button
-2. Select Phantom from wallet adapter modal
-3. Approve connection in Phantom popup
+2. Select "Try the demo" burner wallet from adapter modal (#51)
+3. Auto-connects and auto-funds from faucet (no popup needed)
 
-**Overlay/Narration:** "Meridian runs on Solana devnet. Connect your wallet to start."
+**Overlay/Narration:** "One-click devnet demo: the burner wallet connects and funds instantly."
 
-**Dependencies:** None (app deployed)
+**Dependencies:** 
+- Demo burner wallet (!83 M4-07) ⏳
+- App deployed ✅
 
 ---
 
-### Shot 2: Faucet (0:08-0:18, ~10s) ✅ READY
-**Page:** `/` or wherever faucet button appears  
+### Shot 2: Faucet (0:08-0:18, ~10s) ⏳ PENDING !83
+**Page:** `/` (auto-funded via burner wallet)  
 **Actions:**
-1. Click "Get Devnet USDC" or faucet button
-2. Wait for transaction confirmation toast
+1. Show banner confirming burner wallet connection
+2. Show USDC balance appearing (auto-funded from faucet)
+3. Optional: show alternate wallet can click manual faucet button
 
-**Overlay/Narration:** "Grab devnet USDC from the built-in faucet — $100 per wallet."
+**Overlay/Narration:** "The burner wallet auto-funds from the devnet faucet. Manual faucet available for other wallets."
 
 **Dependencies:** 
+- Demo burner wallet auto-fund (!83 M4-07) ⏳
 - App `/api/faucet` route working ✅
 - Devnet USDC mint deployed ✅
 
@@ -107,12 +111,13 @@
 2. Show settlement price appearing (e.g., "Settled: YES 68.42¢" from oracle)
 3. Show outcome badge (YES/NO winner)
 
-**Overlay/Narration:** "Friday 16:05 ET: Switchboard oracle posts the official close. Market settles on-chain, outcome locked."
+**Overlay/Narration:** "Friday 16:05 ET: Pyth oracle posts the official close, verified on-chain. RedStone as fallback. Market settles, outcome locked."
 
 **Dependencies:**
 - Trade page (!49 M2-06) ⏳
 - **Friday settlement event** (automation runs `settle_market` at close + 5 min) ✅
-- Switchboard feeds updated with real Friday close ✅
+- Pyth as primary live price source (#49) ⏳
+- RedStone as fallback oracle (D-054) ✅
 - At least one market settles successfully via oracle (not override)
 
 ---
