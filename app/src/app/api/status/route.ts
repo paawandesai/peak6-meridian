@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import "./reader"; // Auto-install StatusChainReader
 
 /**
  * Per-market invariant data for Status page (P1-6).
@@ -39,25 +38,6 @@ export type StatusResponse = {
   readonly error?: string;
 };
 
-/**
- * Chain reader interface for dependency injection.
- * Implemented by status-chain.ts (owned by !122).
- */
-export interface StatusChainReader {
-  /**
-   * Fetch all markets for a trading date and compute invariants.
-   * @param tradingDate - YYYYMMDD trading date
-   * @returns Market invariant data
-   */
-  fetchMarketInvariants(tradingDate: number): Promise<MarketInvariant[]>;
-
-  /**
-   * Get the active trading date (today's ET date if markets exist, else most recent).
-   * @returns YYYYMMDD trading date
-   */
-  getActiveDate(): Promise<number>;
-}
-
 const querySchema = z.object({
   date: z
     .string()
@@ -71,12 +51,10 @@ type CacheEntry = {
 };
 
 // In-memory cache with dynamic TTL (P1-6 optimization)
-// - 30s for vault/active data
 // - 5min for markets with some unsettled
 // - 1hr for fully settled dates
 const cache = new Map<string, CacheEntry>();
 
-const CACHE_VAULT_MS = 30_000; // 30s for vault balances
 const CACHE_ACTIVE_MS = 5 * 60 * 1000; // 5min for active markets
 const CACHE_SETTLED_MS = 60 * 60 * 1000; // 1hr for settled markets
 
@@ -113,19 +91,34 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
       );
     }
 
-    // Get reader from global (set by status-chain.ts after !122 merges)
-    const reader = (globalThis as { statusChainReader?: StatusChainReader }).statusChainReader;
-    if (!reader) {
-      return NextResponse.json(
-        { s: "error", error: "Status chain reader not initialized" },
-        { status: 503 }
-      );
-    }
+    // Lazy imports to avoid bundling anchor/client code during Next.js build
+    const { PublicKey } = await import("@solana/web3.js");
+    const { loadStatusData } = await import("@/app/status/status-chain");
+    const { createReader } = await import("@/lib/chain");
+    const { loadPublicConfig } = await import("@/lib/config");
+    const { sharedConnection } = await import("@/lib/rpc");
+
+    const config = loadPublicConfig();
+    const reader = createReader(config);
+    const connection = sharedConnection(config.rpcUrl);
+    const programId = new PublicKey(config.programId);
 
     // Determine trading date
-    const tradingDate = params.data.date
-      ? parseDateParam(params.data.date)
-      : await reader.getActiveDate();
+    let tradingDate: number;
+    if (params.data.date) {
+      tradingDate = parseDateParam(params.data.date);
+    } else {
+      // Get active date (most recent trading date)
+      const allMarkets = await reader.listMarkets();
+      if (allMarkets.length === 0) {
+        const now = new Date();
+        const etDate = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+        tradingDate = etDate.getFullYear() * 10000 + (etDate.getMonth() + 1) * 100 + etDate.getDate();
+      } else {
+        const dates = [...new Set(allMarkets.map((m) => m.tradingDate))].sort((a, b) => b - a);
+        tradingDate = dates[0] ?? 0;
+      }
+    }
 
     const cacheKey = `status:${tradingDate}`;
     const now = Date.now();
@@ -146,12 +139,42 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
     // Fetch data
     const fetchPromise = (async (): Promise<StatusResponse> => {
       try {
-        const markets = await reader.fetchMarketInvariants(tradingDate);
-        return {
-          s: "ok",
-          date: tradingDate,
-          markets,
-        };
+        const USDC_BASE_PER_CONTRACT = 1_000_000n;
+
+        // Load all markets and filter to this trading date
+        const allMarkets = await reader.listMarkets();
+        const dateMarkets = allMarkets.filter((m) => m.tradingDate === tradingDate);
+
+        if (dateMarkets.length === 0) {
+          return { s: "ok", date: tradingDate, markets: [] };
+        }
+
+        // Load status data (vaults + facts)
+        const statusData = await loadStatusData(connection, dateMarkets, programId);
+
+        // Build invariant rows
+        const markets: MarketInvariant[] = statusData.markets.map((market) => {
+          const vaultBase = statusData.vaults.get(market.address) ?? null;
+          const facts = statusData.facts.get(market.address);
+          const pairsOutstanding = BigInt(market.pairsOutstanding);
+          const expectedVaultBase = pairsOutstanding * USDC_BASE_PER_CONTRACT;
+          const invariantPass = vaultBase !== null && vaultBase === expectedVaultBase;
+
+          return {
+            address: market.address,
+            ticker: market.ticker,
+            strikeCents: Number(market.strikeCents),
+            vaultBase: vaultBase?.toString() ?? "0",
+            pairsOutstanding: pairsOutstanding.toString(),
+            expectedVaultBase: expectedVaultBase.toString(),
+            invariantPass,
+            closeTs: Number(market.closeTs),
+            settledAt: facts?.settledAt ?? 0,
+            oracleAsOf: Number(facts?.oracleSlot ?? 0n),
+          };
+        });
+
+        return { s: "ok", date: tradingDate, markets };
       } catch (error) {
         console.error("Failed to fetch status data:", error);
         return {
