@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { loadWalletEvents, openOrdersAddresses } from "./history-chain";
 import { HistoryView } from "./history-view";
 import { AppHeader } from "@/components/app-header";
+import { BottomTabBar } from "@/components/app-shell/bottom-tab-bar";
 import { FaucetButton } from "@/components/faucet-button";
 import { Providers } from "@/components/providers";
 import { useReader } from "@/components/reader-context";
@@ -50,7 +51,7 @@ function Page() {
       >
         <FaucetButton />
       </AppHeader>
-      <main className="mx-auto max-w-5xl px-mer-4 py-mer-6">
+      <main className="mx-auto max-w-5xl px-mer-4 py-mer-6 pb-20 md:pb-mer-6">
         <h2 className="mb-mer-4 text-mer-xl font-semibold">History</h2>
         {events.status === "loading" ? <p>Loading history…</p> : null}
         {events.status === "error" ? (
@@ -64,6 +65,7 @@ function Page() {
           />
         ) : null}
       </main>
+      <BottomTabBar />
     </>
   );
 }

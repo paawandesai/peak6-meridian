@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { AppHeader } from "./app-header";
+import { BottomTabBar } from "./app-shell/bottom-tab-bar";
 import { FaucetButton } from "./faucet-button";
 import { Providers } from "./providers";
 import { useReader } from "./reader-context";
@@ -28,7 +29,10 @@ function Shell({ children, width }: { readonly children: ReactNode; readonly wid
       >
         <FaucetButton />
       </AppHeader>
-      <main className={`mx-auto ${WIDTH[width]} px-mer-4 py-mer-6`}>{children}</main>
+      <main className={`mx-auto ${WIDTH[width]} px-mer-4 py-mer-6 pb-20 md:pb-mer-6`}>
+        {children}
+      </main>
+      <BottomTabBar />
     </>
   );
 }
