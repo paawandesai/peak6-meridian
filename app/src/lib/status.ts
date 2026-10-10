@@ -30,9 +30,16 @@ export type InvariantRow = {
 
 /** Vault vs pairs outstanding × $1. An unreadable vault is a Fail, never a silent Pass. */
 export function invariantRow(market: MarketRow, vault: bigint | null): InvariantRow {
-  const expected = market.pairsOutstanding * BASE_UNITS_PER_PAIR;
+  return { market: market.address, ...vaultInvariant(market.pairsOutstanding, vault) };
+}
+
+/**
+ * The invariant check itself, shared by /status and the Trade page's vault chip (P0-7) so both
+ * always agree: expected = `pairs × 1,000,000` base units; Pass only on an exact match.
+ */
+export function vaultInvariant(pairs: bigint, vault: bigint | null): Omit<InvariantRow, "market"> {
+  const expected = pairs * BASE_UNITS_PER_PAIR;
   return {
-    market: market.address,
     verdict: vault !== null && vault === expected ? "Pass" : "Fail",
     expected,
     actual: vault,

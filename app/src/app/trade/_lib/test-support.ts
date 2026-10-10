@@ -4,7 +4,7 @@ import { BN, MERIDIAN_IDL } from "@meridian/client";
 import { PublicKey } from "@solana/web3.js";
 
 import type { BookOrder, FullBook } from "./book-view";
-import type { TradeReader, WalletView } from "./reader";
+import type { TradeReader, VaultReading, WalletView } from "./reader";
 import type { SimulationOutcome, SubmitResult, TradeActions, TradeRequest } from "./tx";
 import { decodeEvents, type MeridianEvent } from "@/lib/events";
 
@@ -80,12 +80,27 @@ export const EMPTY_WALLET: WalletView = {
   freeYes: 0n,
 };
 
+/** A passing vault: 1,240 pairs and exactly 1,240 × 1,000,000 base units. */
+export const VAULT: VaultReading = {
+  pairs: 1_240n,
+  balance: 1_240_000_000n,
+  asOfSecs: 1_791_486_000,
+};
+
+/**
+ * A fake reader. Unless overridden, `getSnapshot` is `getBook` (the override's, if any) plus
+ * {@link VAULT}, so tests that only replace `getBook` keep driving the page's book.
+ */
 export function fakeReader(overrides: Partial<TradeReader> = {}): TradeReader {
-  return {
+  const base = {
     getBook: () => Promise.resolve(BOOK),
     getWallet: () => Promise.resolve(EMPTY_WALLET),
     getOpenTime: () => Promise.resolve(null),
     ...overrides,
+  };
+  return {
+    getSnapshot: async () => ({ book: await base.getBook(), vault: VAULT }),
+    ...base,
   };
 }
 

@@ -12,15 +12,16 @@ import { ReplayGuard } from "@/components/replay-guard";
 import { useReplay } from "@/components/use-replay";
 import { BottomTabBar } from "@/components/app-shell/bottom-tab-bar";
 import { FaucetButton } from "@/components/faucet-button";
-import { TickerInsight } from "@/components/fair-value/ticker-insight";
+import { PriceHistoryChart } from "@/components/price-history-chart/price-history-chart";
 import { Providers } from "@/components/providers";
 import { useReader } from "@/components/reader-context";
 import { useAsync } from "@/components/use-async";
 import { useNow } from "@/components/use-now";
 import { explorerTxUrl } from "@/lib/admin-chain";
 import { loadPublicConfig } from "@/lib/config";
+import { useFairValues } from "@/lib/fair-values";
 import { useMarketData } from "@/lib/market-data";
-import { partitionMarkets } from "@/lib/markets";
+import { marketStatus, partitionMarkets } from "@/lib/markets";
 
 export const NOT_FOUND_TEXT = "This market does not exist. Go back to Markets and pick a strike.";
 
@@ -51,6 +52,14 @@ function Page({ address }: { readonly address: string }) {
           (m) => m.ticker === market.ticker && m.tradingDate === market.tradingDate,
         );
   const marketData = useMarketData(ladder);
+  // One fair-value poller (5 s) for the price line and the distribution chart, as TickerInsight
+  // had: only while some strike of the ladder is unsettled (and while the list is loading, so the
+  // first paint says "loading" rather than "unavailable").
+  const fair = useFairValues({
+    enabled:
+      markets.status === "loading" ||
+      (nowSecs !== null && ladder.some((m) => marketStatus(m, nowSecs) !== "Settled")),
+  });
   const tradeReader = useMemo(
     () => (market === undefined ? null : createTradeReader(config, market)),
     [config, market],
@@ -88,8 +97,14 @@ function Page({ address }: { readonly address: string }) {
           wallet={publicKey}
           marketData={marketData}
           explorerUrl={(signature) => explorerTxUrl(signature, config)}
+          insight={{ ladder, books: marketData.books, fair }}
         />
-        <TickerInsight market={market} ladder={ladder} books={marketData.books} nowSecs={nowSecs} />
+        <PriceHistoryChart
+          ticker={market.ticker}
+          nowSecs={nowSecs}
+          strikes={ladder.map((m) => m.strikeCents)}
+          fairValueCents={fair.byMarket[market.address]?.fair_cents}
+        />
       </ReplayGuard>
     );
   }

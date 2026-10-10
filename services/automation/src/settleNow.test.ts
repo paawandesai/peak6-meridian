@@ -84,7 +84,7 @@ describe("settleNow (AC7)", () => {
       { ticker: "AAPL", strike: 230 },
     ]);
     const result = await settleNow(t.params());
-    expect(result).toEqual({ settled: 3, failed: 0 });
+    expect(result).toEqual({ settled: 3, failed: 0, deferred: 0 });
     expect(t.world.open).toEqual([]);
     expect(t.out).toEqual(["settled 3 market(s) on localnet"]);
     // It ran now, without the 5-minute wait, and nothing was sent before the close.
@@ -96,14 +96,14 @@ describe("settleNow (AC7)", () => {
     await settleNow(t.params());
     const sent = t.world.executor.sent.length;
     const again = await settleNow(t.params());
-    expect(again).toEqual({ settled: 0, failed: 0 });
+    expect(again).toEqual({ settled: 0, failed: 0, deferred: 0 });
     expect(t.world.executor.sent.length).toBe(sent);
     expect(t.out.at(-1)).toMatch(/nothing to settle/);
   });
 
   it("leaves a market that has not closed yet alone", async () => {
     const t = setup([{ ticker: "META", strike: 680 }], -10);
-    expect(await settleNow(t.params())).toEqual({ settled: 0, failed: 0 });
+    expect(await settleNow(t.params())).toEqual({ settled: 0, failed: 0, deferred: 0 });
     expect(t.world.executor.sent).toEqual([]);
   });
 
@@ -120,9 +120,42 @@ describe("settleNow (AC7)", () => {
     const t = setup([{ ticker: "META", strike: 680 }]);
     t.world.sourceDate = "2026-10-05";
     const result = await settleNow(t.params());
-    expect(result).toEqual({ settled: 0, failed: 1 });
+    expect(result).toEqual({ settled: 0, failed: 1, deferred: 0 });
     expect(t.out.join("\n")).toMatch(/FAILED META:2026-10-06/);
     expect(t.world.clock.sleeps).toEqual([]);
+  });
+
+  it("skips a weekend group without any data-API request and says to use the override (#53)", async () => {
+    const t = setup([{ ticker: "META", strike: 680 }]);
+    t.world.open = t.world.open.map((m) => ({ ...m, tradingDate: 20_261_010 })); // a Saturday
+    const result = await settleNow(t.params());
+    expect(result).toEqual({ settled: 0, failed: 0, deferred: 0 });
+    expect(t.world.httpCalls).toEqual([]);
+    expect(t.out).toEqual([
+      "settled 0 market(s) on localnet",
+      "SKIPPED META:2026-10-10: not_a_trading_day (no completed session; use the admin override)",
+    ]);
+  });
+
+  it("stays within the data-API cap and lists what it deferred (#53)", async () => {
+    const t = setup([
+      { ticker: "META", strike: 640 },
+      { ticker: "AAPL", strike: 230 },
+    ]);
+    // One devnet attempt costs 4 requests (2 checks + 2 oracle fetches): a cap of 4 fits one group.
+    const result = await settleNow(t.params({ maxApiCallsPerRun: 4 }));
+    expect(result).toEqual({ settled: 1, failed: 0, deferred: 1 });
+    expect(t.world.httpCalls).toHaveLength(2);
+    expect(t.out.at(-1)).toBe(
+      "DEFERRED META:2026-10-06: data-API budget or rate-limit backoff; run settle-now again in a minute",
+    );
+    // Running it again settles the rest.
+    expect(await settleNow(t.params({ maxApiCallsPerRun: 4 }))).toEqual({
+      settled: 1,
+      failed: 0,
+      deferred: 0,
+    });
+    expect(t.world.open).toEqual([]);
   });
 
   it("refuses a cluster assertCluster does not accept, before loading any key", async () => {

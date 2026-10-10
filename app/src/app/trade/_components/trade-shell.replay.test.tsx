@@ -17,7 +17,9 @@ vi.mock("@/components/providers", () => ({
   Providers: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@/components/wallet-button", () => ({ WalletButton: () => null }));
-vi.mock("@/components/fair-value/ticker-insight", () => ({ TickerInsight: () => null }));
+vi.mock("@/components/price-history-chart/price-history-chart", () => ({
+  PriceHistoryChart: () => null,
+}));
 vi.mock("@/components/faucet-button", () => ({ FaucetButton: () => null }));
 vi.mock("@/lib/market-data", () => ({
   useMarketData: () => ({ status: "ready", prices: {}, pricesUnavailable: [], books: {} }),
@@ -27,6 +29,11 @@ vi.mock("../_lib/reader", () => ({
     created.reader(...args);
     return {
       getBook: () => Promise.resolve({ bids: [], asks: [] }),
+      getSnapshot: () =>
+        Promise.resolve({
+          book: { bids: [], asks: [] },
+          vault: { pairs: 0n, balance: 0n, asOfSecs: 1_791_486_000 },
+        }),
       getWallet: () => Promise.resolve({ yes: 0n, no: 0n, usdc: 0n, freeUsdc: 0n, freeYes: 0n }),
       getOpenTime: () => Promise.resolve(null),
     };
