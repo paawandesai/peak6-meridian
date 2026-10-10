@@ -112,7 +112,7 @@ else
 fi
 
 log "starting solana-test-validator on $RPC_URL"
-solana-test-validator --reset --quiet --ledger "$WORK/ledger" "${VALIDATOR_ARGS[@]}" \
+solana-test-validator --reset --quiet --ledger "$WORK/ledger" ${VALIDATOR_ARGS[@]+"${VALIDATOR_ARGS[@]}"} \
   --rpc-port "$RPC_PORT" --faucet-port "$FAUCET_PORT" > "$WORK/validator.log" 2>&1 &
 VALIDATOR_PID=$!
 
