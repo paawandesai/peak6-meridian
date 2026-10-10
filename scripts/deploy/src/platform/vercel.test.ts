@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { PlatformDeps } from "./platform";
-import { deployVercel, parseDeploymentUrl, type VercelOptions } from "./vercel";
+import {
+  deployVercel,
+  ensureVercelProject,
+  parseDeploymentUrl,
+  type VercelOptions,
+} from "./vercel";
 
 const TOKEN = "vercel-token-SECRET";
 const FAUCET = "[9,9,9,9,9,9,9]";
@@ -31,6 +36,7 @@ function fakes(projectStatus: number) {
     fetch: async (url, init) => {
       calls.push({ url, method: String(init.method), body: String(init.body ?? "") });
       if (url.endsWith("/v2/user")) return new Response(JSON.stringify({ user: { id: "usr_1" } }));
+      if (url.endsWith("/v2/teams")) return new Response(JSON.stringify({ teams: [] }));
       if (url.includes("/v9/projects/")) {
         return new Response(JSON.stringify({ id: "prj_1" }), { status: projectStatus });
       }
@@ -119,5 +125,24 @@ describe("parseDeploymentUrl", () => {
   it("takes the last URL and fails when none is printed", () => {
     expect(parseDeploymentUrl("a https://x.test b\nhttps://y.test")).toBe("https://y.test");
     expect(() => parseDeploymentUrl("nothing")).toThrow(/no deployment URL/);
+  });
+
+  it("reuses a project found under one of the token's teams instead of creating one", async () => {
+    const calls: string[] = [];
+    const fetch = async (url: string) => {
+      calls.push(url);
+      if (url.endsWith("/v2/user")) return new Response(JSON.stringify({ user: { id: "usr_1" } }));
+      if (url.endsWith("/v2/teams"))
+        return new Response(JSON.stringify({ teams: [{ id: "team_1" }] }));
+      if (url.includes("/v9/projects/") && url.includes("teamId=team_1")) {
+        return new Response(JSON.stringify({ id: "prj_team" }));
+      }
+      if (url.includes("/v9/projects/")) return new Response("{}", { status: 404 });
+      return new Response("{}", { status: 400 });
+    };
+    const deps: PlatformDeps = { fetch, log: () => undefined, sleep: async () => undefined };
+    const got = await ensureVercelProject(deps, options, []);
+    expect(got).toEqual({ id: "prj_team", orgId: "team_1", created: false, teamId: "team_1" });
+    expect(calls.some((c) => c.includes("/v11/projects"))).toBe(false);
   });
 });
