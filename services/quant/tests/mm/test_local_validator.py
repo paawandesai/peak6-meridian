@@ -55,6 +55,12 @@ async def test_mm_quotes_local_validator() -> None:  # noqa: PLR0912, PLR0915
     # Check .so exists before starting validator (fresh worktree check)
     program_so_path = Path("target/deploy/meridian.so")
     if not program_so_path.exists():
+        # Fail in CI (merge path) to block merge until AC1 runs; skip locally
+        if os.getenv("CI") or os.getenv("GITLAB_CI"):
+            pytest.fail(
+                "target/deploy/meridian.so not found. AC1 requires Solana toolchain + prebuilt .so. "
+                "Wire this test to a CI job with solana-test-validator and the build artifact."
+            )
         pytest.skip("target/deploy/meridian.so not found (run 'make build-local' first)")
 
     try:
