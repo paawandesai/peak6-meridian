@@ -153,10 +153,12 @@ describe("status-chain", () => {
     const good1Key = new PublicKey(new Uint8Array(32).fill(1));
     const badKey = new PublicKey(new Uint8Array(32).fill(2));
     const good2Key = new PublicKey(new Uint8Array(32).fill(3));
+    const nowSecs = Math.floor(Date.now() / 1000);
+    const pastClose = BigInt(nowSecs - 3600); // 1 hour ago
     const markets = [
       market({ address: good1Key.toBase58(), tradingDate: DATE, settled: true }),
       market({ address: badKey.toBase58(), tradingDate: DATE, settled: true }),
-      market({ address: good2Key.toBase58(), tradingDate: DATE }),
+      market({ address: good2Key.toBase58(), tradingDate: DATE, closeTs: pastClose }),
     ];
     const rpc = rpcWith({
       getMultipleParsedAccounts: vi.fn().mockResolvedValue({
