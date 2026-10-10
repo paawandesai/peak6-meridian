@@ -1,9 +1,11 @@
 //! AB-06 (NFR-08, D-030): admin-only instructions reject every other signer. M1-02 covers
-//! `update_config`; later tickets extend this file for override, pause and add_strike.
+//! `update_config`; later tickets extend this file for override, pause and add_strike, and
+//! M3-10b for `migrate_config`.
 
 use anchor_lang::error::ErrorCode;
 use anchor_lang::prelude::Pubkey;
 use meridian::errors::MeridianError;
+use security_tests::harness::migration::pyth_params;
 use security_tests::harness::{
     assert_anchor_error, assert_meridian_error, config_pda, default_params, expect_failure,
     expect_success, Harness,
@@ -197,4 +199,41 @@ fn a_stolen_automation_key_cannot_move_funds_or_pause() {
         MeridianError::AdminOnly,
     );
     h.harness.assert_market_invariants(&addresses);
+}
+
+// ---- M3-10b: migrate_config ------------------------------------------------------------------
+
+#[test]
+fn migrate_config_succeeds_for_the_admin() {
+    let mut harness = Harness::new();
+    expect_success(&harness.initialize_config(&default_params(Pubkey::new_unique())));
+    harness.downgrade_config_to_v1();
+    let signer = Pubkey::new_unique();
+    expect_success(&harness.migrate_config(Some(pyth_params(signer))));
+    let config = harness.config();
+    assert_eq!(config.admin, harness.admin.pubkey());
+    assert_eq!(config.pyth_lazer_signer, signer);
+}
+
+#[test]
+fn migrate_config_rejects_every_other_signer_and_cannot_pin_a_pyth_signer() {
+    let mut harness = Harness::new();
+    let automation = harness.funded_keypair();
+    expect_success(&harness.initialize_config(&default_params(automation.pubkey())));
+    let v1 = harness.downgrade_config_to_v1();
+    let intruder = harness.funded_keypair();
+
+    // A non-admin must not be able to grow the account and pin its own Pyth Lazer signer
+    // (which would let it settle every market with prices it signs, AB-04).
+    for signer in [&intruder, &automation] {
+        let result = harness.migrate_config_as(signer, Some(pyth_params(signer.pubkey())));
+        assert_meridian_error(&result, MeridianError::AdminOnly);
+    }
+    assert_eq!(harness.config_account().data, v1, "config untouched");
+
+    // Nor through a substituted account at another address.
+    let fake = harness.funded_keypair().pubkey();
+    let ix = Harness::migrate_config_ix(intruder.pubkey(), fake, Some(pyth_params(fake)));
+    let result = harness.send(ix, &[&intruder]);
+    assert_anchor_error(&result, ErrorCode::ConstraintSeeds);
 }

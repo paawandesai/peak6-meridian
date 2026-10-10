@@ -38,6 +38,15 @@ pub mod meridian {
         instructions::update_config::handle_update_config(ctx, params)
     }
 
+    /// Admin grows the v1 Config account to the current layout in place (M3-10b); optionally
+    /// sets the Pyth fields. Fails with `ConfigAlreadyMigrated` on a migrated account.
+    pub fn migrate_config(
+        ctx: Context<MigrateConfig>,
+        pyth: Option<PythConfigParams>,
+    ) -> Result<()> {
+        instructions::migrate_config::handle_migrate_config(ctx, pyth)
+    }
+
     /// Automation authority creates one strike market (FR-02). Stub until M1-04.
     pub fn create_strike_market(
         ctx: Context<CreateStrikeMarket>,

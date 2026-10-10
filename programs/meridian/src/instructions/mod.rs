@@ -10,6 +10,7 @@ pub mod create_strike_market;
 pub mod initialize_config;
 #[cfg(feature = "local-oracle")]
 pub mod local_oracle_set;
+pub mod migrate_config;
 pub mod mint_pair;
 pub mod pause;
 pub mod place_order;
@@ -31,6 +32,7 @@ pub use create_strike_market::*;
 pub use initialize_config::*;
 #[cfg(feature = "local-oracle")]
 pub use local_oracle_set::*;
+pub use migrate_config::*;
 pub use mint_pair::*;
 pub use pause::*;
 pub use place_order::*;

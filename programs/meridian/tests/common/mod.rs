@@ -881,3 +881,8 @@ pub fn assert_token_error(result: &TransactionResult, expected: spl_token::error
 // ---- M1-07: settlement ------------------------------------------------------------------------
 
 pub mod settlement;
+
+// ---- M3-10b: Config migration and the Pyth settlement path -----------------------------------
+
+pub mod migration;
+pub mod pyth;

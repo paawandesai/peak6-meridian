@@ -88,68 +88,59 @@ pub fn handle_settle_market(
         .get(ticker_index)
         .ok_or(MeridianError::UnknownTicker)?;
 
-    // Oracle path priority (D-055): Pyth PRIMARY, RedStone fallback, Switchboard legacy
-    let has_pyth = ctx.accounts.instructions_sysvar.is_some()
-        && ed25519_ix_index.is_some()
-        && pyth_feed_id != 0;
-    let has_redstone = ctx.accounts.redstone_price.is_some();
-
-    let (price, oracle_slot) = if has_pyth && has_redstone {
-        // Both Pyth and RedStone present: two-source spread check (D-033, D-055)
-        let pyth_reading = read_pyth_price(
-            ctx.accounts.instructions_sysvar.as_ref().unwrap(),
-            ed25519_ix_index.unwrap(),
+    // Oracle path priority (D-055): Pyth PRIMARY, RedStone fallback, Switchboard legacy. Pyth
+    // needs the instructions sysvar, the Ed25519 instruction index and a configured feed id.
+    let pyth_input = match (ctx.accounts.instructions_sysvar.as_ref(), ed25519_ix_index) {
+        (Some(sysvar), Some(index)) if pyth_feed_id != 0 => Some((sysvar, index)),
+        _ => None,
+    };
+    let read_pyth = |sysvar: &UncheckedAccount, index: u16| {
+        read_pyth_price(
+            sysvar,
+            index,
             &config.pyth_lazer_signer,
             pyth_feed_id,
             &clock,
             market.close_ts,
             config.pyth_max_age_secs,
-        )?;
+        )
+    };
+    let read_redstone = |redstone_price: &Account<RedstonePrice>| {
         let oracle_config = ctx
             .accounts
             .oracle_config
             .as_ref()
             .ok_or(MeridianError::RedStoneWrongPricePda)?;
-        let redstone_reading = read_redstone_price(
-            ctx.accounts.redstone_price.as_ref().unwrap(),
+        read_redstone_price(
+            redstone_price,
             &market.ticker,
             &clock,
             market.close_ts,
             oracle_config.max_package_delay_secs,
             config.max_staleness_slots,
+        )
+    };
+
+    let (price, oracle_slot) = if let (Some((sysvar, index)), Some(redstone_price)) =
+        (pyth_input, ctx.accounts.redstone_price.as_ref())
+    {
+        // Both Pyth and RedStone present: two-source spread check (D-033, D-055)
+        let pyth_reading = read_pyth(sysvar, index)?;
+        let redstone_reading = read_redstone(redstone_price)?;
+        let price = combine(
+            pyth_reading.value_scaled,
+            redstone_reading.value_scaled,
+            config.max_conf_bps,
         )?;
-        // Combine with spread check: both must be within max_conf_bps
-        let price =
-            combine(pyth_reading.value_scaled, redstone_reading.value_scaled, config.max_conf_bps)?;
         let oracle_slot = pyth_reading.slot.min(redstone_reading.slot);
         (price, oracle_slot)
-    } else if has_pyth {
+    } else if let Some((sysvar, index)) = pyth_input {
         // Pyth only (PRIMARY path, D-055)
-        let reading = read_pyth_price(
-            ctx.accounts.instructions_sysvar.as_ref().unwrap(),
-            ed25519_ix_index.unwrap(),
-            &config.pyth_lazer_signer,
-            pyth_feed_id,
-            &clock,
-            market.close_ts,
-            config.pyth_max_age_secs,
-        )?;
+        let reading = read_pyth(sysvar, index)?;
         (reading.value_scaled, reading.slot)
-    } else if has_redstone {
+    } else if let Some(redstone_price) = ctx.accounts.redstone_price.as_ref() {
         // RedStone only (fallback, D-055)
-        let oracle_config = ctx
-            .accounts
-            .oracle_config
-            .as_ref()
-            .ok_or(MeridianError::RedStoneWrongPricePda)?;
-        let reading = read_redstone_price(
-            ctx.accounts.redstone_price.as_ref().unwrap(),
-            &market.ticker,
-            &clock,
-            market.close_ts,
-            oracle_config.max_package_delay_secs,
-            config.max_staleness_slots,
-        )?;
+        let reading = read_redstone(redstone_price)?;
         (reading.value_scaled, reading.slot)
     } else {
         // Switchboard path (legacy, until M2-18 removes): dual feeds + combine
