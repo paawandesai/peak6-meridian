@@ -51,6 +51,7 @@ const querySchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  showTest: z.string().optional(),
 });
 
 type CacheEntry = {
@@ -90,6 +91,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
     const searchParams = request.nextUrl.searchParams;
     const params = querySchema.safeParse({
       date: searchParams.get("date") ?? undefined,
+      showTest: searchParams.get("showTest") ?? undefined,
     });
 
     if (!params.success) {
@@ -105,16 +107,19 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
     const { createReader } = await import("@/lib/chain");
     const { loadPublicConfig } = await import("@/lib/config");
     const { sharedConnection } = await import("@/lib/rpc");
+    const { partitionMarkets } = await import("@/lib/markets");
 
     const config = loadPublicConfig();
     const reader = createReader(config);
     const connection = sharedConnection(config.rpcUrl);
     const programId = new PublicKey(config.programId);
 
-    // Build cache key (use "today" for active date requests)
-    const cacheKey = params.data.date
+    // Build cache key (use "today" for active date requests, include showTest flag)
+    const showTest = params.data.showTest === "1";
+    const dateKey = params.data.date
       ? `status:${parseDateParam(params.data.date)}`
       : "status:today";
+    const cacheKey = showTest ? `${dateKey}:test` : dateKey;
     const now = Date.now();
 
     // Check cache BEFORE any RPC
@@ -156,13 +161,17 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
 
         const dateMarkets = allMarkets.filter((m) => m.tradingDate === tradingDate);
 
-        if (dateMarkets.length === 0) {
+        // P0-1: Filter test markets unless showTest=1
+        const { session, test } = partitionMarkets(dateMarkets);
+        const filteredMarkets = showTest ? [...session, ...test] : session;
+
+        if (filteredMarkets.length === 0) {
           return { s: "ok", date: tradingDate, markets: [] };
         }
 
         // Load status data (vaults + facts)
         const nowSecs = Math.floor(Date.now() / 1000);
-        const statusData = await loadStatusData(connection, dateMarkets, programId, nowSecs);
+        const statusData = await loadStatusData(connection, filteredMarkets, programId, nowSecs);
 
         // Build invariant rows
         const markets: MarketInvariant[] = statusData.markets.map((market) => {
