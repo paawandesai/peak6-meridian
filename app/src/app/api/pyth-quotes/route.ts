@@ -37,6 +37,7 @@ const proFeedSchema = z.object({
   price: z.string().optional(),
   exponent: z.number().int().optional(),
   confidence: z.union([z.string(), z.number()]).optional(),
+  feedUpdateTimestamp: z.union([z.string(), z.number()]).optional(),
 });
 
 const proResponseSchema = z.object({
@@ -80,7 +81,7 @@ async function fetchPythPrice(
       },
       body: JSON.stringify({
         priceFeedIds: [feedId],
-        properties: ["price", "exponent", "confidence"],
+        properties: ["price", "exponent", "confidence", "feedUpdateTimestamp"],
         formats: [],
         channel: "fixed_rate@200ms",
         jsonBinaryEncoding: "hex",
@@ -117,7 +118,10 @@ async function fetchPythPrice(
       ticker,
       price_cents: priceCents,
       conf_cents: confCents,
-      publish_time: Math.floor(Number(data.data.parsed.timestampUs) / 1_000_000),
+      // feedUpdateTimestamp is when the price last changed (the last close after hours).
+      publish_time: Math.floor(
+        Number(feed.feedUpdateTimestamp ?? data.data.parsed.timestampUs) / 1_000_000,
+      ),
       feed_id: String(feedId),
     };
   } catch (error) {
