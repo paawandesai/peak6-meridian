@@ -1,14 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { confirmedStatus, intentButton, priceInput, qtyInput, signButton } from "./support/ui";
 
-// AC1/AC9: Demo wallet tests run with E2E_DEMO_WALLET=1 (devnet setup) or without (localnet).
-// With E2E_DEMO_WALLET=1: full demo wallet flow (connect, fund, trade).
-// Without (default make e2e): verify "Try the demo" is absent (AC9 non-devnet check).
+// AC1/AC9: Demo wallet happy path (connect, fund, trade) runs in `make e2e` with NEXT_PUBLIC_CLUSTER=devnet.
+// AC6 registration guard (absence on non-devnet) is verified by unit tests in storage.test.ts.
 
 test.describe("Demo wallet (M4-07)", () => {
   test("offers demo wallet, connects, funds, and places a trade", async ({ page }) => {
-    test.skip(!process.env.E2E_DEMO_WALLET, "Requires E2E_DEMO_WALLET=1 (devnet setup)");
-
     // Navigate to markets (root page)
     await page.goto("/");
 
@@ -43,15 +40,10 @@ test.describe("Demo wallet (M4-07)", () => {
 
     // AC9: Assert exactly one signature request was made and transaction confirmed
     await expect(confirmedStatus(page)).toBeVisible({ timeout: 10000 });
-    const sigCount = await page.evaluate(() => (window as any).__demoWallet?.signatureCount ?? 0);
+    const sigCount = await page.evaluate(() => {
+      const w = globalThis as typeof globalThis & { __demoWallet?: { signatureCount: number } };
+      return w.__demoWallet?.signatureCount ?? 0;
+    });
     expect(sigCount, "AC9: exactly one auto-signed transaction").toBe(1);
-  });
-
-  test("demo wallet not offered on non-devnet", async ({ page }) => {
-    test.skip(!!process.env.E2E_DEMO_WALLET, "Runs in localnet project (E2E_DEMO_WALLET unset)");
-    // AC9: Verify "Try the demo" is absent when cluster is not devnet (default make e2e: localnet).
-    await page.goto("/");
-    await page.getByRole("button", { name: /connect wallet/i }).click();
-    await expect(page.getByRole("button", { name: /try the demo/i })).not.toBeVisible();
   });
 });

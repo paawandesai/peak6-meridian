@@ -12,7 +12,7 @@ import { DemoWalletBanner } from "./DemoWalletBanner";
 import { ReaderProvider } from "./reader-context";
 import { createReader } from "@/lib/chain";
 import { loadPublicConfig } from "@/lib/config";
-<<<<<<< HEAD
+import { registerDemoWallet } from "@/lib/demo-wallet";
 import { withRateLimitRetry } from "@/lib/rpc";
 
 /** The wallet adapter's connection gets the same 429 backoff as the shared read connection. */
@@ -21,9 +21,6 @@ const WALLET_CONNECTION_CONFIG = {
   disableRetryOnRateLimit: true,
   fetch: withRateLimitRetry((input, init) => fetch(input, init)),
 };
-=======
-import { registerDemoWallet } from "@/lib/demo-wallet";
->>>>>>> 6cf2ef8 (feat(ui): demo wallet for devnet one-click trading (M4-07))
 
 if (typeof window !== "undefined") {
   registerDemoWallet();
