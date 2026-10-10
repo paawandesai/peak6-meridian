@@ -1,8 +1,10 @@
 /**
  * Railway deploy (M2-11): resolves the project BY NAME (a project token names its own project;
  * an account token lists or creates it), ensures the service, sets its variables, points it at
- * services/automation/railway.json, uploads with the Railway CLI, and checks `/health` with the
- * bearer token. Variable values and tokens never reach logs or errors.
+ * the target's railway.json, uploads with the Railway CLI, and checks the target's health path
+ * with the bearer token. Variable values and tokens never reach logs or errors.
+ *
+ * Targets: the automation service (M2-11, the default) and the quant service (M3-08b).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -12,16 +14,49 @@ import {
   RAILWAY_CLI_VERSION,
   collectEnv,
   AUTOMATION_ENV,
+  QUANT_ENV,
   redactSecrets,
   requestJson,
   secretValues,
   type CollectedEnv,
+  type EnvSpec,
   type PlatformDeps,
 } from "./platform";
 
 const API = "https://backboard.railway.com/graphql/v2";
 // Railway resolves the config-as-code path from the repo root and expects a leading slash.
 export const CONFIG_FILE = "/services/automation/railway.json";
+export const QUANT_CONFIG_FILE = "/services/quant/railway.json";
+
+/** What differs between the Railway services this command deploys. */
+export type RailwayTarget = {
+  readonly label: string;
+  readonly configFile: string;
+  readonly envSpec: EnvSpec;
+  readonly healthPath: string;
+  /** Non-secret service variables the build needs, set alongside the collected ones. */
+  readonly fixedVariables: Readonly<Record<string, string>>;
+};
+
+export const AUTOMATION_TARGET: RailwayTarget = {
+  label: "automation",
+  configFile: CONFIG_FILE,
+  envSpec: AUTOMATION_ENV,
+  healthPath: "/health",
+  fixedVariables: {},
+};
+
+/**
+ * The repo root holds Cargo.toml, so Railpack would detect Rust; RAILPACK_CONFIG_FILE points it
+ * at services/quant/railpack.json (Python provider, pinned uv) instead.
+ */
+export const QUANT_TARGET: RailwayTarget = {
+  label: "quant",
+  configFile: QUANT_CONFIG_FILE,
+  envSpec: QUANT_ENV,
+  healthPath: "/health",
+  fixedVariables: { RAILPACK_CONFIG_FILE: "services/quant/railpack.json" },
+};
 
 export type RailwayOptions = {
   readonly token: string;
@@ -31,6 +66,8 @@ export type RailwayOptions = {
   readonly repoRoot: string;
   readonly healthAttempts?: number;
   readonly healthIntervalMs?: number;
+  /** Which service to deploy; the automation service when absent (M2-11 behaviour). */
+  readonly target?: RailwayTarget;
 };
 
 export type RailwayRun = (
@@ -48,7 +85,7 @@ const edges = (value: unknown): Json[] => {
 };
 
 export function planRailway(options: RailwayOptions): CollectedEnv {
-  return collectEnv(AUTOMATION_ENV, options.env);
+  return collectEnv((options.target ?? AUTOMATION_TARGET).envSpec, options.env);
 }
 
 type Gql = (label: string, query: string, variables: Json) => Promise<Json>;
@@ -181,25 +218,26 @@ async function ensureDomain(gql: Gql, target: Target, serviceId: string): Promis
   return domain;
 }
 
-/** GET `/health` with the bearer; a bounded number of attempts, spaced out. */
+/** GET the health path (`/health`) with the bearer; a bounded number of attempts, spaced out. */
 export async function checkHealth(
   deps: PlatformDeps,
   url: string,
   serviceToken: string,
   attempts: number,
   intervalMs: number,
+  healthPath = "/health",
 ): Promise<void> {
   let lastStatus = 0;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await deps.fetch(`${url}/health`, {
+      const response = await deps.fetch(`${url}${healthPath}`, {
         method: "GET",
         headers: { Authorization: `Bearer ${serviceToken}` },
         signal: AbortSignal.timeout(30_000),
       });
       lastStatus = response.status;
       if (response.status === 200) {
-        deps.log(`railway: ${url}/health reachable with bearer (200)`);
+        deps.log(`railway: ${url}${healthPath} reachable with bearer (200)`);
         return;
       }
     } catch {
@@ -208,7 +246,7 @@ export async function checkHealth(
     if (attempt < attempts) await deps.sleep(intervalMs);
   }
   throw new Error(
-    `railway: ${url}/health not healthy after ${attempts} attempts (last status ${lastStatus})`,
+    `railway: ${url}${healthPath} not healthy after ${attempts} attempts (last status ${lastStatus})`,
   );
 }
 
@@ -216,8 +254,8 @@ export async function checkHealth(
  * Railway rejects `railwayConfigFile` now that Config as Code is deprecated, so the settings in
  * railway.json (still the source of truth) are applied directly as service instance fields.
  */
-export function serviceSettings(repoRoot: string): Json {
-  const config = asRecord(JSON.parse(readFileSync(join(repoRoot, CONFIG_FILE), "utf8")));
+export function serviceSettings(repoRoot: string, configFile: string = CONFIG_FILE): Json {
+  const config = asRecord(JSON.parse(readFileSync(join(repoRoot, configFile), "utf8")));
   const build = asRecord(config.build);
   const deploy = asRecord(config.deploy);
   const input: Json = {};
@@ -230,6 +268,7 @@ export function serviceSettings(repoRoot: string): Json {
   if (typeof deploy.restartPolicyMaxRetries === "number") {
     input.restartPolicyMaxRetries = deploy.restartPolicyMaxRetries;
   }
+  if (typeof deploy.healthcheckPath === "string") input.healthcheckPath = deploy.healthcheckPath;
   return input;
 }
 
@@ -238,9 +277,11 @@ export async function deployRailway(
   options: RailwayOptions,
   run: RailwayRun,
 ): Promise<{ readonly url: string }> {
+  const railwayTarget = options.target ?? AUTOMATION_TARGET;
   const collected = planRailway(options);
   assertComplete("railway", collected);
   const secrets = secretValues([options.token], collected);
+  const variables = { ...collected.values, ...railwayTarget.fixedVariables };
   const { target, gql } = await resolveTarget(deps, options, secrets);
   const serviceId = await ensureService(gql, target, options.serviceName);
 
@@ -252,19 +293,23 @@ export async function deployRailway(
         projectId: target.projectId,
         environmentId: target.environmentId,
         serviceId,
-        variables: collected.values,
+        variables,
       },
     },
   );
   deps.log(
-    `railway: set ${Object.keys(collected.values).length} variables: ${Object.keys(collected.values).join(", ")}`,
+    `railway: set ${Object.keys(variables).length} variables: ${Object.keys(variables).join(", ")}`,
   );
   await gql(
     "serviceInstanceUpdate",
     `mutation($serviceId: String!, $environmentId: String!, $input: ServiceInstanceUpdateInput!) {
        serviceInstanceUpdate(serviceId: $serviceId, environmentId: $environmentId, input: $input)
      }`,
-    { serviceId, environmentId: target.environmentId, input: serviceSettings(options.repoRoot) },
+    {
+      serviceId,
+      environmentId: target.environmentId,
+      input: serviceSettings(options.repoRoot, railwayTarget.configFile),
+    },
   );
   const domain = await ensureDomain(gql, target, serviceId);
 
@@ -300,6 +345,7 @@ export async function deployRailway(
       collected.values.SERVICE_TOKEN ?? "",
       options.healthAttempts ?? 3,
       options.healthIntervalMs ?? 120_000,
+      railwayTarget.healthPath,
     );
   } catch (error) {
     await logRecentDeployLogs(deps, gql, target, serviceId, secrets);

@@ -24,6 +24,18 @@ describe("AB-16 locked dependencies", () => {
     expect(readRepoFile(".gitlab-ci.yml")).toMatch(/^ {4}- make audit$/m);
   });
 
+  it("the quant Railway build installs from uv.lock with a pinned uv (M3-08b)", () => {
+    const railway = JSON.parse(readRepoFile("services/quant/railway.json")) as {
+      build: { buildCommand: string };
+    };
+    expect(railway.build.buildCommand).toMatch(/^uv sync --locked /);
+    expect(railway.build.buildCommand).toContain("--no-dev");
+    const railpack = JSON.parse(readRepoFile("services/quant/railpack.json")) as {
+      packages: Record<string, string>;
+    };
+    expect(railpack.packages.uv).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
   it("deploy never runs an unpinned npx package (M2-11)", () => {
     const sources = trackedFiles().filter(
       (file) =>

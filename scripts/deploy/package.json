@@ -11,6 +11,7 @@
     "test:deploy": "vitest run --config vitest.deploy.config.ts",
     "deploy-devnet": "tsx --env-file-if-exists=../../.env src/deploy-devnet.ts",
     "deploy-platform": "tsx --env-file-if-exists=../../.env src/deploy-platform.ts",
+    "deploy-quant": "tsx --env-file-if-exists=../../.env src/deploy-platform.ts railway-quant",
     "migrate-config": "tsx --env-file-if-exists=../../.env ../migrate-config.ts",
     "rehearsal-smoke": "tsx src/rehearsal-smoke.ts"
   },

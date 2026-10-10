@@ -88,6 +88,34 @@ export const AUTOMATION_ENV: EnvSpec = {
   optional: ["ALERT_WEBHOOK_URL", "OPS_AGENT_URL", "PYTH_API_TOKEN"],
 };
 
+/**
+ * Variables the quant service (fair values + market maker, `python -m meridian_quant.mm.main`)
+ * needs on Railway (M3-08b; services/quant/src/meridian_quant/mm/{main,config}.py).
+ * Secret: MARKET_MAKER_KEYPAIR, SERVICE_TOKEN, FINNHUB_API_KEY, TIINGO_API_KEY, SOLANA_RPC_URL
+ * (a provider URL carries its API key), PYTH_API_TOKEN, MERIDIAN_DEVNET_RPC_URL, SOLANA_WS_URL.
+ * Like every target, ALL values are redacted from logs and errors; only names are printed.
+ * PYTH_API_TOKEN is optional but recommended: Pyth Pro is the primary spot source and Finnhub
+ * (free tier, ~60 calls/min) only the per-ticker fallback.
+ */
+export const QUANT_ENV: EnvSpec = {
+  required: [
+    "MARKET_MAKER_KEYPAIR",
+    "MERIDIAN_PROGRAM_ID",
+    "USDC_MINT",
+    "SERVICE_TOKEN",
+    "FINNHUB_API_KEY",
+    "TIINGO_API_KEY",
+    "SOLANA_RPC_URL",
+    "SOLANA_CLUSTER",
+  ],
+  optional: [
+    "PYTH_API_TOKEN",
+    "MERIDIAN_DEMO_ALLOW_STALE_SPOT",
+    "MERIDIAN_DEVNET_RPC_URL",
+    "SOLANA_WS_URL",
+  ],
+};
+
 export type CollectedEnv = {
   readonly values: Readonly<Record<string, string>>;
   readonly missingRequired: readonly string[];

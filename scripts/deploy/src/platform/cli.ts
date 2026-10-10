@@ -1,4 +1,4 @@
-import { deployRailway, planRailway, type RailwayRun } from "./railway";
+import { deployRailway, planRailway, QUANT_TARGET, type RailwayRun } from "./railway";
 import type { PlatformDeps } from "./platform";
 import { deployVercel, planVercel, type VercelRun } from "./vercel";
 
@@ -7,7 +7,11 @@ export type CliDeps = PlatformDeps & {
   readonly run: VercelRun & RailwayRun;
 };
 
-const USAGE = "usage: deploy-platform <vercel|railway> [--dry-run]\n";
+const USAGE = "usage: deploy-platform <vercel|railway|railway-quant> [--dry-run]\n";
+const TARGETS = ["vercel", "railway", "railway-quant"] as const;
+type Target = (typeof TARGETS)[number];
+const isTarget = (value: string | undefined): value is Target =>
+  TARGETS.some((target) => target === value);
 
 /** Returns the process exit code. `--dry-run` prints the plan (variable names only), no network. */
 export async function runPlatformCli(
@@ -17,7 +21,7 @@ export async function runPlatformCli(
 ): Promise<number> {
   const [target, ...flags] = argv;
   const dryRun = flags.includes("--dry-run");
-  if ((target !== "vercel" && target !== "railway") || flags.some((flag) => flag !== "--dry-run")) {
+  if (!isTarget(target) || flags.some((flag) => flag !== "--dry-run")) {
     deps.log(USAGE.trimEnd());
     return 2;
   }
@@ -40,6 +44,7 @@ export async function runPlatformCli(
     deps.log(`app URL: ${result.url}`);
     return 0;
   }
+  if (target === "railway-quant") return railwayQuant(env, projectName, dryRun, deps);
   const options = {
     token: env.RAILWAY_TOKEN ?? "",
     projectName: env.RAILWAY_PROJECT_NAME ?? projectName,
@@ -51,6 +56,33 @@ export async function runPlatformCli(
   if (options.token === "") return fail("RAILWAY_TOKEN is not set", deps);
   const result = await deployRailway(deps, options, deps.run);
   deps.log(`automation URL: ${result.url}`);
+  return 0;
+}
+
+/** M3-08b: the quant service (GET /fair-values, GET /health, market maker) as service `quant`. */
+async function railwayQuant(
+  env: Readonly<Record<string, string | undefined>>,
+  projectName: string,
+  dryRun: boolean,
+  deps: CliDeps,
+): Promise<number> {
+  const options = {
+    token: env.RAILWAY_TOKEN ?? "",
+    projectName: env.RAILWAY_PROJECT_NAME ?? projectName,
+    serviceName: env.RAILWAY_QUANT_SERVICE_NAME ?? QUANT_TARGET.label,
+    env,
+    repoRoot: deps.repoRoot,
+    target: QUANT_TARGET,
+  };
+  if (dryRun) {
+    deps.log(
+      `railway-quant: service ${options.serviceName}, config ${QUANT_TARGET.configFile}, health ${QUANT_TARGET.healthPath}`,
+    );
+    return report("railway-quant", planRailway(options), options.token, deps);
+  }
+  if (options.token === "") return fail("RAILWAY_TOKEN is not set", deps);
+  const result = await deployRailway(deps, options, deps.run);
+  deps.log(`quant URL: ${result.url} (set QUANT_URL on the Vercel app to this URL)`);
   return 0;
 }
 
