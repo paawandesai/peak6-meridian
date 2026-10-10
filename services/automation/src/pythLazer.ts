@@ -237,7 +237,7 @@ export function priceCents(p: PythPayload): bigint {
 
 // ---- REST ----------------------------------------------------------------------------------
 
-export type HttpPost = (
+export type LazerHttpPost = (
   url: string,
   init: {
     readonly headers: Record<string, string>;
@@ -251,7 +251,7 @@ const priceResponseSchema = z.object({
 });
 
 export interface FetchSignedParams {
-  readonly post: HttpPost;
+  readonly post: LazerHttpPost;
   readonly token: string;
   readonly baseUrl: string;
   readonly feedId: number;

@@ -5,7 +5,7 @@ import {
   checkSignedClose,
   confidenceBps,
   fetchSignedPrice,
-  type HttpPost,
+  type LazerHttpPost,
   parsePythPayload,
   parseSolanaMessage,
   priceCents,
@@ -237,14 +237,14 @@ describe("fetchSignedPrice (Pyth Lazer REST, no network)", () => {
     }),
   );
 
-  function replying(status: number, body: unknown, seen: unknown[] = []): HttpPost {
+  function replying(status: number, body: unknown, seen: unknown[] = []): LazerHttpPost {
     return (url, init) => {
       seen.push({ url, init });
       return Promise.resolve({ status, json: () => Promise.resolve(body) });
     };
   }
 
-  const params = (post: HttpPost) => ({
+  const params = (post: LazerHttpPost) => ({
     post,
     token: TOKEN,
     baseUrl: "https://lazer.test",
@@ -253,7 +253,7 @@ describe("fetchSignedPrice (Pyth Lazer REST, no network)", () => {
   });
 
   it("asks for the solana update at the timestamp with a bearer token and decodes it", async () => {
-    const seen: { url: string; init: Parameters<HttpPost>[1] }[] = [];
+    const seen: { url: string; init: Parameters<LazerHttpPost>[1] }[] = [];
     const hex = Buffer.from(message).toString("hex");
     const update = await fetchSignedPrice(
       params(replying(200, { solana: { encoding: "hex", data: hex } }, seen)),
@@ -289,7 +289,7 @@ describe("fetchSignedPrice (Pyth Lazer REST, no network)", () => {
   });
 
   it("times out", async () => {
-    const hang: HttpPost = (_url, init) =>
+    const hang: LazerHttpPost = (_url, init) =>
       new Promise((_resolve, reject) => {
         init.signal.addEventListener("abort", () => reject(new Error("aborted")));
       });

@@ -10,6 +10,10 @@
 # `scripts/e2e.sh --dev` (make dev) stops after seeding the config and markets and then runs the
 # app until interrupted; the validator stays up on :8899.
 #
+# `scripts/e2e.sh --pyth` runs tests/e2e/src/pyth-settle.ts instead of the lifecycle: Pyth Lazer
+# settlement from a real signed update. It calls the live Pyth API with PYTH_API_TOKEN from the
+# repo-root .env, so it is a manual check and not part of `make e2e`.
+#
 # Environment (all optional):
 #   E2E_PAYER_KEYPAIR  existing payer keypair file; a throwaway one is created when unset/missing
 #   E2E_RPC_PORT       validator RPC port (default 8899; the websocket port is this plus one)
@@ -23,6 +27,8 @@ set -euo pipefail
 MODE="e2e"
 if [ "${1:-}" = "--dev" ]; then
   MODE="dev"
+elif [ "${1:-}" = "--pyth" ]; then
+  MODE="pyth"
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -142,6 +148,12 @@ if [ "$MODE" = "dev" ]; then
   log "validator $RPC_URL, program $PROGRAM_ID, USDC mint $USDC_MINT"
   log "starting the app on http://localhost:3000 (Ctrl-C stops the app and the validator)"
   pnpm --filter app dev
+  exit 0
+fi
+
+if [ "$MODE" = "pyth" ]; then
+  pnpm --filter e2e run pyth-settle
+  log "PASS"
   exit 0
 fi
 

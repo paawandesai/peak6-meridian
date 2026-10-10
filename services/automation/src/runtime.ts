@@ -19,7 +19,7 @@ import { createIncidentClient } from "./incidents";
 import { consoleLogger } from "./log";
 import { fetchPrevClose, type HttpGet } from "./prevCloses";
 import { connectionExecutor } from "./executor";
-import { fetchSignedPrice, type HttpPost } from "./pythLazer";
+import { fetchSignedPrice, type LazerHttpPost } from "./pythLazer";
 import {
   buildPythSettleInstructions,
   createPythSettler,
@@ -38,7 +38,7 @@ import {
 
 const httpGet: HttpGet = (url, init) =>
   fetch(url, { headers: { ...init.headers }, signal: init.signal });
-const httpPost: HttpPost = (url, init) =>
+const httpPost: LazerHttpPost = (url, init) =>
   fetch(url, { method: "POST", headers: init.headers, body: init.body, signal: init.signal });
 
 /** A keypair file (JSON array of 64 bytes). Errors never include the path or the content. */
