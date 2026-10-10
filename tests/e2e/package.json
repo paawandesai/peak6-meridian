@@ -11,7 +11,7 @@
     "rehearsal": "tsx --env-file-if-exists=../../.env src/lifecycle.ts --cluster devnet",
     "coverage-window": "tsx --env-file-if-exists=../../.env src/coverage-window.ts",
     "settlement-evidence": "tsx --env-file-if-exists=../../.env src/settlement-evidence.ts",
-    "test:ui": "playwright test --grep-invert '03-trade-evidence'",
+    "test:ui": "playwright test",
     "test:evidence": "mkdir -p playwright-report/evidence && playwright test --config playwright-evidence.config.ts"
   },
   "dependencies": {
