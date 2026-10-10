@@ -21,6 +21,15 @@ Replay measurements (77 markets, 100 ms per RPC call):
     0.4 s             2   2311          796          323.5        121.7
     0.8 s             3   2696          796          245.2        121.7
     1.5 s             4   3081          1196         207.6         96.9
+
+P1-MM-REQUOTE (per-market requote) trades the batched balance and quote-phase Book reads for
+one balance read and one Book read per market (fresh just before that market's place):
++2 reads per market, still under half of the pre-P1-7 calls (same harness):
+
+    confirm latency   p   before/iter   after/iter   share of before
+    0.4 s             2   2311          947          41%
+    0.8 s             3   2696          947          35%
+    1.5 s             4   3081          1347         44%
 """
 
 import json
@@ -141,11 +150,11 @@ async def test_ac_rpc_calls_per_iteration_down_at_least_half(
     # Same trading work as before P1-7: every market cancelled, settled and re-quoted.
     assert rpc.calls["sendTransaction"] == TX_PER_MARKET * N_MARKETS
     assert loop.book_coverage == 1.0
-    # Reads are batched: 1 gPA + 3 Book batches (cancel, quote, coverage) + 2 balance batches.
+    # 1 gPA; 2 batched Book reads (cancel listing, coverage); and, since P1-MM-REQUOTE
+    # requotes market by market, 2 single-market reads per market (balances after its settle,
+    # Book just before its place).
     assert rpc.calls["getProgramAccounts"] == 1
-    assert rpc.calls["getMultipleAccounts"] == 3 * math.ceil(N_MARKETS / 100) + math.ceil(
-        2 * N_MARKETS / 100
-    )
+    assert rpc.calls["getMultipleAccounts"] == 2 * math.ceil(N_MARKETS / 100) + 2 * N_MARKETS
     assert rpc.calls["getAccountInfo"] == 0
     assert rpc.calls["getTokenAccountBalance"] == 0
     assert max(rpc.gma_batch_sizes) <= MAX_MULTIPLE_ACCOUNTS
@@ -566,7 +575,8 @@ async def test_loop_coverage_zero_when_a_book_is_unreadable(
     async def fail_coverage(*args: object, **kwargs: object) -> FakeResp:
         nonlocal calls
         calls += 1
-        if calls == 5:  # cancel books, balances x2, quote books, then coverage books
+        # cancel-listing books, then balances + books per market, then coverage books
+        if calls == 2 + 2 * N_MARKETS:
             raise ConnectionError("RPC down")
         return await real(*args, **kwargs)  # type: ignore[arg-type]
 
