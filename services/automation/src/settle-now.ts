@@ -2,7 +2,7 @@
  * `pnpm --filter automation settle-now --payer <keypair path> [--date YYYY-MM-DD]`
  * Settles every open, closed market with any funded keypair (see `settleNow.ts`). Environment:
  * SOLANA_CLUSTER (localnet|devnet), SOLANA_RPC_URL, MERIDIAN_PROGRAM_ID, TIINGO_API_KEY,
- * TWELVEDATA_API_KEY; on localnet also ADMIN_KEYPAIR_PATH (the Config admin, signs the test-only
+ * TWELVEDATA_API_KEY, optionally SETTLE_MAX_API_CALLS_PER_RUN; on localnet also ADMIN_KEYPAIR_PATH (the Config admin, signs the test-only
  * local oracle). The keypair path is never printed.
  */
 import { MERIDIAN_PROGRAM_ID } from "@meridian/client";
@@ -22,6 +22,7 @@ const env = z
     TWELVEDATA_API_KEY: z.string().min(1),
     ADMIN_KEYPAIR_PATH: z.string().optional(),
     ALERT_WEBHOOK_URL: z.string().optional(),
+    SETTLE_MAX_API_CALLS_PER_RUN: z.coerce.number().int().min(4).max(100).optional(),
   })
   .parse({
     ...process.env,
@@ -56,9 +57,12 @@ settleNow({
     ),
   now: () => new Date(),
   out: (line) => console.log(line),
+  ...(env.SETTLE_MAX_API_CALLS_PER_RUN === undefined
+    ? {}
+    : { maxApiCallsPerRun: env.SETTLE_MAX_API_CALLS_PER_RUN }),
 })
   .then((result) => {
-    process.exit(result.failed === 0 ? 0 : 1);
+    process.exit(result.failed === 0 && result.deferred === 0 ? 0 : 1);
   })
   .catch((error: unknown) => {
     // Messages are built never to contain the RPC URL, the key path or any key material.

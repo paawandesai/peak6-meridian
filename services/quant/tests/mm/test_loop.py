@@ -728,17 +728,35 @@ async def test_missing_ata_vs_rpc_timeout(mm_config: MMConfig) -> None:
                 return 0
             return await super().get_no_token_balance(market, owner)
 
+        async def get_multiple_token_balances(
+            self, markets: list[str], owner: str
+        ) -> dict[str, tuple[int, int]]:
+            """Batch-fetch balances, but inject errors for tests (P1-7)."""
+            if self.simulate_rpc_timeout:
+                raise Exception("RPC timeout")
+            # Simulate missing ATA only on first read (before mint)
+            if self.simulate_missing_ata_initial and self._first_balance_read:
+                self._first_balance_read = False
+                return {market: (0, 0) for market in markets}
+            return await super().get_multiple_token_balances(markets, owner)
+
         async def mint_pair(self, market: str, qty: int, owner: str) -> None:
             self.mint_called = True
             if self.simulate_rpc_timeout:
                 raise Exception("RPC timeout")
             await super().mint_pair(market, qty, owner)
 
-        async def place_order(
-            self, market: str, side: str, price: int, qty: int, owner: str
+        async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+            self,
+            market: str,
+            side: str,
+            price: int,
+            qty: int,
+            owner: str,
+            resting_orders: list[RestingOrder] | None = None,
         ) -> int:
             self.place_called = True
-            return await super().place_order(market, side, price, qty, owner)
+            return await super().place_order(market, side, price, qty, owner, resting_orders)
 
     # Test 2a: Missing ATA (balance=0) should still mint and place
     # Use today's trading date (ET timezone)
@@ -885,11 +903,17 @@ async def test_fetch_resting_orders_failure_skips_quoting(
                 raise Exception("Simulated RPC error on market A")
             return await super().fetch_resting_orders(market)
 
-        async def place_order(
-            self, market: str, side: str, price: int, qty: int, owner: str
+        async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+            self,
+            market: str,
+            side: str,
+            price: int,
+            qty: int,
+            owner: str,
+            resting_orders: list[RestingOrder] | None = None,
         ) -> int:
             self.place_calls.append(market)
-            return await super().place_order(market, side, price, qty, owner)
+            return await super().place_order(market, side, price, qty, owner, resting_orders)
 
     order_client = PartialFailWithLeftoversClient()
     mm = MarketMakerLoop(mm_config, market_source, fv_source, order_client, clock=fake_clock)
@@ -1017,11 +1041,17 @@ async def test_cancel_fetch_failure_per_market_isolation(
             self.cancel_calls.append(market)
             await super().cancel_order(market, order_id, owner)
 
-        async def place_order(
-            self, market: str, side: str, price: int, qty: int, owner: str
+        async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+            self,
+            market: str,
+            side: str,
+            price: int,
+            qty: int,
+            owner: str,
+            resting_orders: list[RestingOrder] | None = None,
         ) -> int:
             self.place_calls.append(market)
-            return await super().place_order(market, side, price, qty, owner)
+            return await super().place_order(market, side, price, qty, owner, resting_orders)
 
     order_client = PartialFailWithLeftoversClient()
     mm = MarketMakerLoop(mm_config, market_source, fv_source, order_client, clock=fake_clock)
@@ -1090,3 +1120,100 @@ def test_invalid_keypair_wrong_length() -> None:
             fair_value_source=FakeFairValueSource(),
             order_client=FakeOrderClient(),
         )
+
+
+@pytest.mark.asyncio
+async def test_weekend_demo_session_is_quoted_when_today_has_closed(mm_config: MMConfig) -> None:
+    """Saturday: today's markets are past close, Sunday demo markets are live (session.py).
+
+    The MM must not pull everything because of today's closed markets, must quote the demo
+    session, and must still leave today's closed market alone (place_order would fail).
+    """
+    now = datetime(2026, 10, 10, 16, 0, tzinfo=UTC)  # Sat 12:00 ET
+
+    def fake_clock() -> datetime:
+        return now
+
+    closed_today = MarketState(
+        market=TEST_MARKET_PUBKEY,
+        ticker="AAPL",
+        strike_cents=34000,
+        trading_date=20261010,
+        close_ts=int((now - timedelta(hours=6)).timestamp()),
+        is_open=True,
+        pairs_outstanding=0,
+    )
+    demo = MarketState(
+        market="AAPL_20261011_34000",
+        ticker="AAPL",
+        strike_cents=34000,
+        trading_date=20261011,
+        close_ts=int((now + timedelta(hours=32)).timestamp()),
+        is_open=True,
+        pairs_outstanding=0,
+    )
+    fair_values = [
+        FairValue(
+            market=demo.market,
+            ticker="AAPL",
+            strike_cents=34000,
+            fair_cents=45,
+            sigma=0.2,
+            spot=336.06,
+            as_of=now,
+        )
+    ]
+    order_client = FakeOrderClient()
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource([closed_today, demo]),
+        fair_value_source=FakeFairValueSource(fair_values),
+        order_client=order_client,
+        clock=fake_clock,
+    )
+    mm_owner = str(mm.keypair.pubkey())
+    order_client.set_yes_balance(demo.market, mm_owner, 50)
+    order_client.set_no_balance(demo.market, mm_owner, 50)
+
+    await mm._run_once()
+
+    demo_orders = [
+        o for o in await order_client.fetch_resting_orders(demo.market) if o.owner == mm_owner
+    ]
+    assert sorted(o.side for o in demo_orders) == ["Ask", "Bid"]
+    closed_orders = await order_client.fetch_resting_orders(closed_today.market)
+    assert [o for o in closed_orders if o.owner == mm_owner] == []
+    assert mm.book_coverage == 1.0
+
+
+@pytest.mark.asyncio
+async def test_demo_session_near_close_still_pulls(mm_config: MMConfig) -> None:
+    """The 2-minute pull applies to the demo session exactly as to a real one."""
+    now = datetime(2026, 10, 10, 16, 0, tzinfo=UTC)
+    demo = MarketState(
+        market="AAPL_20261011_34000",
+        ticker="AAPL",
+        strike_cents=34000,
+        trading_date=20261011,
+        close_ts=int((now + timedelta(seconds=60)).timestamp()),
+        is_open=True,
+        pairs_outstanding=0,
+    )
+    fv = FairValue(
+        market=demo.market,
+        ticker="AAPL",
+        strike_cents=34000,
+        fair_cents=45,
+        sigma=0.2,
+        spot=336.06,
+        as_of=now,
+    )
+    order_client = FakeOrderClient()
+    mm = MarketMakerLoop(
+        mm_config,
+        market_source=FakeMarketSource([demo]),
+        fair_value_source=FakeFairValueSource([fv]),
+        order_client=order_client,
+        clock=lambda: now,
+    )
+    assert mm._should_pull_all_quotes([fv], [demo]) is True

@@ -5,6 +5,12 @@
  *
  * HTTP is injected so tests run on fixtures only. API keys travel in headers, never in URLs, so
  * URLs and error messages are safe to log.
+ *
+ * The sources are asked one after the other (Tiingo first): when Tiingo fails, the answer is an
+ * error whatever Twelve Data says, so Twelve Data (the scarcer quota, 8/min and 800/day on the
+ * free tier) is not asked at all. A rate limit (HTTP 429, or Twelve Data's `code: 429` body) is
+ * reported as `rateLimit` on the error, with the `Retry-After` header if the source sent one, so
+ * callers can back off instead of retrying (#53).
  */
 import { z } from "zod";
 
@@ -16,6 +22,8 @@ export type Source = "tiingo" | "twelvedata";
 /** The subset of a fetch `Response` this module reads. */
 export interface HttpResponse {
   readonly status: number;
+  /** Response headers (fetch's `Headers`); optional so simple fakes can omit them. */
+  readonly headers?: { get(name: string): string | null };
   text(): Promise<string>;
 }
 
@@ -58,6 +66,13 @@ export interface PrevCloseError {
   /** The failing source; absent when both answered but disagree. */
   readonly source?: Source;
   readonly message: string;
+  /** Present when the source rate-limited the request (HTTP 429 or Twelve Data's code 429). */
+  readonly rateLimit?: RateLimitInfo;
+}
+
+export interface RateLimitInfo {
+  /** The raw `Retry-After` header, when the source sent one (seconds or an HTTP date). */
+  readonly retryAfter: string | null;
 }
 
 export type PrevCloseResult =
@@ -97,16 +112,26 @@ export async function fetchPrevClose(
     ok: false,
     error: { kind, ticker, date, message, ...(source === undefined ? {} : { source }) },
   });
+  const failFrom = (result: FailedSource): PrevCloseResult => ({
+    ok: false,
+    error: {
+      kind: result.kind,
+      ticker,
+      date,
+      message: result.message,
+      source: result.source,
+      ...(result.rateLimit === undefined ? {} : { rateLimit: result.rateLimit }),
+    },
+  });
 
-  const [tiingo, twelve] = await Promise.all([
-    fetchTiingo(deps, ticker, date),
-    fetchTwelveData(deps, ticker, date),
-  ]);
+  // Sequential on purpose: a failed Tiingo answer decides the result, so Twelve Data is spared.
+  const tiingo = await fetchTiingo(deps, ticker, date);
   if (!tiingo.ok) {
-    return fail(tiingo.kind, tiingo.message, tiingo.source);
+    return failFrom(tiingo);
   }
+  const twelve = await fetchTwelveData(deps, ticker, date);
   if (!twelve.ok) {
-    return fail(twelve.kind, twelve.message, twelve.source);
+    return failFrom(twelve);
   }
 
   const a = tiingo.value.closeCents;
@@ -147,14 +172,18 @@ export function meanHalfUp(a: number, b: number): number {
   return Number((BigInt(a) + BigInt(b) + 1n) / 2n);
 }
 
-type SourceResult =
-  | { readonly ok: true; readonly value: SourceClose }
-  | {
-      readonly ok: false;
-      readonly kind: PrevCloseErrorKind;
-      readonly source: Source;
-      readonly message: string;
-    };
+interface FailedSource {
+  readonly ok: false;
+  readonly kind: PrevCloseErrorKind;
+  readonly source: Source;
+  readonly message: string;
+  readonly rateLimit?: RateLimitInfo;
+}
+
+type SourceResult = { readonly ok: true; readonly value: SourceClose } | FailedSource;
+
+/** Twelve Data reports "out of API credits" as HTTP 200 with `code: 429` in the body. */
+const RATE_LIMIT_STATUS = 429;
 
 async function fetchTiingo(
   deps: PrevClosesDeps,
@@ -202,6 +231,7 @@ async function fetchTwelveData(
       kind: "source_unavailable",
       source,
       message: `api error ${String(parsed.data.code)}: ${parsed.data.message}`,
+      ...(parsed.data.code === RATE_LIMIT_STATUS ? { rateLimit: { retryAfter: null } } : {}),
     };
   }
   const bar = parsed.data.values.find((row) => row.datetime.slice(0, 10) === date);
@@ -228,8 +258,7 @@ function toSourceClose(
   return { ok: true, value: { source, date, closeCents } };
 }
 
-type JsonResult =
-  { readonly ok: true; readonly value: unknown } | Extract<SourceResult, { readonly ok: false }>;
+type JsonResult = { readonly ok: true; readonly value: unknown } | FailedSource;
 
 async function getJson(
   deps: PrevClosesDeps,
@@ -250,6 +279,9 @@ async function getJson(
         kind: "source_unavailable",
         source,
         message: `HTTP ${String(response.status)} from ${url}`,
+        ...(response.status === RATE_LIMIT_STATUS
+          ? { rateLimit: { retryAfter: response.headers?.get("retry-after") ?? null } }
+          : {}),
       };
     }
     text = await response.text();

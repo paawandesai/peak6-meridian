@@ -2,7 +2,7 @@ import { BN } from "@coral-xyz/anchor";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { describe, expect, it, vi } from "vitest";
 
-import { decodeBook, fetchOpenTime } from "./reader";
+import { decodeBook, decodeSnapshot, fetchOpenTime, splAmount } from "./reader";
 
 const slot = (price: number, qty: number, owner: PublicKey) => ({
   orderId: { toString: () => String(price) },
@@ -123,5 +123,66 @@ describe("getWallet OpenOrders decode (P0-4)", () => {
     expect(mockCoder.decode).toHaveBeenCalledWith("openOrders", expect.any(Buffer));
     expect(freeUsdc).toBe(500n);
     expect(freeYes).toBe(300n);
+  });
+});
+
+describe("decodeSnapshot (P0-7: book + vault in one read)", () => {
+  const owner = Keypair.generate().publicKey;
+  const rawBook = { bids: [slot(58, 30, owner)], asks: [slot(61, 40, owner)] };
+  const vaultData = (amount: bigint): Buffer => {
+    const data = Buffer.alloc(165);
+    data.writeBigUInt64LE(amount, 64);
+    return data;
+  };
+  const info = (data: Uint8Array) => ({ data });
+  const decoder = (market: unknown = { pairsOutstanding: new BN(1240) }) =>
+    vi.fn((name: "book" | "market") => (name === "book" ? rawBook : market));
+
+  it("decodes the book, pairs outstanding and the vault balance from one call", () => {
+    const decode = decoder();
+    const snap = decodeSnapshot(
+      [info(Buffer.alloc(8)), info(new Uint8Array(8)), info(vaultData(1_240_000_000n))],
+      decode,
+      1_000,
+    );
+    expect(snap.book.bids).toHaveLength(1);
+    expect(snap.vault).toEqual({ pairs: 1240n, balance: 1_240_000_000n, asOfSecs: 1_000 });
+    expect(decode).toHaveBeenCalledWith("book", expect.any(Buffer));
+    expect(decode).toHaveBeenCalledWith("market", expect.any(Buffer));
+  });
+
+  it("fails loudly when the book account is missing", () => {
+    expect(() => decodeSnapshot([null, null, null], decoder(), 1)).toThrow(
+      "book account not found",
+    );
+  });
+
+  it("a missing vault or market reads as unavailable (null), never zero", () => {
+    const snap = decodeSnapshot([info(Buffer.alloc(8)), null, null], decoder(), 1);
+    expect(snap.vault).toEqual({ pairs: null, balance: null, asOfSecs: 1 });
+  });
+
+  it("an undecodable market or a short vault reads as unavailable", () => {
+    const throwing = vi.fn((name: "book" | "market") => {
+      if (name === "market") throw new Error("bad discriminator");
+      return rawBook;
+    });
+    const snap = decodeSnapshot(
+      [info(Buffer.alloc(8)), info(Buffer.alloc(8)), info(Buffer.alloc(10))],
+      throwing,
+      1,
+    );
+    expect(snap.vault.pairs).toBeNull();
+    expect(snap.vault.balance).toBeNull();
+    expect(
+      decodeSnapshot([info(Buffer.alloc(8)), info(Buffer.alloc(8)), null], decoder({}), 1).vault
+        .pairs,
+    ).toBeNull();
+  });
+
+  it("splAmount reads u64 LE at offset 64 from a Buffer or a Uint8Array", () => {
+    expect(splAmount(vaultData(42n))).toBe(42n);
+    expect(splAmount(new Uint8Array(vaultData(7n)))).toBe(7n);
+    expect(splAmount(undefined)).toBeNull();
   });
 });

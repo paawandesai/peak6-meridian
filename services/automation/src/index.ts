@@ -15,6 +15,7 @@ export * from "./runtime";
 export * from "./service";
 export * from "./settleChain";
 export * from "./settleNow";
+export * from "./settlePacing";
 export * from "./settleTx";
 export * from "./state";
 export * from "./strikes";

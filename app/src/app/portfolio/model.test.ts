@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import { AAPL, fill, held, MSFT, NVDA, OTHER, snapshot, WALLET } from "./fixtures";
@@ -204,9 +205,71 @@ describe("buildPortfolio", () => {
         ],
       }),
     );
-    expect(model.mm.strikes).toEqual([{ market: NVDA, net: 25n, resting: 3 }]);
+    // resting_count says 3 but the book holds one of the wallet's orders: flagged as a mismatch.
+    expect(model.mm.strikes).toEqual([
+      {
+        market: NVDA,
+        net: 25n,
+        resting: 3,
+        bids: { count: 1, qty: 5n, best: 40 },
+        asks: { count: 0, qty: 0n, best: null },
+        netIfBidsFill: 30n,
+        netIfAsksFill: 25n,
+        escrowUsdc: 5n * 40n * CENT,
+        escrowYes: 0n,
+        freeUsdc: 12_400_000n,
+        freeYes: 0n,
+        mismatch: true,
+      },
+    ]);
     expect(model.mm).toMatchObject({ openOrders: 3, unsettledUsdc: 12_400_000n });
     expect(model.mm.withdrawable).toEqual([NVDA]);
     expect(model.resting[0]).toMatchObject({ orderId: 1n, marketRow: NVDA });
+  });
+});
+
+describe("MM net exposure (property)", () => {
+  it("net = YES held (wallet + free + resting asks) − NO held, for any holdings and orders", () => {
+    fc.assert(
+      fc.property(
+        fc.bigInt({ min: 0n, max: 10n ** 6n }),
+        fc.bigInt({ min: 0n, max: 10n ** 6n }),
+        fc.bigInt({ min: 0n, max: 10n ** 6n }),
+        fc.array(
+          fc.record({
+            side: fc.constantFrom<"Bid" | "Ask">("Bid", "Ask"),
+            price: fc.integer({ min: 1, max: 99 }),
+            qty: fc.bigInt({ min: 1n, max: 10n ** 4n }),
+          }),
+          { minLength: 1, maxLength: 8 },
+        ),
+        (walletYes, walletNo, freeYes, orders) => {
+          const resting = orders.map((o, index) => ({
+            market: NVDA.address,
+            orderId: BigInt(index),
+            ...o,
+          }));
+          const model = build(
+            snapshot({
+              holdings:
+                walletYes > 0n || walletNo > 0n
+                  ? { [NVDA.address]: held(walletYes, walletNo) }
+                  : {},
+              openOrders: [
+                { market: NVDA.address, freeUsdc: 0n, freeYes, restingCount: resting.length },
+              ],
+              resting,
+            }),
+          );
+          const asks = resting.filter((o) => o.side === "Ask").reduce((s, o) => s + o.qty, 0n);
+          const bids = resting.filter((o) => o.side === "Bid").reduce((s, o) => s + o.qty, 0n);
+          const strike = model.mm.strikes[0];
+          expect(model.mm.strikes).toHaveLength(1);
+          expect(strike?.net).toBe(walletYes + freeYes + asks - walletNo);
+          expect(strike?.netIfBidsFill).toBe(walletYes + freeYes + asks + bids - walletNo);
+          expect(strike?.netIfAsksFill).toBe(walletYes + freeYes - walletNo);
+        },
+      ),
+    );
   });
 });

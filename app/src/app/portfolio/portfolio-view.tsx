@@ -6,13 +6,9 @@ import { useMemo, useState } from "react";
 
 import { createActions, type PortfolioActions, type RedeemItem } from "./actions";
 import { createPortfolioSource, type PortfolioSource } from "./data";
-import {
-  buildPortfolio,
-  type MmStrike,
-  type PortfolioModel,
-  type PositionRow,
-  type RowState,
-} from "./model";
+import { marketLabel } from "./label";
+import { MmBlock } from "./mm-block";
+import { buildPortfolio, type PortfolioModel, type PositionRow, type RowState } from "./model";
 import { useReader } from "@/components/reader-context";
 import { useTestMarkets } from "@/components/test-market-context";
 import {
@@ -39,7 +35,6 @@ import {
 import { type MarketData, type MarketDataSources, useMarketData } from "@/lib/market-data";
 import {
   formatStrike,
-  formatTradingDate,
   isSessionMarket,
   type MarketRow,
   marketStatus,
@@ -54,11 +49,7 @@ export const CONNECT_COPY = "Connect your wallet to see your positions, P&L and 
 
 type Filter = "open" | "resting" | "closed";
 
-/** `NVDA ≥ $180 10/08` */
-export function marketLabel(market: MarketRow): string {
-  const [, month, day] = formatTradingDate(market.tradingDate).split("-");
-  return `${market.ticker} ≥ ${formatStrike(market.strikeCents)} ${month}/${day}`;
-}
+export { marketLabel } from "./label";
 
 const signOf = (value: bigint): "gain" | "loss" | "zero" =>
   value > 0n ? "gain" : value < 0n ? "loss" : "zero";
@@ -289,83 +280,6 @@ function RestingTable({ model }: { readonly model: PortfolioModel }) {
   );
 }
 
-function MmBlock({
-  model,
-  busy,
-  onWithdraw,
-}: {
-  readonly model: PortfolioModel;
-  readonly busy: boolean;
-  readonly onWithdraw: () => void;
-}) {
-  const { mm } = model;
-  const collapsed = mm.openOrders === 0 && mm.withdrawable.length === 0;
-  if (collapsed) {
-    return (
-      <section aria-labelledby="mm-heading" className="text-mer-sm text-mer-ink-muted">
-        <h3 id="mm-heading" className="inline font-medium">
-          MM exposure:
-        </h3>{" "}
-        no open orders.
-      </section>
-    );
-  }
-  return (
-    <section aria-labelledby="mm-heading" className="flex flex-col gap-mer-2 text-mer-sm">
-      <h3 id="mm-heading" className="font-medium">
-        MM exposure
-      </h3>
-      <table className="w-full">
-        <caption className="sr-only">Net exposure per strike</caption>
-        <thead>
-          <tr className="text-left text-mer-ink-muted">
-            <th scope="col" className="py-mer-1 pr-mer-2 font-medium">
-              Strike
-            </th>
-            <th scope="col" className="py-mer-1 pr-mer-2 text-right font-medium">
-              Net (YES-equiv)
-            </th>
-            <th scope="col" className="py-mer-1 text-right font-medium">
-              Open orders
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {mm.strikes.map((strike: MmStrike) => (
-            <tr key={strike.market.address} className="border-t border-mer-rule">
-              <th scope="row" className="py-mer-1 pr-mer-2 text-left font-medium">
-                {marketLabel(strike.market)}
-              </th>
-              <td className="mer-num py-mer-1 pr-mer-2 text-right">
-                {strike.net > 0n ? "+" : strike.net < 0n ? "−" : ""}
-                {(strike.net < 0n ? -strike.net : strike.net).toString()}
-              </td>
-              <td className="mer-num py-mer-1 text-right">{strike.resting}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="flex flex-wrap items-center gap-mer-2">
-        <span>Open orders {mm.openOrders}</span>
-        <span>
-          Unsettled <span className="mer-num">{formatUsdSigned(mm.unsettledUsdc)}</span>
-          {mm.unsettledYes > 0n ? ` + ${mm.unsettledYes.toString()} YES` : ""}
-        </span>
-        {mm.withdrawable.length > 0 ? (
-          <button
-            type="button"
-            className="rounded-mer border border-mer-control-border px-mer-2 py-mer-1 font-medium disabled:opacity-50"
-            disabled={busy}
-            onClick={onWithdraw}
-          >
-            Withdraw
-          </button>
-        ) : null}
-      </p>
-    </section>
-  );
-}
-
 function explorerUrl(signature: string, cluster: "devnet" | "localnet", rpcUrl: string): string {
   const base = `https://explorer.solana.com/tx/${signature}`;
   return cluster === "devnet"
@@ -550,11 +464,7 @@ export function PortfolioView(props: PortfolioViewProps) {
 
   return (
     <div className="flex flex-col gap-mer-4">
-      <PortfolioFilters
-        activeTab={filter}
-        onTabChange={setFilter}
-        totals={portfolioTotals}
-      />
+      <PortfolioFilters activeTab={filter} onTabChange={setFilter} totals={portfolioTotals} />
       {redeemAll.length > 0 ? (
         <div>
           <button
@@ -605,7 +515,7 @@ export function PortfolioView(props: PortfolioViewProps) {
       )}
 
       <MmBlock
-        model={model}
+        mm={model.mm}
         busy={busy}
         onWithdraw={() => void run((actions) => actions.withdraw(model.mm.withdrawable))}
       />

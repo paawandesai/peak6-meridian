@@ -842,6 +842,9 @@ async function main(): Promise<void> {
           },
           now: () => new Date(),
           out: (line) => say(`          ${line}`),
+          // The data sources are faked here, so the production per-run request cap (#53) is
+          // lifted to fit every ticker in one invocation (2 requests each with the local oracle).
+          maxApiCallsPerRun: 2 * Object.keys(closes).length,
         });
       const first = await run();
       const after = await outcomes();

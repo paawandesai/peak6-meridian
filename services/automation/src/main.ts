@@ -42,8 +42,10 @@ async function main(): Promise<void> {
   });
   const state = new RunState();
   const memory = new SettleMemory();
+  const settleOptions = { ...JOB_OPTIONS, maxApiCallsPerRun: env.SETTLE_MAX_API_CALLS_PER_RUN };
   // The open-time index (P1-4) reads the chain only, so it needs no signer and runs in every
-  // degraded mode; it learns the automation authority from Config.
+  // degraded mode; it learns the automation authority from Config. `env.SOLANA_RPC_URL` is the
+  // same resolved URL every other chain read here uses (parseEnv: MERIDIAN_DEVNET_RPC_URL first).
   const readConnection = new Connection(env.SOLANA_RPC_URL, "confirmed");
   const readOnly = createMeridianProgram(
     new AnchorProvider(
@@ -112,7 +114,6 @@ async function main(): Promise<void> {
         // Settlement is permissionless: the loaded key is only the fee payer here (AB-19).
         settlement: createSettlementJob({
           now,
-          sleep,
           chain: runtime.chain,
           verifyClose: runtime.verifyClose,
           adapter: runtime.adapter,
@@ -123,12 +124,12 @@ async function main(): Promise<void> {
           incidents: runtime.incidents,
           state,
           log,
-          options: JOB_OPTIONS,
+          options: settleOptions,
           memory,
         }),
         // The payer must be funded before the first settlement is due (ticket: checked at startup).
         startupCheck: () =>
-          checkBalance({ chain: runtime.chain, alerter, options: JOB_OPTIONS }, memory),
+          checkBalance({ chain: runtime.chain, alerter, options: settleOptions }, memory),
       };
     },
     cron: defaultCron,

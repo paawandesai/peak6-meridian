@@ -1,8 +1,11 @@
 """Fake implementations for MM loop testing (AC1/AC2)."""
 
+import logging
 from collections import defaultdict
 
 from .types import FairValue, MarketState, RestingOrder
+
+logger = logging.getLogger(__name__)
 
 
 class FakeMarketSource:
@@ -35,8 +38,21 @@ class FakeOrderClient:
         # (market, owner) -> YES/NO token balances
         self._yes_balances: dict[tuple[str, str], int] = defaultdict(int)
         self._no_balances: dict[tuple[str, str], int] = defaultdict(int)
+        self.cycles_started = 0
 
-    async def place_order(self, market: str, side: str, price: int, qty: int, owner: str) -> int:
+    def begin_cycle(self) -> None:
+        """Count loop cycles (test helper; the chain client resets its blockhash cache)."""
+        self.cycles_started += 1
+
+    async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature
+        self,
+        market: str,
+        side: str,
+        price: int,
+        qty: int,
+        owner: str,
+        resting_orders: list[RestingOrder] | None = None,  # noqa: ARG002 - unused in fake
+    ) -> int:
         """Place an order and return its ID."""
         order_id = self._next_order_id
         self._next_order_id += 1
@@ -66,6 +82,19 @@ class FakeOrderClient:
         """Fetch all resting orders for a market."""
         return self._orders[market].copy()
 
+    async def fetch_resting_orders_batch(self, markets: list[str]) -> dict[str, list[RestingOrder]]:
+        """Batch fetch built on fetch_resting_orders so per-market fault injection works.
+
+        A market whose fetch raises is left out of the result (the loop fails closed on it).
+        """
+        books: dict[str, list[RestingOrder]] = {}
+        for market in markets:
+            try:
+                books[market] = await self.fetch_resting_orders(market)
+            except Exception:
+                logger.exception(f"Fake fetch failed for {market}")
+        return books
+
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
         """Mint a YES+NO pair - increases both YES and NO balances."""
         key = (market, owner)
@@ -83,6 +112,18 @@ class FakeOrderClient:
     async def get_no_token_balance(self, market: str, owner: str) -> int:
         """Get NO token balance for owner in market."""
         return self._no_balances[(market, owner)]
+
+    async def get_multiple_token_balances(
+        self, markets: list[str], owner: str
+    ) -> dict[str, tuple[int, int]]:
+        """Batch-fetch YES and NO token balances for multiple markets (P1-7)."""
+        return {
+            market: (
+                self._yes_balances[(market, owner)],
+                self._no_balances[(market, owner)],
+            )
+            for market in markets
+        }
 
     def set_yes_balance(self, market: str, owner: str, balance: int) -> None:
         """Set YES balance (test helper)."""

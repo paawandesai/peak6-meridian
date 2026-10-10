@@ -30,8 +30,25 @@ export type WalletView = {
   readonly freeYes: bigint;
 };
 
+/** The vault invariant inputs, read in the same RPC call as the book (P0-7, FR-29). */
+export type VaultReading = {
+  /** `Market.pairs_outstanding`, or `null` when the market account could not be decoded. */
+  readonly pairs: bigint | null;
+  /** The vault's USDC base units, or `null` when the vault is missing or unreadable. */
+  readonly balance: bigint | null;
+  /** Unix seconds (client clock) the read returned. */
+  readonly asOfSecs: number;
+};
+
+export type TradeSnapshot = { readonly book: FullBook; readonly vault: VaultReading };
+
 export type TradeReader = {
   getBook(): Promise<FullBook>;
+  /**
+   * The book plus the vault invariant inputs in ONE `getMultipleAccountsInfo` call, so the Trade
+   * page's existing book poll carries the vault chip at no extra request.
+   */
+  getSnapshot(): Promise<TradeSnapshot>;
   getWallet(owner: PublicKey): Promise<WalletView>;
   /**
    * When the market was created (D-050): unix seconds, `null` when the index has no record, or
@@ -64,6 +81,44 @@ export function decodeBook(raw: {
       }))
       .filter((order) => order.qty > 0n);
   return { bids: side(raw.bids), asks: side(raw.asks) };
+}
+
+/** SPL token account `amount` (u64 LE at offset 64), or `null` for a missing or short account. */
+export function splAmount(data: Uint8Array | null | undefined): bigint | null {
+  if (data === null || data === undefined || data.length < 72) return null;
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  return buf.readBigUInt64LE(64);
+}
+
+type AccountData = { readonly data: Uint8Array } | null | undefined;
+type DecodeAccount = (name: "book" | "market", data: Buffer) => unknown;
+
+/**
+ * Decodes `[book, market, vault]` account infos from one multi-account read. A missing book is an
+ * error (the page shows it); a missing or undecodable market or vault only makes the vault chip
+ * read "unavailable", never a guessed number.
+ */
+export function decodeSnapshot(
+  [bookInfo, marketInfo, vaultInfo]: readonly [AccountData, AccountData, AccountData],
+  decode: DecodeAccount,
+  asOfSecs: number,
+): TradeSnapshot {
+  if (bookInfo === null || bookInfo === undefined) throw new Error("book account not found");
+  const toBuf = (data: Uint8Array): Buffer => (Buffer.isBuffer(data) ? data : Buffer.from(data));
+  const book = decodeBook(decode("book", toBuf(bookInfo.data)) as Parameters<typeof decodeBook>[0]);
+  let pairs: bigint | null = null;
+  if (marketInfo !== null && marketInfo !== undefined) {
+    try {
+      const market = decode("market", toBuf(marketInfo.data)) as {
+        pairsOutstanding?: { toString(): string };
+      };
+      pairs =
+        market.pairsOutstanding === undefined ? null : BigInt(market.pairsOutstanding.toString());
+    } catch {
+      pairs = null;
+    }
+  }
+  return { book, vault: { pairs, balance: splAmount(vaultInfo?.data), asOfSecs } };
 }
 
 /** The market's open time from the automation creation-time index (one request, P1-4). */
@@ -105,6 +160,17 @@ export function createTradeReader(
   return {
     async getBook() {
       return decodeBook(await program.account.book.fetch(addresses.book));
+    },
+    async getSnapshot() {
+      const infos = await connection.getMultipleAccountsInfo(
+        [addresses.book, market, addresses.vault],
+        "confirmed",
+      );
+      return decodeSnapshot(
+        [infos[0], infos[1], infos[2]],
+        (name, data) => program.coder.accounts.decode(name, data),
+        Math.floor(Date.now() / 1000),
+      );
     },
     async getWallet(owner) {
       // P0-4: fetch 3 ATAs + OpenOrders in one getMultipleAccounts call

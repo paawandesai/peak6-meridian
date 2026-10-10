@@ -4,23 +4,37 @@ Real implementations using solders/solana-py. Mirrors packages/client (TS) for P
 derivation and instruction building. Covers only what MM needs: fetch open markets,
 mint_pair, place_order, cancel_order, settle_funds.
 
+RPC efficiency (P1-7): Market accounts are fetched with a discriminator memcmp filter;
+books and token balances for all markets are read with chunked getMultipleAccounts
+(<= 100 keys per call); the recent blockhash is reused within one loop cycle; transaction
+confirmation polls getSignatureStatuses on a slot-paced schedule instead of immediately.
+
 SECURITY: MARKET_MAKER_KEYPAIR must never be logged (AC5).
 """
 
+import asyncio
 import logging
 import struct
+import time
+from collections.abc import Awaitable, Callable, Iterator, Sequence
+from dataclasses import dataclass, field
+from typing import Protocol
 
 from solana.rpc.async_api import AsyncClient
-from solana.rpc.commitment import Confirmed, Finalized
+from solana.rpc.commitment import Commitment, Confirmed, Finalized
+from solana.rpc.types import MemcmpOpts
+from solders.hash import Hash
 from solders.instruction import AccountMeta, Instruction
 from solders.keypair import Keypair
 from solders.message import Message
 from solders.pubkey import Pubkey
+from solders.signature import Signature
 from solders.system_program import ID as SYSTEM_PROGRAM_ID
 from solders.transaction import Transaction
+from solders.transaction_status import TransactionConfirmationStatus
 from spl.token.instructions import create_associated_token_account
 
-from .types import MarketState, RestingOrder
+from .types import MarketState, RestingOrder, Side
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +46,119 @@ DISCRIMINATOR_PLACE_ORDER = bytes([51, 194, 155, 175, 109, 130, 96, 106])
 DISCRIMINATOR_CANCEL_ORDER = bytes([95, 129, 237, 240, 8, 49, 223, 132])
 DISCRIMINATOR_MINT_PAIR = bytes([19, 149, 94, 110, 181, 186, 33, 107])
 DISCRIMINATOR_SETTLE_FUNDS = bytes([238, 64, 163, 96, 75, 171, 16, 33])
+
+# Account discriminator for Market (target/idl/meridian.json "accounts")
+MARKET_DISCRIMINATOR = bytes([219, 190, 213, 55, 0, 227, 198, 154])
+
+# getMultipleAccounts accepts at most 100 pubkeys per request (Solana JSON-RPC limit).
+MAX_MULTIPLE_ACCOUNTS = 100
+
+# SPL token account layout: mint (32) | owner (32) | amount u64 LE (8) | ...
+SPL_TOKEN_AMOUNT_OFFSET = 64
+SPL_TOKEN_AMOUNT_END = SPL_TOKEN_AMOUNT_OFFSET + 8
+
+# A blockhash stays valid for ~150 slots (~60 s); reuse one for at most 20 s of a cycle.
+BLOCKHASH_TTL_SECS = 20.0
+# Confirmation polling: first check after ~2 slots (~800 ms), then every ~2 slots.
+CONFIRM_FIRST_POLL_SECS = 0.8
+CONFIRM_POLL_SECS = 0.8
+CONFIRM_TIMEOUT_SECS = 90.0
+
+_B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+@dataclass(frozen=True)
+class Timing:
+    """Injectable sleep + monotonic clock (tests drive a simulated clock)."""
+
+    sleep: Callable[[float], Awaitable[None]] = field(default=asyncio.sleep)
+    monotonic: Callable[[], float] = field(default=time.monotonic)
+
+
+class TransactionFailedError(RuntimeError):
+    """A sent transaction landed but failed on-chain."""
+
+
+class ConfirmationTimeoutError(TimeoutError):
+    """A sent transaction did not reach the requested commitment in time."""
+
+
+class _HasData(Protocol):
+    @property
+    def data(self) -> bytes: ...
+
+    @property
+    def owner(self) -> Pubkey: ...
+
+
+def b58encode(data: bytes) -> str:
+    """Base58-encode bytes (Bitcoin alphabet, as used by Solana RPC memcmp filters)."""
+    num = int.from_bytes(data, "big")
+    out = ""
+    while num > 0:
+        num, rem = divmod(num, 58)
+        out = _B58_ALPHABET[rem] + out
+    leading_zeros = len(data) - len(data.lstrip(b"\x00"))
+    return "1" * leading_zeros + out
+
+
+def chunked[T](items: Sequence[T], size: int) -> Iterator[list[T]]:
+    """Yield consecutive slices of at most `size` items."""
+    if size <= 0:
+        raise ValueError(f"chunk size must be positive, got {size}")
+    for start in range(0, len(items), size):
+        yield list(items[start : start + size])
+
+
+def parse_token_amount(account: _HasData | None) -> int:
+    """Read the u64 amount of an SPL token account; a missing account holds 0.
+
+    Raises ValueError if the account is not a token account (wrong owner or too short).
+    """
+    if account is None:
+        return 0
+    if account.owner != TOKEN_PROGRAM_ID:
+        raise ValueError(f"not an SPL token account (owner {account.owner})")
+    data = bytes(account.data)
+    if len(data) < SPL_TOKEN_AMOUNT_END:
+        raise ValueError(f"token account too short: {len(data)} bytes")
+    amount: int = struct.unpack("<Q", data[SPL_TOKEN_AMOUNT_OFFSET:SPL_TOKEN_AMOUNT_END])[0]
+    return amount
+
+
+def parse_book(data: bytes, market: str) -> list[RestingOrder]:
+    """Deserialize a Book account's bids and asks into resting orders.
+
+    Layout: 8-byte Anchor discriminator, then 32 bid slots and 32 ask slots of 64 bytes
+    (order_id u64, owner pubkey, price u8, pad [u8; 7], qty u64, seq u64).
+    Empty slots (order_id == 0 or qty == 0) are skipped.
+    """
+    discriminator_size = 8
+    order_size = 64
+    max_orders_per_side = 32
+    sides: tuple[Side, Side] = ("Bid", "Ask")
+    orders: list[RestingOrder] = []
+    offset = discriminator_size
+    for side in sides:
+        for _ in range(max_orders_per_side):
+            if offset + order_size > len(data):
+                return orders
+            order_data = data[offset : offset + order_size]
+            order_id = struct.unpack("<Q", order_data[0:8])[0]
+            qty = struct.unpack("<Q", order_data[48:56])[0]
+            if order_id != 0 and qty > 0:
+                orders.append(
+                    RestingOrder(
+                        order_id=order_id,
+                        market=market,
+                        side=side,
+                        price=order_data[40],
+                        qty=qty,
+                        owner=str(Pubkey(order_data[8:40])),
+                    )
+                )
+            offset += order_size
+    return orders
 
 
 def derive_config_pda(program_id: Pubkey) -> Pubkey:
@@ -139,13 +266,15 @@ class ChainMarketSource:
         - pairs_outstanding: u64 (8 bytes, offset ~233)
         """
         try:
-            # Fetch all program accounts (filter by Market discriminator in Python)
-            # Market discriminator from IDL: [219, 190, 213, 55, 0, 227, 198, 154]
-            market_discriminator = bytes([219, 190, 213, 55, 0, 227, 198, 154])
+            # P1-7: filter by the Market account discriminator server-side so the RPC
+            # returns Market accounts only (not Books / OpenOrders / Config). MemcmpOpts.bytes
+            # is a base58 string (solders serializes it with encoding="base58").
+            market_discriminator = MARKET_DISCRIMINATOR
             response = await self.rpc.get_program_accounts(
                 self.program_id,
                 encoding="base64",
                 commitment=Confirmed,
+                filters=[MemcmpOpts(offset=0, bytes=b58encode(market_discriminator))],
             )
 
             markets = []
@@ -222,7 +351,11 @@ class ChainMarketSource:
 
 
 class ChainOrderClient:
-    """On-chain order client using solders for transaction building."""
+    """On-chain order client using solders for transaction building.
+
+    Transactions are still sent and confirmed one at a time (same ordering and failure
+    semantics as before P1-7); only the RPC traffic around them is reduced.
+    """
 
     def __init__(
         self,
@@ -230,13 +363,187 @@ class ChainOrderClient:
         program_id: Pubkey,
         payer_keypair: Keypair,
         usdc_mint: Pubkey,
+        timing: Timing | None = None,
     ) -> None:
         self.rpc = rpc_client
         self.program_id = program_id
         self.payer = payer_keypair  # MARKET_MAKER_KEYPAIR - NEVER LOGGED
         self.usdc_mint = usdc_mint
+        timing = timing or Timing()
+        self._sleep = timing.sleep
+        self._monotonic = timing.monotonic
+        self._blockhash: tuple[Hash, float] | None = None
+        # OpenOrders accounts are never closed by the program, so once seen they exist.
+        self._known_open_orders: set[Pubkey] = set()
 
-    async def place_order(self, market: str, side: str, price: int, qty: int, owner: str) -> int:
+    # --- RPC plumbing ----------------------------------------------------------------------
+
+    def begin_cycle(self) -> None:
+        """Start a loop cycle: the next transaction fetches a fresh blockhash.
+
+        Reusing one blockhash within a cycle is safe because no transaction repeats inside
+        a cycle; refreshing per cycle keeps identical transactions in consecutive cycles
+        (same quote re-placed) from colliding on the same signature.
+        """
+        self._blockhash = None
+
+    async def _recent_blockhash(self) -> Hash:
+        now = self._monotonic()
+        if self._blockhash is not None and now - self._blockhash[1] < BLOCKHASH_TTL_SECS:
+            return self._blockhash[0]
+        resp = await self.rpc.get_latest_blockhash()
+        blockhash = resp.value.blockhash
+        self._blockhash = (blockhash, now)
+        return blockhash
+
+    async def _send_and_confirm(
+        self, instructions: list[Instruction], commitment: Commitment = Confirmed
+    ) -> Signature:
+        """Sign, send and confirm one transaction; raise if it fails or times out."""
+        blockhash = await self._recent_blockhash()
+        message = Message.new_with_blockhash(instructions, self.payer.pubkey(), blockhash)
+        transaction = Transaction([self.payer], message, blockhash)
+        sig: Signature = (await self.rpc.send_transaction(transaction)).value
+        await self._confirm(sig, commitment)
+        return sig
+
+    async def _confirm(self, sig: Signature, commitment: Commitment) -> None:
+        """Poll getSignatureStatuses until `sig` reaches `commitment`.
+
+        Unlike AsyncClient.confirm_transaction this waits ~2 slots before the first poll
+        (an immediate poll is almost never confirmed) and raises on on-chain errors.
+        """
+        target = (
+            TransactionConfirmationStatus.Finalized
+            if commitment == Finalized
+            else TransactionConfirmationStatus.Confirmed
+        )
+        deadline = self._monotonic() + CONFIRM_TIMEOUT_SECS
+        await self._sleep(CONFIRM_FIRST_POLL_SECS)
+        while True:
+            status = (await self.rpc.get_signature_statuses([sig])).value[0]
+            if status is not None:
+                if status.err is not None:
+                    raise TransactionFailedError(f"transaction {sig} failed: {status.err}")
+                level = status.confirmation_status
+                if level is not None and int(level) >= int(target):
+                    return
+            if self._monotonic() >= deadline:
+                raise ConfirmationTimeoutError(
+                    f"transaction {sig} not {commitment} after {CONFIRM_TIMEOUT_SECS:.0f}s"
+                )
+            await self._sleep(CONFIRM_POLL_SECS)
+
+    async def _get_multiple_accounts(self, keys: Sequence[Pubkey]) -> list[_HasData | None]:
+        """Read accounts with getMultipleAccounts, at most 100 keys per request.
+
+        RPC errors propagate: callers must fail closed rather than act on missing data.
+        """
+        accounts: list[_HasData | None] = []
+        for chunk in chunked(keys, MAX_MULTIPLE_ACCOUNTS):
+            resp = await self.rpc.get_multiple_accounts(chunk, commitment=Confirmed)
+            values = list(resp.value)
+            if len(values) != len(chunk):
+                raise RuntimeError(
+                    f"getMultipleAccounts returned {len(values)} accounts for {len(chunk)} keys"
+                )
+            accounts.extend(values)
+        return accounts
+
+    # --- reads -----------------------------------------------------------------------------
+
+    async def fetch_resting_orders(self, market: str) -> list[RestingOrder]:
+        """Fetch resting orders for one market from its Book account.
+
+        Raises on RPC errors (AB-10: never place orders without seeing existing ones).
+
+        Args:
+            market: Market PDA (base58 pubkey string)
+        """
+        try:
+            book_pda = derive_book_pda(self.program_id, Pubkey.from_string(market))
+            resp = await self.rpc.get_account_info(book_pda)
+            if not resp.value or not resp.value.data:
+                return []
+            return parse_book(bytes(resp.value.data), market)
+        except Exception:
+            logger.exception(f"Failed to fetch resting orders for {market}")
+            raise
+
+    async def fetch_resting_orders_batch(self, markets: list[str]) -> dict[str, list[RestingOrder]]:
+        """Fetch resting orders for many markets with chunked getMultipleAccounts (P1-7).
+
+        Returns an entry for every market (a missing Book reads as an empty book).
+        Raises on RPC errors so the loop fails closed (AB-10).
+        """
+        book_pdas = [derive_book_pda(self.program_id, Pubkey.from_string(m)) for m in markets]
+        accounts = await self._get_multiple_accounts(book_pdas)
+        return {
+            market: parse_book(bytes(account.data), market) if account else []
+            for market, account in zip(markets, accounts, strict=True)
+        }
+
+    async def get_yes_token_balance(self, market: str, owner: str) -> int:
+        """Get YES token balance for owner in market (0 if the ATA doesn't exist).
+
+        Propagates RPC errors (timeouts, 429, connection errors) to caller.
+        """
+        yes_mint = derive_yes_mint_pda(self.program_id, Pubkey.from_string(market))
+        user_yes = get_associated_token_address(yes_mint, Pubkey.from_string(owner))
+        return parse_token_amount((await self.rpc.get_account_info(user_yes)).value)
+
+    async def get_no_token_balance(self, market: str, owner: str) -> int:
+        """Get NO token balance for owner in market (0 if the ATA doesn't exist).
+
+        Propagates RPC errors (timeouts, 429, connection errors) to caller.
+        """
+        no_mint = derive_no_mint_pda(self.program_id, Pubkey.from_string(market))
+        user_no = get_associated_token_address(no_mint, Pubkey.from_string(owner))
+        return parse_token_amount((await self.rpc.get_account_info(user_no)).value)
+
+    async def get_multiple_token_balances(
+        self, markets: list[str], owner: str
+    ) -> dict[str, tuple[int, int]]:
+        """Batch-read (YES, NO) balances for many markets (P1-7).
+
+        One getMultipleAccounts call per 50 markets (2 ATAs each, <= 100 keys per call).
+        A missing ATA reads as 0. RPC errors propagate (fail loudly; the loop must not
+        quote on unknown inventory). A market whose ATA is not a valid token account is
+        logged and omitted, so only that market is skipped.
+        """
+        owner_pubkey = Pubkey.from_string(owner)
+        keys: list[Pubkey] = []
+        for market in markets:
+            market_pda = Pubkey.from_string(market)
+            for mint in (
+                derive_yes_mint_pda(self.program_id, market_pda),
+                derive_no_mint_pda(self.program_id, market_pda),
+            ):
+                keys.append(get_associated_token_address(mint, owner_pubkey))
+        accounts = await self._get_multiple_accounts(keys)
+
+        balances: dict[str, tuple[int, int]] = {}
+        for i, market in enumerate(markets):
+            try:
+                yes = parse_token_amount(accounts[2 * i])
+                no = parse_token_amount(accounts[2 * i + 1])
+            except ValueError:
+                logger.exception(f"Invalid token account for {market}; skipping market")
+                continue
+            balances[market] = (yes, no)
+        return balances
+
+    # --- transactions ----------------------------------------------------------------------
+
+    async def place_order(  # noqa: PLR0913, PLR0917 - OrderClient signature + optional snapshot
+        self,
+        market: str,
+        side: str,
+        price: int,
+        qty: int,
+        owner: str,
+        resting_orders: list[RestingOrder] | None = None,
+    ) -> int:
         """Place order via place_order instruction.
 
         Instruction args (Borsh):
@@ -247,6 +554,8 @@ class ChainOrderClient:
 
         Args:
             market: Market PDA (base58 pubkey string)
+            resting_orders: The market's resting orders if the caller just read them
+                (P1-7: saves a Book read per order). Fetched when None.
         """
         market_pda = Pubkey.from_string(market)
         owner_pubkey = Pubkey.from_string(owner)
@@ -286,40 +595,27 @@ class ChainOrderClient:
             AccountMeta(pubkey=SYSTEM_PROGRAM_ID, is_signer=False, is_writable=False),
         ]
 
-        # Fetch all resting orders and include their OpenOrders in remaining_accounts.
-        # Program needs OpenOrders for:
+        # Include every resting owner's OpenOrders in remaining_accounts. Program needs them:
         # - contra-side owners (credit_other when taker crosses)
         # - same-side owners (refund when displaced from full book)
         # The signer's open_orders is already in the named accounts, so exclude it.
-        resting_orders = await self.fetch_resting_orders(market)
+        if resting_orders is None:
+            resting_orders = await self.fetch_resting_orders(market)
 
-        # Get unique owners from BOTH sides, excluding the signer
         all_owners = {Pubkey.from_string(o.owner) for o in resting_orders}
         all_owners.discard(owner_pubkey)  # Signer already in named accounts
 
         remaining_accounts = [
             AccountMeta(
-                pubkey=derive_open_orders_pda(self.program_id, market_pda, owner),
+                pubkey=derive_open_orders_pda(self.program_id, market_pda, other),
                 is_signer=False,
                 is_writable=True,
             )
-            for owner in all_owners
+            for other in sorted(all_owners, key=bytes)
         ]
 
         instruction = Instruction(self.program_id, data, accounts + remaining_accounts)
-
-        # Build and send transaction
-        # Get recent blockhash
-        blockhash_resp = await self.rpc.get_latest_blockhash()
-        recent_blockhash = blockhash_resp.value.blockhash
-
-        # Create message and transaction
-        message = Message.new_with_blockhash([instruction], self.payer.pubkey(), recent_blockhash)
-        transaction = Transaction([self.payer], message, recent_blockhash)
-
-        # Send and confirm transaction
-        sig = await self.rpc.send_transaction(transaction)
-        await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
+        await self._send_and_confirm([instruction])
         # Return a mock order ID (in production, parse from events/logs)
         return 1
 
@@ -349,108 +645,18 @@ class ChainOrderClient:
             AccountMeta(pubkey=open_orders, is_signer=False, is_writable=True),
         ]
 
-        instruction = Instruction(self.program_id, data, accounts)
+        await self._send_and_confirm([Instruction(self.program_id, data, accounts)])
 
-        # Build and send transaction
-        blockhash_resp = await self.rpc.get_latest_blockhash()
-        recent_blockhash = blockhash_resp.value.blockhash
-        message = Message.new_with_blockhash([instruction], self.payer.pubkey(), recent_blockhash)
-        transaction = Transaction([self.payer], message, recent_blockhash)
-
-        sig = await self.rpc.send_transaction(transaction)
-        await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
-
-    async def fetch_resting_orders(self, market: str) -> list[RestingOrder]:
-        """Fetch resting orders from book account.
-
-        Deserializes Book account to read bids and asks arrays.
-
-        Args:
-            market: Market PDA (base58 pubkey string)
-        """
-        try:
-            market_pda = Pubkey.from_string(market)
-            book_pda = derive_book_pda(self.program_id, market_pda)
-
-            # Fetch book account
-            resp = await self.rpc.get_account_info(book_pda)
-            if not resp.value or not resp.value.data:
-                return []
-
-            data = bytes(resp.value.data)
-            # Anchor discriminator size
-            discriminator_size = 8
-            if len(data) < discriminator_size:
-                return []
-
-            # Skip discriminator
-            offset = discriminator_size
-
-            # BookOrder: 64 bytes each
-            # (order_id u64, owner pubkey, price u8, pad [u8;7], qty u64, seq u64)
-            order_size = 64
-            max_orders_per_side = 32
-
-            orders = []
-
-            # Parse bids array (32 orders)
-            for _ in range(max_orders_per_side):
-                if offset + order_size > len(data):
-                    break
-                order_data = data[offset : offset + order_size]
-                order_id = struct.unpack("<Q", order_data[0:8])[0]
-                owner_bytes = order_data[8:40]
-                price = order_data[40]
-                # skip padding [41:48]
-                qty = struct.unpack("<Q", order_data[48:56])[0]
-                # seq at [56:64], not needed
-
-                # order_id == 0 means empty slot
-                if order_id != 0 and qty > 0:
-                    owner = str(Pubkey(owner_bytes))
-                    orders.append(
-                        RestingOrder(
-                            order_id=order_id,
-                            market=market,
-                            side="Bid",
-                            price=price,
-                            qty=qty,
-                            owner=owner,
-                        )
-                    )
-                offset += order_size
-
-            # Parse asks array (32 orders)
-            for _ in range(max_orders_per_side):
-                if offset + order_size > len(data):
-                    break
-                order_data = data[offset : offset + order_size]
-                order_id = struct.unpack("<Q", order_data[0:8])[0]
-                owner_bytes = order_data[8:40]
-                price = order_data[40]
-                qty = struct.unpack("<Q", order_data[48:56])[0]
-
-                if order_id != 0 and qty > 0:
-                    owner = str(Pubkey(owner_bytes))
-                    orders.append(
-                        RestingOrder(
-                            order_id=order_id,
-                            market=market,
-                            side="Ask",
-                            price=price,
-                            qty=qty,
-                            owner=owner,
-                        )
-                    )
-                offset += order_size
-
-            return orders
-
-        except Exception:
-            logger.exception(f"Failed to fetch resting orders for {market}")
-            # Re-raise to fail closed: prevents placing orders when we can't see
-            # existing ones (AB-10: would violate 8-order cap)
-            raise
+    async def _ensure_ata(self, ata: Pubkey, mint: Pubkey, owner: Pubkey) -> None:
+        """Create an associated token account if it doesn't exist (idempotent)."""
+        # Missing accounts return value=None, not an exception
+        if (await self.rpc.get_account_info(ata)).value is not None:
+            return
+        # Use Finalized so the account is fully indexed before mint_pair
+        create_ix = create_associated_token_account(self.payer.pubkey(), owner, mint)
+        await self._send_and_confirm([create_ix], commitment=Finalized)
+        if (await self.rpc.get_account_info(ata)).value is None:
+            logger.warning(f"ATA creation finalized but refetch returned None: {ata}")
 
     async def mint_pair(self, market: str, qty: int, owner: str) -> None:
         """Mint YES+NO pair via mint_pair instruction.
@@ -477,38 +683,8 @@ class ChainOrderClient:
         vault = derive_vault_pda(self.program_id, market_pda)
 
         # Create YES/NO ATAs idempotently (required for mint_pair)
-        # Missing accounts return value=None, not an exception
-        yes_info = await self.rpc.get_account_info(user_yes)
-        if yes_info.value is None:
-            # Create YES ATA (use Finalized to ensure account fully indexed)
-            create_yes_ix = create_associated_token_account(
-                self.payer.pubkey(), owner_pubkey, yes_mint
-            )
-            blockhash = (await self.rpc.get_latest_blockhash()).value.blockhash
-            msg = Message.new_with_blockhash([create_yes_ix], self.payer.pubkey(), blockhash)
-            tx = Transaction([self.payer], msg, blockhash)
-            sig = await self.rpc.send_transaction(tx)
-            await self.rpc.confirm_transaction(sig.value, commitment=Finalized)
-            # Refetch to ensure account is indexed before mint_pair
-            yes_info = await self.rpc.get_account_info(user_yes)
-            if yes_info.value is None:
-                logger.warning(f"YES ATA creation finalized but refetch returned None: {user_yes}")
-
-        no_info = await self.rpc.get_account_info(user_no)
-        if no_info.value is None:
-            # Create NO ATA (use Finalized to ensure account fully indexed)
-            create_no_ix = create_associated_token_account(
-                self.payer.pubkey(), owner_pubkey, no_mint
-            )
-            blockhash = (await self.rpc.get_latest_blockhash()).value.blockhash
-            msg = Message.new_with_blockhash([create_no_ix], self.payer.pubkey(), blockhash)
-            tx = Transaction([self.payer], msg, blockhash)
-            sig = await self.rpc.send_transaction(tx)
-            await self.rpc.confirm_transaction(sig.value, commitment=Finalized)
-            # Refetch to ensure account is indexed before mint_pair
-            no_info = await self.rpc.get_account_info(user_no)
-            if no_info.value is None:
-                logger.warning(f"NO ATA creation finalized but refetch returned None: {user_no}")
+        await self._ensure_ata(user_yes, yes_mint, owner_pubkey)
+        await self._ensure_ata(user_no, no_mint, owner_pubkey)
 
         # IDL: user is signer but not writable
         accounts = [
@@ -524,21 +700,13 @@ class ChainOrderClient:
             AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
         ]
 
-        instruction = Instruction(self.program_id, data, accounts)
-
-        # Build and send transaction
-        blockhash_resp = await self.rpc.get_latest_blockhash()
-        recent_blockhash = blockhash_resp.value.blockhash
-        message = Message.new_with_blockhash([instruction], self.payer.pubkey(), recent_blockhash)
-        transaction = Transaction([self.payer], message, recent_blockhash)
-
-        sig = await self.rpc.send_transaction(transaction)
-        await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
+        await self._send_and_confirm([Instruction(self.program_id, data, accounts)])
 
     async def settle_funds(self, market: str, owner: str) -> None:
         """Settle funds via settle_funds instruction (no args).
 
-        Skips if OpenOrders account doesn't exist (nothing to settle on first run).
+        Skips if OpenOrders account doesn't exist (nothing to settle on first run). The
+        existence check runs once per OpenOrders account: the program never closes them.
 
         Args:
             market: Market PDA (base58 pubkey string)
@@ -548,13 +716,10 @@ class ChainOrderClient:
 
         # Check if OpenOrders exists (created by first place_order; nothing to settle if not)
         open_orders = derive_open_orders_pda(self.program_id, market_pda, owner_pubkey)
-        oo_info = await self.rpc.get_account_info(open_orders)
-        if oo_info.value is None:
-            # OpenOrders doesn't exist yet - nothing to settle
-            return
-
-        # Build instruction data (no args beyond discriminator)
-        data = DISCRIMINATOR_SETTLE_FUNDS
+        if open_orders not in self._known_open_orders:
+            if (await self.rpc.get_account_info(open_orders)).value is None:
+                return  # OpenOrders doesn't exist yet - nothing to settle
+            self._known_open_orders.add(open_orders)
 
         # Account metas
         escrow_usdc = derive_escrow_usdc_pda(self.program_id, market_pda)
@@ -574,55 +739,6 @@ class ChainOrderClient:
             AccountMeta(pubkey=TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
         ]
 
-        instruction = Instruction(self.program_id, data, accounts)
-
-        # Build and send transaction
-        blockhash_resp = await self.rpc.get_latest_blockhash()
-        recent_blockhash = blockhash_resp.value.blockhash
-        message = Message.new_with_blockhash([instruction], self.payer.pubkey(), recent_blockhash)
-        transaction = Transaction([self.payer], message, recent_blockhash)
-
-        sig = await self.rpc.send_transaction(transaction)
-        await self.rpc.confirm_transaction(sig.value, commitment=Confirmed)
-
-    async def get_yes_token_balance(self, market: str, owner: str) -> int:
-        """Get YES token balance for owner in market.
-
-        Returns 0 if ATA doesn't exist (checked via get_account_info).
-        Propagates RPC errors (timeouts, 429, connection errors) to caller.
-        getTokenAccountBalance raises when account doesn't exist, so check first.
-        """
-        market_pda = Pubkey.from_string(market)
-        owner_pubkey = Pubkey.from_string(owner)
-        yes_mint = derive_yes_mint_pda(self.program_id, market_pda)
-        user_yes = get_associated_token_address(yes_mint, owner_pubkey)
-
-        # Check if account exists (getTokenAccountBalance raises if it doesn't)
-        account_info = await self.rpc.get_account_info(user_yes)
-        if account_info.value is None:
-            return 0
-
-        # Account exists, get balance
-        balance_resp = await self.rpc.get_token_account_balance(user_yes)
-        return int(balance_resp.value.amount)
-
-    async def get_no_token_balance(self, market: str, owner: str) -> int:
-        """Get NO token balance for owner in market.
-
-        Returns 0 if ATA doesn't exist (checked via get_account_info).
-        Propagates RPC errors (timeouts, 429, connection errors) to caller.
-        getTokenAccountBalance raises when account doesn't exist, so check first.
-        """
-        market_pda = Pubkey.from_string(market)
-        owner_pubkey = Pubkey.from_string(owner)
-        no_mint = derive_no_mint_pda(self.program_id, market_pda)
-        user_no = get_associated_token_address(no_mint, owner_pubkey)
-
-        # Check if account exists (getTokenAccountBalance raises if it doesn't)
-        account_info = await self.rpc.get_account_info(user_no)
-        if account_info.value is None:
-            return 0
-
-        # Account exists, get balance
-        balance_resp = await self.rpc.get_token_account_balance(user_no)
-        return int(balance_resp.value.amount)
+        # Instruction data: discriminator only (no args)
+        instruction = Instruction(self.program_id, DISCRIMINATOR_SETTLE_FUNDS, accounts)
+        await self._send_and_confirm([instruction])

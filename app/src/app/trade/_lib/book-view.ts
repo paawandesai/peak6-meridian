@@ -125,3 +125,51 @@ export function ownOrders(
       .map((o) => ({ ...o, side: "Ask" as const })),
   ];
 }
+
+/**
+ * A price level named in YES terms, `ask:61` or `bid:58`. The highlight after a fill is kept in
+ * YES terms so the YES and NO views mark the same level of the one book.
+ */
+export type LevelKey = `${"ask" | "bid"}:${number}`;
+
+export const levelKey = (side: "ask" | "bid", price: number): LevelKey => `${side}:${price}`;
+
+/**
+ * The YES-terms levels whose quantity differs between two reads (added, removed or resized),
+ * asks first then bids, each in ascending price. Equal books give an empty list.
+ */
+export function changedLevels(previous: BookLevels, next: BookLevels): LevelKey[] {
+  const diff = (side: "ask" | "bid", a: readonly Level[], b: readonly Level[]): LevelKey[] => {
+    const before = new Map(a.map((level) => [level.price, level.qty]));
+    const after = new Map(b.map((level) => [level.price, level.qty]));
+    const prices = [...new Set([...before.keys(), ...after.keys()])].sort((x, y) => x - y);
+    return prices
+      .filter((price) => (before.get(price) ?? 0n) !== (after.get(price) ?? 0n))
+      .map((price) => levelKey(side, price));
+  };
+  return [...diff("ask", previous.asks, next.asks), ...diff("bid", previous.bids, next.bids)];
+}
+
+/**
+ * The YES level a NO-view row relabels: the NO view lists YES asks as NO bids at 100 − p and YES
+ * bids as NO asks at 100 − p, so a NO row maps back to the opposite YES side at 100 − its price.
+ */
+export function yesKeyOfNoRow(side: "ask" | "bid", noPrice: number): LevelKey {
+  return levelKey(side === "bid" ? "ask" : "bid", complementCents(noPrice));
+}
+
+/** Width of a depth bar: the level's share of the largest level shown, whole percent 0–100. */
+export function depthPercent(qty: bigint, maxQty: bigint): number {
+  if (maxQty <= 0n || qty <= 0n) return 0;
+  const capped = qty > maxQty ? maxQty : qty;
+  return Number((capped * 100n) / maxQty);
+}
+
+/** The displayed-price rule (design.md §3): the YES mid only when the spread is at most 10¢. */
+export const MAX_DISPLAY_SPREAD_CENTS = 10;
+
+/** The YES price the Trade header shows, or `null` for a one-sided, crossed or wide book. */
+export function displayedYesOfLevels(levels: BookLevels): number | null {
+  const { spread, mid } = spreadOf(levels);
+  return spread !== null && spread <= MAX_DISPLAY_SPREAD_CENTS ? mid : null;
+}
