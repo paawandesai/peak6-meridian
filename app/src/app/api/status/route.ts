@@ -70,8 +70,15 @@ type CacheEntry = {
   expiresAt: number;
 };
 
-// In-memory cache with 30s TTL
+// In-memory cache with dynamic TTL (P1-6 optimization)
+// - 30s for vault/active data
+// - 5min for markets with some unsettled
+// - 1hr for fully settled dates
 const cache = new Map<string, CacheEntry>();
+
+const CACHE_VAULT_MS = 30_000; // 30s for vault balances
+const CACHE_ACTIVE_MS = 5 * 60 * 1000; // 5min for active markets
+const CACHE_SETTLED_MS = 60 * 60 * 1000; // 1hr for settled markets
 
 // In-flight request deduplication
 const inflightRequests = new Map<string, Promise<StatusResponse>>();
@@ -159,11 +166,13 @@ export async function GET(request: NextRequest): Promise<NextResponse<StatusResp
     try {
       const data = await fetchPromise;
 
-      // Cache successful responses
-      if (data.s === "ok") {
+      // Cache successful responses with dynamic TTL (P1-6 optimization)
+      if (data.s === "ok" && data.markets) {
+        const allSettled = data.markets.every((m) => m.settledAt > 0);
+        const ttl = allSettled ? CACHE_SETTLED_MS : CACHE_ACTIVE_MS;
         cache.set(cacheKey, {
           data,
-          expiresAt: now + 30_000, // 30s TTL
+          expiresAt: now + ttl,
         });
       }
 
