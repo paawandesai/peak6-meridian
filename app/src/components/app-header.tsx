@@ -1,6 +1,8 @@
 "use client";
 
-import { Countdown } from "./ui";
+import { useWallet } from "@solana/wallet-adapter-react";
+
+import { Countdown, DemoWalletCTA } from "./ui";
 import { UsdcBalance } from "./usdc-balance";
 import { WalletButton } from "./wallet-button";
 import type { AppConfig } from "@/lib/chain";
@@ -82,6 +84,13 @@ export function AppHeader({
   /** Extra header controls (for example the faucet button). */
   readonly children?: React.ReactNode;
 }) {
+  const { publicKey, select } = useWallet();
+
+  const handleDemoConnect = () => {
+    // Connect to burner wallet (demo wallet adapter)
+    select("burner" as any);
+  };
+
   return (
     <header className="border-b border-mer-rule bg-mer-surface">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-mer-6 gap-y-mer-2 px-mer-4 py-mer-3">
@@ -107,6 +116,7 @@ export function AppHeader({
           </span>
           <UsdcBalance />
           {children}
+          {publicKey === null ? <DemoWalletCTA onConnect={handleDemoConnect} /> : null}
           <WalletButton />
         </div>
       </div>
