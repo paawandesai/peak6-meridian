@@ -9,6 +9,7 @@ import { market, reader, withReader } from "@/test-utils";
 import type { MarketRow } from "@/lib/markets";
 
 vi.mock("./price-history-chart/price-history-chart", () => ({ PriceHistoryChart: () => null }));
+vi.mock("lightweight-charts", () => ({ createChart: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -98,11 +99,13 @@ describe("MarketsPage replay", () => {
     expect(screen.queryByTestId("replay-view")).toBeNull();
   });
 
-  it("live: shows the replay control and the normal ladder", async () => {
+  it("live: shows the replay control and the Trade board", async () => {
     page(FRIDAY);
     const form = await screen.findByRole("form", { name: "Replay a past session" });
     expect(within(form).getByRole("button", { name: "View replay" })).toBeEnabled();
     expect(screen.queryByTestId("replay-view")).toBeNull();
+    expect(await screen.findByTestId("tile-grid")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "AAPL" })).toBeInTheDocument();
     expect(within(form).queryByRole("link", { name: "Back to live" })).toBeNull();
   });
 });

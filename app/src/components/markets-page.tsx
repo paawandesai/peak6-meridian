@@ -1,11 +1,11 @@
 "use client";
 
-import { MarketsView } from "./markets-view";
 import { ReplayControl, ReplayView } from "./replay-view";
+import { TradeBoard } from "./trade-board/trade-board";
 import { useReplay } from "./use-replay";
 
 /**
- * The Markets page body: the live ladder, or (with a valid `?replay=`) the read-only replay of a
+ * The Markets page body: the live Trade board (docs/redesign-spec.md), or (with a valid `?replay=`) the read-only replay of a
  * past session. An invalid replay link falls back to live; the header shows why.
  */
 export function MarketsPage() {
@@ -27,7 +27,7 @@ export function MarketsPage() {
   }
   return (
     <div className="space-y-mer-6">
-      <MarketsView />
+      <TradeBoard />
       {control}
     </div>
   );

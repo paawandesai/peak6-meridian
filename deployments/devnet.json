@@ -93,5 +93,15 @@
         "placeholder": true
       }
     ]
-  }
+  },
+  "oracleConfigPda": "Af8qTVTtyxwbFD9jWfKkWh9siTCiMhauPw5pKysUgztT",
+  "oracleSigners": [
+    "0x8cdbf4fe234f106efb28d84ef466bbaf8616f8d9",
+    "0x8bb8f32df04c8b654987daaed53d6b6091e3b774",
+    "0xdeb22f54738d54976c4c0fe5ce6d408e40d88499",
+    "0x51ce04be4b3e32572c4ec9135221d0691ba7d202",
+    "0xdd682daec5a90dd295d14da4b0bec9281017b5be"
+  ],
+  "oracleSignerThreshold": 3,
+  "oracleMaxPackageDelaySecs": 600
 }

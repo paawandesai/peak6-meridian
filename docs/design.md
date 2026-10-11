@@ -187,6 +187,7 @@ CSS custom properties in `app/src/app/globals.css`, exposed to Tailwind v4 throu
   --mer-loss: #B42318;       /* −P&L, fail */
   --mer-warn: #8A5A00;       /* closing soon, stale, override pending */
   --mer-focus: #1E5BB8;      /* 2px focus ring + 2px offset */
+  --mer-primary: #1E5BB8;    /* primary actions and the live-price line (AA 6.1:1 on paper) */
   /* space (4px base) */
   --mer-space-1: 4px; --mer-space-2: 8px; --mer-space-3: 12px;
   --mer-space-4: 16px; --mer-space-6: 24px; --mer-space-8: 32px;
@@ -204,7 +205,7 @@ CSS custom properties in `app/src/app/globals.css`, exposed to Tailwind v4 throu
     --mer-yes: #7FAEF5;
     --mer-on-yes: #0E1726; --mer-on-no: #0E1726;
     --mer-no: #F2A766; --mer-gain: #5CC98D; --mer-loss: #F28B82;
-    --mer-warn: #E8C26A; --mer-focus: #7FAEF5;
+    --mer-warn: #E8C26A; --mer-focus: #7FAEF5; --mer-primary: #7FAEF5;
   }
 }
 ```
