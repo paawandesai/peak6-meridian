@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { LandingHeader } from "../markets/landing-header";
 import { MarketsEmpty, MarketsLoading } from "../markets/markets-states";
@@ -11,7 +11,12 @@ import { useTestMarkets } from "../test-market-context";
 import { useAsync } from "../use-async";
 import { useNow } from "../use-now";
 import { TestMarketToggle } from "../ui";
+import { DetailView } from "./detail-view";
+import { tileButtonId } from "./stock-tile";
+import { TileGrid } from "./tile-grid";
 import { BOARD_TICKERS, type BoardTicker, type StrikeCell, type TileModel } from "./types";
+import { useBoardSelection } from "./use-board-selection";
+import { tradeHref } from "@/app/trade/_lib/href";
 import type { FairValue } from "@/lib/fair-values";
 import { useFairValues } from "@/lib/fair-values";
 import { useMarketData, type MarketBook, type MarketDataSources } from "@/lib/market-data";
@@ -78,65 +83,42 @@ export function buildTiles(
   });
 }
 
+/** The tile the detail view shows: the one whose open strikes hold `market`, else the session tile. */
+export function detailTile(
+  ticker: BoardTicker | null,
+  market: string | null,
+  boards: readonly (readonly TileModel[])[],
+): TileModel | undefined {
+  if (ticker === null) return undefined;
+  const candidates = boards.flatMap((tiles) => tiles.filter((tile) => tile.ticker === ticker));
+  return (
+    candidates.find((tile) => tile.open.some((cell) => cell.market.address === market)) ??
+    candidates[0]
+  );
+}
+
 /**
- * Placeholder tile grid until `TileGrid` (feat/rd-tiles) lands: the grid layout and one
- * `section` per tile with the symbol-only `h2` and the button that selects it.
+ * Moves focus back to the tile's header button once the detail view has closed (spec §2.3). Runs
+ * after the render that removed the detail, so the button is in the document.
  */
-function GridPlaceholder({
-  tiles,
-  selected,
-  onSelect,
-}: {
-  readonly tiles: readonly TileModel[];
-  readonly selected: BoardTicker | null;
-  readonly onSelect: (ticker: BoardTicker) => void;
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-mer-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {tiles.map((tile) => (
-        <section
-          key={tile.ticker}
-          aria-label={tile.ticker}
-          {...(selected === tile.ticker ? { "aria-current": "true" as const } : {})}
-          className="rounded-mer-md border border-mer-rule p-mer-3"
-        >
-          <button type="button" onClick={() => onSelect(tile.ticker)}>
-            <h2 className="text-mer-lg font-semibold">{tile.ticker}</h2>
-          </button>
-          <p className="text-mer-sm text-mer-ink-muted">
-            {tile.open.length + tile.closed.length === 0
-              ? `No markets today for ${tile.ticker}`
-              : `${tile.open.length} open · ${tile.closed.length} closed`}
-          </p>
-        </section>
-      ))}
-    </div>
-  );
-}
-
-/** Placeholder detail view until `DetailView` (feat/rd-detail) lands. */
-function DetailPlaceholder({
-  tile,
-  onClose,
-}: {
-  readonly tile: TileModel;
-  readonly onClose: () => void;
-}) {
-  return (
-    <section aria-label={`${tile.ticker} detail`} className="rounded-mer-md border p-mer-4">
-      <h2 className="text-mer-lg font-semibold">{tile.ticker}</h2>
-      <button type="button" onClick={onClose}>
-        Close
-      </button>
-    </section>
-  );
+function useReturnFocus(selected: BoardTicker | null): (ticker: BoardTicker) => void {
+  const pending = useRef<BoardTicker | null>(null);
+  useEffect(() => {
+    const ticker = pending.current;
+    if (selected !== null || ticker === null) return;
+    pending.current = null;
+    document.getElementById(tileButtonId(ticker))?.focus();
+  }, [selected]);
+  return useCallback((ticker: BoardTicker) => {
+    pending.current = ticker;
+  }, []);
 }
 
 /**
- * The one-page Trade board on `/` (docs/redesign-spec.md): all seven stocks as tiles, with a
- * detail view above the grid for the selected one. The only component on the board that calls
- * data hooks; it makes the same reads `MarketsView` makes, once for the page (spec §3). Placeholder
- * stage: config and open times (for each tile's `BadgeContext`) are read when the tiles are wired.
+ * The one-page Trade board on `/` (docs/redesign-spec.md): all seven stocks as tiles, and the
+ * selected one in a detail view above the grid. The only component on the board that calls data
+ * hooks; it makes the reads `MarketsView` made, once for the page (spec §3), and hands the tiles
+ * and the detail plain props. The selection lives in the URL (`?t=` / `?m=`).
  */
 export function TradeBoard({ nowSecs }: { readonly nowSecs?: number }) {
   const reader = useReader();
@@ -144,14 +126,15 @@ export function TradeBoard({ nowSecs }: { readonly nowSecs?: number }) {
   const { showTestMarkets, setShowTestMarkets } = useTestMarkets();
   const clock = nowSecs ?? ticking;
   const state = useAsync(() => reader.listMarkets(), [reader]);
+  const config = useAsync(() => reader.getConfig(), [reader]);
   const sources = useMarketSources();
   const all = state.status === "ready" ? state.value : [];
   const { session, test } = partitionMarkets(all);
   const data = useMarketData([...session, ...test], sources.data ?? NO_SOURCES);
   const pythQuotes = usePythQuotes();
   const fairValues = useFairValues();
-  // Replaced by `useBoardSelection` (`?t=` / `?m=`) in the lead's wiring step.
-  const [selected, setSelected] = useState<BoardTicker | null>(null);
+  const { selection, selectTicker, selectMarket, clear } = useBoardSelection();
+  const returnFocusTo = useReturnFocus(selection.ticker);
 
   if (state.status === "loading" || clock === null) {
     return (
@@ -165,6 +148,9 @@ export function TradeBoard({ nowSecs }: { readonly nowSecs?: number }) {
     return <p role="alert">Could not load markets: {state.message}</p>;
   }
 
+  const cfg =
+    config.status === "ready" ? config.value : { paused: false, overrideDelaySecs: 3_600n };
+  const ctx = { nowSecs: clock, paused: cfg.paused, overrideDelaySecs: cfg.overrideDelaySecs };
   const inputs: TileInputs = {
     nowSecs: clock,
     books: data.books,
@@ -172,14 +158,15 @@ export function TradeBoard({ nowSecs }: { readonly nowSecs?: number }) {
     pythQuotes: pythQuotes.quotes,
   };
   const tiles = buildTiles(session, inputs, true);
-  const testTiles = buildTiles(test, inputs, false);
+  const testTiles = showTestMarkets ? buildTiles(test, inputs, false) : [];
+  const detail = detailTile(selection.ticker, selection.market, [tiles, testTiles]);
+  const fairMeta = { status: fairValues.status, lastSuccessSecs: fairValues.lastSuccessSecs };
   // Only when trading has stopped everywhere: an open market alongside a closed one keeps it hidden.
   const statuses = session.map((m) => marketStatus(m, clock));
   const needsSettleNote =
     !statuses.some((s) => s === "Open" || s === "ClosingSoon") &&
     statuses.some((s) => s === "Closed" || s === "Settling" || s === "SettlementDelayed");
   const hasNoMarkets = session.length === 0 && (!showTestMarkets || test.length === 0);
-  const selectedTile = tiles.find((tile) => tile.ticker === selected);
 
   return (
     <div className="space-y-mer-6">
@@ -192,19 +179,52 @@ export function TradeBoard({ nowSecs }: { readonly nowSecs?: number }) {
           onToggle={() => setShowTestMarkets(!showTestMarkets)}
         />
       ) : null}
-      {selectedTile === undefined ? null : (
-        <DetailPlaceholder tile={selectedTile} onClose={() => setSelected(null)} />
+      {detail === undefined ? null : (
+        <DetailView
+          tile={detail}
+          selectedMarket={selection.market}
+          fair={fairValues}
+          ctx={ctx}
+          onSelectMarket={(market) => selectMarket(detail.ticker, market)}
+          onClose={() => {
+            returnFocusTo(detail.ticker);
+            clear();
+          }}
+          tradeHref={tradeHref}
+        />
       )}
       {hasNoMarkets ? (
         <MarketsEmpty />
       ) : (
-        <GridPlaceholder tiles={tiles} selected={selected} onSelect={setSelected} />
+        <TileGrid
+          tiles={tiles}
+          selectedTicker={detail !== undefined && tiles.includes(detail) ? detail.ticker : null}
+          fairMeta={fairMeta}
+          ctx={ctx}
+          onSelectTicker={selectTicker}
+          onSelectMarket={selectMarket}
+        />
       )}
-      {showTestMarkets && testTiles.length > 0 ? (
-        <div className="space-y-mer-4">
-          <h3 className="text-mer-lg font-semibold">Test Markets</h3>
-          <GridPlaceholder tiles={testTiles} selected={null} onSelect={() => undefined} />
-        </div>
+      {testTiles.length > 0 ? (
+        <section aria-labelledby="test-markets-heading" className="space-y-mer-4">
+          <h3 id="test-markets-heading" className="text-mer-lg font-semibold">
+            Test Markets
+          </h3>
+          <TileGrid
+            tiles={testTiles}
+            selectedTicker={
+              detail !== undefined && testTiles.includes(detail) ? detail.ticker : null
+            }
+            fairMeta={fairMeta}
+            ctx={ctx}
+            onSelectTicker={(ticker) => {
+              const first = testTiles.find((tile) => tile.ticker === ticker)?.open[0];
+              if (first === undefined) selectTicker(ticker);
+              else selectMarket(ticker, first.market.address);
+            }}
+            onSelectMarket={selectMarket}
+          />
+        </section>
       ) : null}
     </div>
   );
