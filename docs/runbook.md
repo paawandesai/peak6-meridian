@@ -75,6 +75,16 @@ Restart AO desktop/daemon if needed: `$AO stop` then `$AO start` (or relaunch th
 - **M1-01 merged** (2026-10-06). "Pipelines must succeed" is on; daily heartbeat schedule **id 20** (`HEARTBEAT=1`, `0 14 * * *` America/Chicago). Feature MRs still need green CI + Cursor approve (D-045 = docs-only tie-break only).
 - Merge only when: GitLab pipeline green + Cursor review vs `docs/review.md` (or logged tie-break) + ACs met
 
+## CI runner host: Docker Hub pull-through cache
+
+Host `w2-ci-runner` (Vultr, 4 vCPU / 8 GB; runners #235, #290 `equinox`, #291 `meridian`, #292 `cerbo`, all docker executor, `pull_policy = if-not-present`). Set up 2026-10-10; it is host configuration, not part of the repo.
+
+- **What:** a `registry:2` container `registry-mirror` (`--restart=always`, `127.0.0.1:5000`, 256 MB cap, data in `/var/lib/registry-mirror`) proxying `https://registry-1.docker.io` with a 168 h TTL (expired blobs are removed by the registry itself). `/etc/docker/daemon.json` holds `{"registry-mirrors": ["http://127.0.0.1:5000"]}`.
+- **What it does not do:** it covers Docker Hub only (`ubuntu:24.04`, `node`, `golang`, `postgres`, ...). `registry.gitlab.com` (the runner helper image) and `mcr.microsoft.com` (Playwright) are pulled directly. If the mirror is down, Docker falls back to Docker Hub, so a dead mirror slows nothing down.
+- **Why:** resilience (Docker Hub rate limits, an image prune, a second runner host), not speed: an `if-not-present` pull of a cached `ubuntu:24.04` already takes ~1 s. Per-job toolchain installs (30-48 s, `scripts/toolchain.sh`) are not affected.
+- **Check:** `docker info --format '{{.RegistryConfig.Mirrors}}'` lists `http://127.0.0.1:5000/`; `curl -s localhost:5000/v2/_catalog` lists what is cached.
+- **Rollback:** delete `/etc/docker/daemon.json`, `systemctl restart docker` (kills running jobs on all four runners: do it when `docker ps` is empty), then `docker rm -f registry-mirror`.
+
 ## Heartbeats / monitors
 
 - Operator heartbeat: every 30–60 minutes while unblocked work remains
