@@ -6,6 +6,7 @@
 import bs58 from "bs58";
 import nacl from "tweetnacl";
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
+import { feeSolNotice } from "./funding";
 import { load, reset, save } from "./storage";
 import { sharedConnection } from "@/lib/rpc";
 
@@ -182,8 +183,11 @@ export class DemoWallet implements Wallet {
         body: JSON.stringify({ wallet }),
       });
       if (response.ok) {
-        // Faucet funded wallet with SOL + USDC
+        // The faucet minted test-USDC and, for this fresh wallet, sent fee SOL in the same
+        // transaction; say so when it could not spare the SOL (the wallet cannot trade without it).
         this.#hasFunded = true;
+        const notice = feeSolNotice(await response.json().catch(() => null));
+        if (notice !== null) alert(notice);
         return;
       } else if (response.status === 429) {
         // 24h limit hit. If the wallet already has SOL (checked above), this is a benign retry

@@ -17,6 +17,7 @@ import {
   createFaucet,
   isMarkerConflict,
 } from "../../../app/src/lib/faucet/faucet";
+import { FEE_SOL_LAMPORTS, FEE_SOL_THRESHOLD_LAMPORTS } from "../../../app/src/lib/faucet/response";
 import { dayBucket, markerSeed, SECONDS_PER_DAY } from "../../../app/src/lib/faucet/seed";
 
 const DAY = SECONDS_PER_DAY;
@@ -384,5 +385,102 @@ describe("AB-21 misconfiguration", () => {
     expect(dayBucket(DAY)).toBe(1n);
     expect(() => dayBucket(-1)).toThrow();
     expect(() => dayBucket(1.5)).toThrow();
+  });
+});
+
+describe("AB-21 fee SOL cannot be drained past the claim limits", () => {
+  const FEE = Number(FEE_SOL_LAMPORTS);
+  const lamportsOf = (chain: FakeFaucetChain, w: string) => chain.getBalance(new PublicKey(w));
+
+  it("one wallet that spends its fee SOL every time still gets it once per 24 h claim", async () => {
+    const { faucet, chain } = setup();
+    const w = wallet();
+    let received = 0;
+    for (const day of [0, 0, 1, 1, 2, 2, 3]) {
+      chain.unixTime = (20_000 + day) * DAY + 100;
+      const result = await faucet.claim(w);
+      received += await lamportsOf(chain, w);
+      chain.accounts.set(w, { lamports: 0, dataLen: 0 }); // spend it all, as a drainer would
+      expect([200, 429]).toContain(result.status);
+    }
+    // Claims succeed on days 0 and 2 only (day 1 and 3 hit bucket N+1); every repeat sends nothing.
+    expect(chain.mints).toHaveLength(2);
+    expect(received).toBe(2 * FEE);
+  });
+
+  it("concurrent claims for one wallet, from separate instances, send the fee SOL once", async () => {
+    const { chain, make } = setup();
+    const w = wallet();
+    let sims = 0;
+    chain.beforeSend = async () => {
+      while (chain.simulations < 3) await new Promise((resolve) => setTimeout(resolve, 1));
+      sims += 1;
+    };
+    const results = await Promise.all([
+      make().claim(w),
+      make(5_000).claim(w),
+      make(-5_000).claim(w),
+    ]);
+    expect(sims).toBe(3);
+    expect(results.map(status).sort()).toEqual([200, 429, 429]);
+    expect(await lamportsOf(chain, w)).toBe(FEE);
+  });
+
+  it("any claim sequence: fee SOL only rides on successful claims, at most once per wallet per 24 h, and never takes the faucet below its floor (property)", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(
+          fc.record({
+            who: fc.integer({ min: 0, max: 3 }),
+            dayStep: fc.integer({ min: 0, max: 2 }),
+            spend: fc.boolean(),
+          }),
+          { minLength: 1, maxLength: 25 },
+        ),
+        fc.integer({ min: 100_000_000, max: 100_000_000 + 6 * FEE }),
+        async (steps, startBalance) => {
+          const { faucet, chain } = setup();
+          chain.balance = startBalance;
+          const wallets = [wallet(), wallet(), wallet(), wallet()];
+          const floor = 100_000_000;
+          let day = 0;
+          let sent = 0;
+          let successes = 0;
+          const lastSuccessDay = new Map<string, number>();
+          for (const step of steps) {
+            day += step.dayStep;
+            chain.unixTime = (20_000 + day) * DAY + 100;
+            const w = wallets[step.who] ?? wallets[0] ?? wallet();
+            const before = await lamportsOf(chain, w);
+            const faucetBefore = chain.balance;
+            const result = await faucet.claim(w);
+            const gained = (await lamportsOf(chain, w)) - before;
+            if (result.status === 200) {
+              successes += 1;
+              const previous = lastSuccessDay.get(w);
+              // The existing limit: never two successful claims within the same or next bucket.
+              if (previous !== undefined) expect(day - previous).toBeGreaterThanOrEqual(2);
+              lastSuccessDay.set(w, day);
+              if (result.feeSol.status === "sent") {
+                expect(gained).toBe(FEE);
+                expect(before).toBeLessThan(Number(FEE_SOL_THRESHOLD_LAMPORTS));
+                expect(faucetBefore - FEE).toBeGreaterThanOrEqual(floor);
+                sent += FEE;
+              } else {
+                expect(gained).toBe(0);
+              }
+            } else {
+              expect(gained).toBe(0); // refused or failed claims move no SOL to the claimant
+            }
+            if (step.spend) chain.accounts.set(w, { lamports: 0, dataLen: 0 });
+          }
+          expect(sent).toBeLessThanOrEqual(successes * FEE);
+          // Fee SOL never pushed the faucet below its floor; only the marker rents (the existing
+          // per-claim cost, paid even without fee SOL) can take it under, by at most one claim's.
+          expect(chain.balance).toBeGreaterThanOrEqual(floor - 2 * chain.rent);
+        },
+      ),
+      { numRuns: 40 },
+    );
   });
 });

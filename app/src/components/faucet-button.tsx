@@ -5,15 +5,36 @@ import { useState } from "react";
 import { z } from "zod";
 
 import { formatUsdcBalance } from "@/lib/display";
+import {
+  type FaucetSuccess,
+  faucetSuccessSchema,
+  formatLamportsAsSol,
+} from "@/lib/faucet/response";
 
-const successSchema = z.object({ signature: z.string(), amount_base_units: z.string() });
 const errorSchema = z.object({ error: z.string() });
 
 type State =
   | { readonly status: "idle" }
   | { readonly status: "working" }
-  | { readonly status: "done"; readonly text: string }
+  | { readonly status: "done"; readonly text: string; readonly warning?: string }
   | { readonly status: "failed"; readonly text: string };
+
+/** What a successful claim says: the test-USDC, the fee SOL if any, and why none was sent. */
+function doneState(ok: FaucetSuccess): Extract<State, { status: "done" }> {
+  const usdc = formatUsdcBalance(BigInt(ok.amount_base_units));
+  if (ok.fee_sol_status === "sent") {
+    const sol = formatLamportsAsSol(BigInt(ok.fee_sol_lamports));
+    return { status: "done", text: `Received ${usdc} and ${sol} for network fees.` };
+  }
+  if (ok.fee_sol_status === "faucet_low") {
+    return {
+      status: "done",
+      text: `Received ${usdc}.`,
+      warning: ok.fee_sol_message ?? "The faucet sent no SOL for network fees.",
+    };
+  }
+  return { status: "done", text: `Received ${usdc}.` };
+}
 
 /**
  * "Get test-USDC": asks the server faucet for the connected wallet. Renders nothing until a
@@ -34,11 +55,7 @@ export function FaucetButton() {
       });
       const body: unknown = await response.json();
       if (response.ok) {
-        const ok = successSchema.parse(body);
-        setState({
-          status: "done",
-          text: `Received ${formatUsdcBalance(BigInt(ok.amount_base_units))}.`,
-        });
+        setState(doneState(faucetSuccessSchema.parse(body)));
       } else {
         setState({ status: "failed", text: errorSchema.parse(body).error });
       }
@@ -59,6 +76,9 @@ export function FaucetButton() {
       </button>
       {state.status === "working" && <span role="status">Requesting…</span>}
       {state.status === "done" && <span role="status">{state.text}</span>}
+      {state.status === "done" && state.warning !== undefined && (
+        <span role="alert">{state.warning}</span>
+      )}
       {state.status === "failed" && <span role="alert">{state.text}</span>}
     </span>
   );
