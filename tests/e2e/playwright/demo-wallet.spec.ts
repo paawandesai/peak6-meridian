@@ -27,8 +27,10 @@ test.describe("Demo wallet (M4-07)", () => {
     // Verify banner is shown
     await expect(page.getByText(/demo wallet.*devnet only/i)).toBeVisible();
 
-    // Wait for funding to complete - check for USDC balance (formatUsdcBalance renders "N.NN test-USDC")
-    await expect(page.getByText(/[1-9].*test-USDC/i)).toBeVisible({ timeout: 10000 });
+    // Wait for funding to complete - check for USDC balance (formatUsdcBalance renders "N.NN test-USDC").
+    // The faucet confirms two transfers (test-USDC, then fee SOL) on the local validator; on the
+    // 1-vCPU CI runner a claim takes 28-35 s end to end (01-faucet), so 10 s timed out (pipeline 48825).
+    await expect(page.getByText(/[1-9].*test-USDC/i)).toBeVisible({ timeout: 60_000 });
 
     // AC9: Navigate to a market and place a trade
     // Open the first session strike on the board and follow its Trade link (see global-setup)
@@ -49,7 +51,8 @@ test.describe("Demo wallet (M4-07)", () => {
     await signButton(page).click();
 
     // AC9: Assert exactly one signature request was made and transaction confirmed
-    await expect(confirmedStatus(page)).toBeVisible({ timeout: 10000 });
+    // Same wait as 03-trade (the suite default): one confirmed transaction on the local validator.
+    await expect(confirmedStatus(page)).toBeVisible();
     const sigCount = await page.evaluate(() => {
       const w = globalThis as typeof globalThis & { __demoWallet?: { signatureCount: number } };
       return w.__demoWallet?.signatureCount ?? 0;
