@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fair, NOW, quotes } from "@/components/fair-value/test-support";
 import { market } from "@/test-utils";
 import { TileGrid } from "./tile-grid";
-import { BOARD_TICKERS, type BoardTicker, type TileModel } from "./tile-window";
+import { BOARD_TICKERS, type BoardTicker, type TileModel } from "./types";
 
 const CTX = { nowSecs: NOW, paused: false, overrideDelaySecs: 3_600n };
 
@@ -29,6 +29,10 @@ function tile(ticker: BoardTicker): TileModel {
   };
 }
 
+function empty(ticker: BoardTicker): TileModel {
+  return { ticker, open: [], closed: [], pythQuote: undefined };
+}
+
 function renderGrid(tiles: readonly TileModel[], selectedTicker: BoardTicker | null = null) {
   const onSelectTicker = vi.fn();
   const onSelectMarket = vi.fn();
@@ -48,8 +52,8 @@ function renderGrid(tiles: readonly TileModel[], selectedTicker: BoardTicker | n
 const regionNames = () => screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"));
 
 describe("TileGrid", () => {
-  it("always shows seven tiles in board order, each saying so when it has no markets", () => {
-    renderGrid([]);
+  it("shows the session board's seven tiles in board order, each saying so when it has no markets", () => {
+    renderGrid([...BOARD_TICKERS].reverse().map(empty));
     expect(regionNames()).toEqual([...BOARD_TICKERS]);
     for (const ticker of BOARD_TICKERS) {
       expect(screen.getByRole("region", { name: ticker })).toHaveTextContent(
@@ -58,13 +62,18 @@ describe("TileGrid", () => {
     }
   });
 
-  it("orders the caller's tiles and fills in the missing tickers", () => {
-    renderGrid([tile("TSLA"), tile("AAPL"), tile("NVDA")]);
-    expect(regionNames()).toEqual([...BOARD_TICKERS]);
+  it("orders mixed tiles and keeps each tile's data", () => {
+    renderGrid([tile("TSLA"), empty("MSFT"), tile("AAPL")]);
+    expect(regionNames()).toEqual(["AAPL", "MSFT", "TSLA"]);
     expect(screen.getByRole("region", { name: "TSLA" })).toHaveTextContent("$200");
     expect(screen.getByRole("region", { name: "MSFT" })).toHaveTextContent(
       "No markets today for MSFT",
     );
+  });
+
+  it("adds no tile the caller left out (the test-market board)", () => {
+    renderGrid([tile("NVDA")]);
+    expect(regionNames()).toEqual(["NVDA"]);
   });
 
   it("marks only the selected ticker's tile", () => {

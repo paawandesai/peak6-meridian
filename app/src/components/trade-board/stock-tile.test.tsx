@@ -5,7 +5,7 @@ import { fair, NOW, quotes } from "@/components/fair-value/test-support";
 import { market } from "@/test-utils";
 import type { PythQuote } from "@/lib/pyth-quotes";
 import { StockTile, tileButtonId } from "./stock-tile";
-import type { StrikeCell, TileModel } from "./tile-window";
+import type { StrikeCell, TileModel } from "./types";
 
 const CLOSE = 1_791_489_600n; // 2026-10-08 16:00 ET
 const CTX = { nowSecs: NOW, paused: false, overrideDelaySecs: 3_600n };

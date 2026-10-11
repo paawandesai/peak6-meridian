@@ -3,54 +3,20 @@
  * five-strike window around the live price, where the live marker sits, and the words a tile
  * shows when nothing is trading. Prices are integer cents.
  */
-import type { BookQuotes } from "@meridian/client";
-
 import { closeSets } from "@/components/markets/ticker-ladder";
-import type { FairValue } from "@/lib/fair-values";
-import { marketStatus, type MarketRow } from "@/lib/markets";
-import type { PythQuote } from "@/lib/pyth-quotes";
-
-// The contract types below mirror docs/redesign-spec.md §4.1 (`trade-board/types.ts`, lead-owned).
-// They are structural, so the lead's `TileModel` values fit them; switch these to imports from
-// `./types` once that file lands.
-
-export const BOARD_TICKERS = ["AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA"] as const;
-export type BoardTicker = (typeof BOARD_TICKERS)[number];
-
-/** Everything the board knows about one strike. */
-export type StrikeCell = {
-  readonly market: MarketRow;
-  readonly quotes: BookQuotes | null;
-  readonly fair: FairValue | undefined;
-};
-
-/** One tile's input. `open`/`closed` ascending by strike. */
-export type TileModel = {
-  readonly ticker: BoardTicker;
-  readonly open: readonly StrikeCell[];
-  readonly closed: readonly StrikeCell[];
-  readonly pythQuote: PythQuote | undefined;
-};
-
-export type FairMeta = {
-  readonly status: "loading" | "ready" | "unavailable";
-  readonly lastSuccessSecs: number | null;
-};
+import { marketStatus } from "@/lib/markets";
+import { BOARD_TICKERS, type StrikeCell, type TileModel } from "./types";
 
 /** At most this many strikes show in a tile; the rest are behind "+N more strikes". */
 export const TILE_WINDOW = 5;
 
-/** A tile for every board ticker, in board order; a ticker the caller left out gets an empty one. */
+/**
+ * The given tiles in board order (spec §2.1). Which tiles exist is the caller's choice: the
+ * session board passes all seven, the test-market board only tickers that have markets.
+ */
 export function orderTiles(tiles: readonly TileModel[]): TileModel[] {
-  return BOARD_TICKERS.map(
-    (ticker) =>
-      tiles.find((tile) => tile.ticker === ticker) ?? {
-        ticker,
-        open: [],
-        closed: [],
-        pythQuote: undefined,
-      },
-  );
+  const rank = (tile: TileModel) => BOARD_TICKERS.indexOf(tile.ticker);
+  return [...tiles].sort((a, b) => rank(a) - rank(b));
 }
 
 /** Index of the last strike at or below `live`; -1 when `live` is below every strike or unknown. */

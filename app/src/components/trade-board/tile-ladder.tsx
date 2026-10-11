@@ -2,7 +2,7 @@ import { EdgeLabel, StaleTag, fairDetail } from "@/components/fair-value/fair-ed
 import { asOfSecs, edgeCents, staleReasons } from "@/lib/fair-values";
 import { formatStrike } from "@/lib/markets";
 import { rangeText, yesView, type YesView } from "@/lib/market-view";
-import type { FairMeta, StrikeCell } from "./tile-window";
+import type { FairMeta, StrikeCell } from "./types";
 
 /** Shown under a tile's table when no strike has a quote (same words as the Markets ladder). */
 export const NO_QUOTES_TEXT = "No quotes yet: odds appear when the market maker posts.";

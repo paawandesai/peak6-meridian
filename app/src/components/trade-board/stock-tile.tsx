@@ -1,23 +1,8 @@
 import { PythPrice, PythPricePlaceholder } from "@/components/pyth-price";
-import type { BadgeContext } from "@/lib/market-view";
 import { formatEtHm } from "@/lib/time";
 import { TileLadder } from "./tile-ladder";
-import {
-  type BoardTicker,
-  type FairMeta,
-  type TileModel,
-  tileLadder,
-  tileStateText,
-} from "./tile-window";
-
-export type StockTileProps = {
-  readonly tile: TileModel;
-  readonly fairMeta: FairMeta;
-  readonly ctx: BadgeContext;
-  readonly selected: boolean;
-  readonly onSelectTicker: (ticker: BoardTicker) => void;
-  readonly onSelectMarket: (ticker: BoardTicker, market: string) => void;
-};
+import { tileLadder, tileStateText } from "./tile-window";
+import type { BoardTicker, StockTileProps } from "./types";
 
 /** `id` of a tile's header button, so the detail view can return focus to it on close. */
 export function tileButtonId(ticker: BoardTicker): string {

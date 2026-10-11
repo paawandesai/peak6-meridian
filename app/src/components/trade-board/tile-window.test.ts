@@ -5,16 +5,14 @@ import { fair, NOW, quotes } from "@/components/fair-value/test-support";
 import { market } from "@/test-utils";
 import type { PythQuote } from "@/lib/pyth-quotes";
 import {
-  BOARD_TICKERS,
   belowIndex,
   orderTiles,
-  type StrikeCell,
   strikeWindow,
   TILE_WINDOW,
-  type TileModel,
   tileLadder,
   tileStateText,
 } from "./tile-window";
+import { BOARD_TICKERS, type StrikeCell, type TileModel } from "./types";
 
 const CLOSE = 1_791_489_600n; // 2026-10-08 16:00 ET
 const LATER_CLOSE = CLOSE + 86_400n;
@@ -51,18 +49,19 @@ function tile(overrides: Partial<TileModel> = {}): TileModel {
 const strikes = (...dollars: number[]) => dollars.map((d) => BigInt(d * 100));
 
 describe("orderTiles", () => {
-  it("returns all seven tickers in board order, empty when the caller left one out", () => {
-    const tiles = orderTiles([]);
-    expect(tiles.map((t) => t.ticker)).toEqual([...BOARD_TICKERS]);
-    expect(tiles.every((t) => t.open.length === 0 && t.closed.length === 0)).toBe(true);
-  });
-
-  it("keeps the caller's tile data and reorders it", () => {
+  it("puts the caller's tiles in board order and keeps their data", () => {
     const nvda = tile({ open: [cell(180)] });
     const aapl = tile({ ticker: "AAPL", open: [cell(220)] });
     const out = orderTiles([nvda, aapl]);
+    expect(out).toEqual([aapl, nvda]);
     expect(out[0]).toBe(aapl);
-    expect(out[5]).toBe(nvda);
+  });
+
+  it("orders all seven, and adds none the caller left out", () => {
+    const reversed = [...BOARD_TICKERS].reverse().map((ticker) => tile({ ticker }));
+    expect(orderTiles(reversed).map((t) => t.ticker)).toEqual([...BOARD_TICKERS]);
+    expect(orderTiles([tile({ ticker: "TSLA" })]).map((t) => t.ticker)).toEqual(["TSLA"]);
+    expect(orderTiles([])).toEqual([]);
   });
 });
 

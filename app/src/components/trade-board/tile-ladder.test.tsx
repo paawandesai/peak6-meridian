@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { fair, NOW, quotes } from "@/components/fair-value/test-support";
 import { market } from "@/test-utils";
 import { NO_QUOTES_TEXT, TileLadder } from "./tile-ladder";
-import type { FairMeta, StrikeCell } from "./tile-window";
+import type { FairMeta, StrikeCell } from "./types";
 
 const FRESH: FairMeta = { status: "ready", lastSuccessSecs: NOW - 1 };
 
