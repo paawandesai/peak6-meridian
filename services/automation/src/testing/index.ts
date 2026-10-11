@@ -7,3 +7,4 @@ export * from "./fakeHttp";
 export * from "./harness";
 export * from "./settleHarness";
 export * from "./updateFixture";
+export * from "./pythUpdates";

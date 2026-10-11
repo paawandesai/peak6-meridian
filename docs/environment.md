@@ -35,6 +35,8 @@
 | `TWELVEDATA_API_KEY` | same | Twelve Data API | devnet | `test-twelvedata-key` |
 | `FINNHUB_API_KEY` | app server, quant, ops-agent | Finnhub live quotes | no | `test-finnhub-key` |
 | `PYTH_API_TOKEN` | automation, quant, app (server) | Pyth Pro (Lazer) API (server-only secret, never in tests/logs/commits). Quant: primary spot source (one `latest_price` call for all 7 tickers per 5 s) and daily-closes fallback; without it quant uses Finnhub only | M3 (quant: recommended) | `test-pyth-token` |
+| `PYTH_SETTLEMENT_ENABLED` | automation (service and `settle-now`) | `true` settles from Pyth Lazer's signed close (D-055; docs/runbook.md § Pyth settlement); anything else keeps the default path. When `true`, `PYTH_API_TOKEN` is required | no (default `false`) | `false` |
+| `PYTH_LAZER_URL` | automation | Pyth Lazer REST base URL for signed closes | no (default `https://pyth-lazer.dourolabs.app`) | `https://pyth-lazer.dourolabs.app` |
 | `ANTHROPIC_API_KEY` | ops-agent | Claude API | M3 | `sk-ant-test-placeholder` |
 | `OPS_AGENT_MODEL` | ops-agent | Model ID | no | `claude-sonnet-5-5` |
 | `OPS_AGENT_BUDGET_USD` | ops-agent | Hard spend cap; agent refuses calls once reached | no (default 20) | `20` |

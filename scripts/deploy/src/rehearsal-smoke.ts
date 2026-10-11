@@ -49,6 +49,8 @@ const TRADING_DATE = 20_991_231;
 const CLOSE_IN_SECS = 20;
 /** $681.25 with 8 fractional digits (exponent -8). */
 const PYTH_PRICE = 68_125_000_000n;
+/** $0.02 (≈ 0.3 bps): inside the default max_conf_bps of 5. */
+const PYTH_CONFIDENCE = 2_000_000n;
 
 function env(name: string): string {
   const value = process.env[name];
@@ -62,20 +64,25 @@ async function chainNow(connection: Connection): Promise<number> {
   return Number(clock.data.readBigInt64LE(32));
 }
 
+/**
+ * A PayloadData in the pyth-lazer-protocol v0.46.0 wire encoding: Price and Confidence are bare
+ * i64 mantissas (0 = absent), Exponent an i16.
+ */
 function pythPayload(feedId: number, timestampUs: bigint): Buffer {
-  const out = Buffer.alloc(4 + 8 + 1 + 1 + 4 + 1 + 1 + 1 + 8 + 1 + 2);
+  const out = Buffer.alloc(4 + 8 + 1 + 1 + 4 + 1 + (1 + 8) + (1 + 2) + (1 + 8));
   let o = 0;
   o = out.writeUInt32LE(PAYLOAD_FORMAT_MAGIC, o);
-  o = out.writeBigInt64LE(timestampUs, o);
-  o = out.writeUInt8(1, o); // channel
+  o = out.writeBigUInt64LE(timestampUs, o);
+  o = out.writeUInt8(2, o); // channel
   o = out.writeUInt8(1, o); // one feed
   o = out.writeUInt32LE(feedId, o);
-  o = out.writeUInt8(2, o); // two properties
+  o = out.writeUInt8(3, o); // three properties
   o = out.writeUInt8(0, o); // Price
-  o = out.writeUInt8(1, o); // Some
   o = out.writeBigInt64LE(PYTH_PRICE, o);
   o = out.writeUInt8(4, o); // Exponent
-  out.writeInt16LE(-8, o);
+  o = out.writeInt16LE(-8, o);
+  o = out.writeUInt8(5, o); // Confidence
+  out.writeBigInt64LE(PYTH_CONFIDENCE, o);
   return out;
 }
 
@@ -297,7 +304,8 @@ async function main(): Promise<void> {
   }
   const feedId = updated.pythFeedIds[META_SLOT];
   if (feedId === undefined || feedId === 0) throw new Error("no META Pyth feed id pinned");
-  const message = pythPayload(feedId, BigInt(await chainNow(connection)) * 1_000_000n);
+  // Taken at the close: settle_market accepts [close_ts, close_ts + pyth_max_age_secs].
+  const message = pythPayload(feedId, BigInt(closeTs) * 1_000_000n);
   const verify = Ed25519Program.createInstructionWithPrivateKey({
     privateKey: pythSigner.secretKey,
     message,

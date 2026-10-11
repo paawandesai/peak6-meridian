@@ -1,0 +1,15 @@
+{
+  "source": "POST https://pyth-lazer.dourolabs.app/v1/price (formats [solana], channel fixed_rate@200ms, properties price/exponent/confidence), recorded 2026-10-10T20:39:54.605Z",
+  "ticker": "AMZN",
+  "feedId": 954,
+  "closeTs": 1791576000,
+  "requestedTimestampUs": "1791576000000000",
+  "timestampUs": "1791576000000000",
+  "price": "26242500",
+  "exponent": -5,
+  "confidence": "3947",
+  "priceCents": "26243",
+  "confidenceBps": 1.5,
+  "signer": "80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c",
+  "solanaHex": "b9011a827102eb4d5a58484f94892be9823b198b7ef936a53995d5f1487974d5d16a58ce17afc9c8a46a0e85943c88ef4962486b356f98d35fd8ff4dd39500e31fc60d0c80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c280075d3c793007011cb6d5d06000301ba0300000300c46d90010000000004fbff056b0f000000000000"
+}

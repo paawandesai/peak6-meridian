@@ -129,4 +129,12 @@ pub enum MeridianError {
     ConfigAlreadyMigrated,
     #[msg("Config account is not a v1 Config (discriminator, size or bump mismatch)")]
     ConfigLayoutMismatch,
+
+    // ---- Pyth Lazer settlement (D-055). Appended so every earlier code keeps its number. ------
+    #[msg("Pyth update is not signed by the pyth_lazer_signer pinned in the config")]
+    PythWrongSigner,
+    #[msg("Pyth confidence is missing or wider than max_conf_bps of the price")]
+    PythConfidenceTooWide,
+    #[msg("Pyth update is later than close_ts + pyth_max_age_secs")]
+    PythAfterCloseWindow,
 }

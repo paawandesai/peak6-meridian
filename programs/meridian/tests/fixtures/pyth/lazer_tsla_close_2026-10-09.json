@@ -1,0 +1,15 @@
+{
+  "source": "POST https://pyth-lazer.dourolabs.app/v1/price (formats [solana], channel fixed_rate@200ms, properties price/exponent/confidence), recorded 2026-10-10T20:40:02.487Z",
+  "ticker": "TSLA",
+  "feedId": 1435,
+  "closeTs": 1791576000,
+  "requestedTimestampUs": "1791576000000000",
+  "timestampUs": "1791576000000000",
+  "price": "38275500",
+  "exponent": -5,
+  "confidence": "5365",
+  "priceCents": "38276",
+  "confidenceBps": 1.4,
+  "signer": "80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c",
+  "solanaHex": "b9011a8258c5f4226b02e0631097d89d80ee670f809afa99d9bc5f6e3b2500bc6c0e500eb64d0ee6d62587a6007e1a948065fb2f83bd9c091767b6709059d64e8ebb260e80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c280075d3c793007011cb6d5d060003019b0500000300ac0948020000000004fbff05f514000000000000"
+}

@@ -103,6 +103,7 @@ pub fn handle_settle_market(
             &clock,
             market.close_ts,
             config.pyth_max_age_secs,
+            config.max_conf_bps,
         )
     };
     let read_redstone = |redstone_price: &Account<RedstonePrice>| {
@@ -194,7 +195,10 @@ pub fn handle_settle_market(
     )
 }
 
-/// Reads a Pyth Lazer price from the Ed25519 sysvar instruction and validates it.
+/// Reads a Pyth Lazer price from the Ed25519 sysvar instruction and validates it: taken in
+/// `[close_ts, close_ts + close_window_secs]` (Config `pyth_max_age_secs`), confidence within
+/// `max_conf_bps` of the price.
+#[allow(clippy::too_many_arguments)]
 fn read_pyth_price(
     instructions_sysvar: &UncheckedAccount,
     ed25519_ix_index: u16,
@@ -202,7 +206,8 @@ fn read_pyth_price(
     expected_feed_id: u32,
     clock: &Clock,
     close_ts: i64,
-    max_age_secs: i64,
+    close_window_secs: i64,
+    max_conf_bps: u16,
 ) -> Result<crate::oracle::CloseReading> {
     pyth::read_pyth_lazer_close(
         &instructions_sysvar.to_account_info(),
@@ -211,7 +216,8 @@ fn read_pyth_price(
         expected_feed_id,
         clock,
         close_ts,
-        max_age_secs,
+        close_window_secs,
+        max_conf_bps,
     )
 }
 

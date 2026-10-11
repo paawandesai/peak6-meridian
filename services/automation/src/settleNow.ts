@@ -94,6 +94,7 @@ export async function settleNow(params: SettleNowParams): Promise<SettleNowResul
     buildSettleIxs: runtime.buildSettleIxs,
     payer: payer.publicKey,
     executor: runtime.executor,
+    pyth: runtime.pyth,
     alerter: runtime.alerter satisfies AlerterLike,
     incidents: runtime.incidents,
     state: new RunState(),

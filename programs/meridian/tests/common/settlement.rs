@@ -16,7 +16,6 @@ use solana_sdk::system_program;
 
 use super::{
     config_pda, expect_success, symbol, Harness, MarketAddresses, MarketArgs, MarketHarness,
-    BASE_CLOSE_TS,
 };
 
 /// Slot the settlement harness starts at.
@@ -163,8 +162,13 @@ impl SettlementHarness {
     }
 
     pub fn with_strike(strike_cents: u64) -> Self {
+        Self::with_market(&MarketArgs::base().with_strike(strike_cents))
+    }
+
+    /// A harness around the market `args`, with the clock at its close + [`SETTLE_DELAY_SECS`].
+    pub fn with_market(args: &MarketArgs) -> Self {
         let mut market_harness = MarketHarness::new();
-        let addresses = market_harness.create_market(&MarketArgs::base().with_strike(strike_cents));
+        let addresses = market_harness.create_market(args);
         let payer = market_harness.harness.funded_keypair();
         let mut this = SettlementHarness {
             market_harness,
@@ -172,7 +176,7 @@ impl SettlementHarness {
             payer,
         };
         this.h()
-            .set_unix_timestamp(BASE_CLOSE_TS + SETTLE_DELAY_SECS);
+            .set_unix_timestamp(args.close_ts + SETTLE_DELAY_SECS);
         this.h().set_slot(START_SLOT);
         this
     }

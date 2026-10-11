@@ -90,8 +90,10 @@ pub struct Config {
     /// Pyth feed IDs for MAG7 tickers, in the same order as `tickers`. Each u32 is the
     /// numeric Pyth Pro feed ID. Zero means no Pyth feed configured for that ticker slot.
     pub pyth_feed_ids: [u32; TICKER_COUNT],
-    /// Maximum age of Pyth timestamp in seconds (D-055). Pyth timestamps are in microseconds
-    /// and checked against clock.unix_timestamp (not slot-based like Core feeds).
+    /// Close window for Pyth updates, in seconds (D-055): `settle_market` accepts a signed
+    /// update only if it was taken in `[close_ts, close_ts + pyth_max_age_secs]`. Anchored on
+    /// the close, not on the current time, so a permissionless settler cannot pick a later
+    /// after-hours price. The name is kept from the v2 layout.
     pub pyth_max_age_secs: i64,
 }
 

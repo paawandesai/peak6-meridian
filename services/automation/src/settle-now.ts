@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { assertCluster } from "./cluster";
 import { buildRuntime, readKeypairFile } from "./runtime";
+import { parsePythSettlementEnv } from "./config";
 import { settleNow } from "./settleNow";
 
 const env = z
@@ -28,6 +29,9 @@ const env = z
     ...process.env,
     SOLANA_RPC_URL: process.env.MERIDIAN_DEVNET_RPC_URL?.trim() || process.env.SOLANA_RPC_URL,
   });
+
+// Same switch as the service: off unless PYTH_SETTLEMENT_ENABLED=true.
+const pyth = parsePythSettlementEnv(process.env);
 
 settleNow({
   argv: process.argv.slice(2),
@@ -51,6 +55,7 @@ settleNow({
           cluster === "localnet" && env.ADMIN_KEYPAIR_PATH !== undefined
             ? readKeypairFile(env.ADMIN_KEYPAIR_PATH)
             : undefined,
+        pyth,
       },
       cluster,
       payer,

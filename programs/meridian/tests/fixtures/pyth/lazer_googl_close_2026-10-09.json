@@ -1,0 +1,15 @@
+{
+  "source": "POST https://pyth-lazer.dourolabs.app/v1/price (formats [solana], channel fixed_rate@200ms, properties price/exponent/confidence), recorded 2026-10-10T20:39:56.977Z",
+  "ticker": "GOOGL",
+  "feedId": 1163,
+  "closeTs": 1791576000,
+  "requestedTimestampUs": "1791576000000000",
+  "timestampUs": "1791576000000000",
+  "price": "35160000",
+  "exponent": -5,
+  "confidence": "5965",
+  "priceCents": "35160",
+  "confidenceBps": 1.69,
+  "signer": "80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c",
+  "solanaHex": "b9011a829c61fc250944853153d90d847ab25a23c676c2ed97f5b2c785dfabbe8bd23f0f5e0db9947ba2c36f1ac0acd6611d61b1b689d8040b80ff25b8fe8e540ba3310d80efc1f480c5615af3fb673d42287e993da9fbc3506b6e41dfa32950820c2e6c280075d3c793007011cb6d5d060003018b0400000300c07f18020000000004fbff054d17000000000000"
+}

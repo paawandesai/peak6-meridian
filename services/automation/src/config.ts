@@ -6,6 +6,7 @@ import { Keypair } from "@solana/web3.js";
 import { z } from "zod";
 
 import type { Logger } from "./log";
+import { PYTH_LAZER_URL } from "./pythLazer";
 import { DEFAULT_MAX_API_CALLS_PER_RUN } from "./settlePacing";
 
 const emptyToUndefined = (value: unknown): unknown =>
@@ -51,6 +52,42 @@ export function parseEnv(env: Readonly<Record<string, string | undefined>>): Ser
     throw new Error(`invalid environment: ${names.join(", ")}`);
   }
   return result.data;
+}
+
+const pythEnvSchema = z.object({
+  // Pyth settlement (D-055): off unless exactly "true". The default path is unchanged.
+  PYTH_SETTLEMENT_ENABLED: z.preprocess(
+    emptyToUndefined,
+    z.enum(["true", "false"]).default("false"),
+  ),
+  PYTH_API_TOKEN: z.preprocess(emptyToUndefined, z.string().min(8).optional()),
+  PYTH_LAZER_URL: z.preprocess(emptyToUndefined, z.url().default(PYTH_LAZER_URL)),
+});
+
+export interface PythSettlementEnv {
+  readonly apiToken: string;
+  readonly baseUrl: string;
+}
+
+/**
+ * The Pyth settlement switch: null when off (the default). When on, `PYTH_API_TOKEN` is
+ * required; errors name the variable, never its value.
+ */
+export function parsePythSettlementEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): PythSettlementEnv | null {
+  const result = pythEnvSchema.safeParse(env);
+  if (!result.success) {
+    const names = [...new Set(result.error.issues.map((issue) => String(issue.path[0])))];
+    throw new Error(`invalid environment: ${names.join(", ")}`);
+  }
+  if (result.data.PYTH_SETTLEMENT_ENABLED === "false") {
+    return null;
+  }
+  if (result.data.PYTH_API_TOKEN === undefined) {
+    throw new Error("invalid environment: PYTH_API_TOKEN (required by PYTH_SETTLEMENT_ENABLED)");
+  }
+  return { apiToken: result.data.PYTH_API_TOKEN, baseUrl: result.data.PYTH_LAZER_URL };
 }
 
 /** The keypair from `AUTOMATION_KEYPAIR` (a JSON array of 64 bytes); the error never shows it. */
