@@ -24,7 +24,8 @@ test("Portfolio lists the wallet's META positions with the on-chain quantities",
   await connectWallet(page, wallet.keypair.publicKey.toBase58());
 
   // The totals line answers "where do I stand" first (design.md §5 Portfolio (a)).
-  await expect(page.getByText(/test-USDC/)).toBeVisible();
+  // Scoped to the page body: the header also shows the balance and the "Get test-USDC" button.
+  await expect(page.getByRole("main").getByText(/test-USDC/)).toBeVisible();
   await expect(page.getByText(/Redeemable now/i)).toBeVisible();
 
   // One row per held side, with the quantity from the chain and the market's strike.

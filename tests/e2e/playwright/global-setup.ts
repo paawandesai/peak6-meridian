@@ -1,6 +1,7 @@
 /**
  * Brings up the smoke stack and tears it down again: a `solana-test-validator` with the local-oracle
- * build, the lifecycle seed (config with local feeds, test-USDC, the day's markets open for 8 h),
+ * build, the lifecycle seed (config with local feeds, test-USDC, test markets open for 8 h), real
+ * session ladders for the seven tickers on the next open session (what Markets and Trade list),
  * a funded test wallet and the app (`next dev`) wired to the validator. Everything is throwaway and
  * local: the validator's keys never leave the temp dir and the app only gets them as env.
  *
@@ -23,14 +24,18 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Connection, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { z } from "zod";
 
+import { createSessionLadders } from "./support/chain";
 import { STATE_ENV, type StackState } from "./support/state";
 
 const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
 const PROGRAM_SO = join(ROOT, "target/deploy/meridian.so");
 const PROGRAM_IDL = join(ROOT, "target/idl/meridian.json");
-/** Trading date of tests/fixtures/prev_closes.json, which the lifecycle seed creates markets for. */
-const SEED_TRADING_DATE = 20261006;
+/** The lifecycle seed's previous closes; the session ladders reuse them (META $680.00). */
+const PREV_CLOSES = join(ROOT, "tests/fixtures/prev_closes.json");
+/** The session ladders must stay open for the whole run: skip a session closing within 1 h. */
+const SESSION_MARGIN_SECS = 3_600;
 
 const RPC_PORT = Number(process.env.E2E_RPC_PORT ?? "8899");
 const FAUCET_PORT = Number(process.env.E2E_FAUCET_PORT ?? "9900");
@@ -46,6 +51,12 @@ function programIdFromAnchorToml(): string {
   const match = /^meridian = "(.+)"$/m.exec(toml);
   if (match?.[1] === undefined) throw new Error("no meridian program ID in Anchor.toml");
   return match[1];
+}
+
+function fixtureCloses(): Record<string, number> {
+  return z
+    .object({ closes: z.record(z.string(), z.number().int().positive()) })
+    .parse(JSON.parse(readFileSync(PREV_CLOSES, "utf8"))).closes;
 }
 
 function assertLocalBuild(): void {
@@ -147,6 +158,16 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     const usdcMint = /^SEED_USDC_MINT=(\S+)$/m.exec(seed)?.[1];
     if (usdcMint === undefined) throw new Error("the seed did not report the USDC mint");
 
+    // The seed's markets close "now + 8 h", not at a session close, so every page files them
+    // under "Show test markets" and the Trade page refuses them (P0-1). The specs trade what a
+    // user would see: real session ladders (same previous closes) on the next open session.
+    const tradingDate = createSessionLadders(
+      { rpcUrl: RPC_URL, adminKeypairPath: adminPath, programId },
+      fixtureCloses(),
+      SESSION_MARGIN_SECS,
+    );
+    log(`created the session ladders for ${tradingDate}`);
+
     const appEnv = {
       ...process.env,
       NEXT_PUBLIC_CLUSTER: "devnet",
@@ -208,7 +229,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
       usdcMint,
       adminKeypairPath: adminPath,
       walletSecret: Array.from(wallet.secretKey),
-      tradingDate: SEED_TRADING_DATE,
+      tradingDate,
     };
     const statePath = join(work, "state.json");
     writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });

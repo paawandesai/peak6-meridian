@@ -109,7 +109,7 @@ flowchart LR
 - `ops-agent` `POST /incidents` `{trading_date, ticker, markets[], failure}` → `{incident_id}`; `GET /drafts` → `[{incident_id, market, proposed_price_cents, sources[{name, close, as_of}], spread_bps, note, status}]`
 - `automation` `GET /health` → last morning run, last settlement run, failures.
 - `automation` `GET /markets` → `{ready, as_of, markets[{market, opened_at, signature}]}`: the market open-time index (P1-4, D-050). `opened_at` is the block time (unix seconds) of the transaction that emitted the market's `MarketCreated` event. Rebuilt from the chain at startup with one paged scan of `config.automation_authority`'s signatures plus batched `getTransactions` (every `create_strike_market` is signed by that key, AB-19), then kept current by incremental scans at most every 30 s; 7-day lookback. `ready` is false until the first rebuild finishes. The app reads it through `GET /api/market-open-times`.
-- `app` `POST /api/faucet` `{wallet}` → tx signature or 429.
+- `app` `POST /api/faucet` `{wallet}` → tx signature, amount and `fee_sol_status` (`sent` / `not_needed` / `faucet_low`; a nearly empty wallet gets 0.01 SOL for fees in the same transaction), or 429.
 
 ## Data model (on-chain accounts)
 | Account | PDA seeds | Key fields |

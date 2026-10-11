@@ -16,6 +16,7 @@ type Outcome = {
   err: unknown;
   mints: { ata: string; amount: bigint }[];
   accounts: Map<string, Account>;
+  balance: number;
 };
 
 export class FakeFaucetChain implements FaucetChain {
@@ -23,12 +24,19 @@ export class FakeFaucetChain implements FaucetChain {
   genesisError: Error | undefined;
   /** Cluster time in unix seconds; tests move it. */
   unixTime = 1_791_500_000;
+  /**
+   * Lamports of the faucet key (the mint authority). Transfers from it debit it, and one that
+   * would take it below zero fails like the system program's insufficient-funds error. Every other
+   * address's lamports live in `accounts` (0 when absent).
+   */
   balance = 5_000_000_000;
   mintAuthority: PublicKey | null = null;
   rent = 890_880;
   accounts = new Map<string, Account>();
   mints: { ata: string; amount: bigint }[] = [];
   sentSignatures: string[] = [];
+  /** Every transaction handed to `send`, landed or not. */
+  sentTransactions: Transaction[] = [];
   simulations = 0;
   blockhashes = 0;
   /** Makes the ATA instruction fail with this system/other error code. */
@@ -57,8 +65,11 @@ export class FakeFaucetChain implements FaucetChain {
       ? Promise.resolve(this.genesisHash)
       : Promise.reject(this.genesisError);
   }
-  getBalance(): Promise<number> {
-    return Promise.resolve(this.balance);
+  getBalance(address: PublicKey): Promise<number> {
+    if (this.mintAuthority !== null && address.equals(this.mintAuthority)) {
+      return Promise.resolve(this.balance);
+    }
+    return Promise.resolve(this.accounts.get(address.toBase58())?.lamports ?? 0);
   }
   getMintAuthority(): Promise<PublicKey | null> {
     return Promise.resolve(this.mintAuthority);
@@ -91,16 +102,23 @@ export class FakeFaucetChain implements FaucetChain {
     }
     const accounts = new Map([...this.accounts].map(([k, v]) => [k, { ...v }]));
     const mints: Outcome["mints"] = [];
+    let balance = this.balance;
     for (const [index, ix] of tx.instructions.entries()) {
       const fail = (code: number): Outcome => ({
         err: { InstructionError: [index, { Custom: code }] },
         mints: [],
         accounts: this.accounts,
+        balance: this.balance,
       });
       if (ix.programId.equals(SystemProgram.programId)) {
         const type = SystemInstruction.decodeInstructionType(ix);
         if (type === "Transfer") {
-          const { toPubkey, lamports } = SystemInstruction.decodeTransfer(ix);
+          const { fromPubkey, toPubkey, lamports } = SystemInstruction.decodeTransfer(ix);
+          if (this.mintAuthority !== null && fromPubkey.equals(this.mintAuthority)) {
+            // SystemError::ResultWithNegativeLamports (custom error 1): not enough lamports.
+            if (balance < Number(lamports)) return fail(1);
+            balance -= Number(lamports);
+          }
           const account = accounts.get(toPubkey.toBase58()) ?? { lamports: 0, dataLen: 0 };
           account.lamports += Number(lamports);
           accounts.set(toPubkey.toBase58(), account);
@@ -128,8 +146,9 @@ export class FakeFaucetChain implements FaucetChain {
       // Applied in the same synchronous step as the check, so concurrent claims cannot both win.
       this.accounts = accounts;
       this.mints.push(...mints);
+      this.balance = balance;
     }
-    return { err: null, mints, accounts };
+    return { err: null, mints, accounts, balance };
   }
 
   async simulate(tx: Transaction): Promise<SimulationResult> {
@@ -140,6 +159,7 @@ export class FakeFaucetChain implements FaucetChain {
   async send(tx: Transaction): Promise<string> {
     if (this.beforeSend !== undefined) await this.beforeSend();
     // An expiring transaction never lands (the blockhash passes before any leader includes it).
+    this.sentTransactions.push(tx);
     const dropped = this.expireNext;
     this.expireNext = false;
     const outcome = await this.evaluate(tx, !dropped);

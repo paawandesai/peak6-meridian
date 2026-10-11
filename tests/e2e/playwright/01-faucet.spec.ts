@@ -39,7 +39,10 @@ test("a second claim inside 24 h is refused with the rule stated", async ({
   await page.goto("/");
   await connectWallet(page, wallet.keypair.publicKey.toBase58());
   await page.getByRole("button", { name: "Get test-USDC" }).click();
-  await expect(page.getByRole("alert")).toContainText(/24/);
+  // The faucet's own alert, not Next's (empty) route announcer, which also has role="alert".
+  await expect(page.getByRole("alert").filter({ hasText: /already claimed/ })).toContainText(
+    /one claim per wallet per 24 hours/,
+  );
   await expect
     .poll(() => usdcBalance(connectionFor(state), state, wallet.keypair.publicKey))
     .toBe(1_000_000_000n);
