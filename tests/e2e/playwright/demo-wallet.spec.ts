@@ -1,5 +1,12 @@
 import { test, expect } from "@playwright/test";
-import { confirmedStatus, intentButton, priceInput, qtyInput, signButton } from "./support/ui";
+import {
+  confirmedStatus,
+  intentButton,
+  openTradeLink,
+  priceInput,
+  qtyInput,
+  signButton,
+} from "./support/ui";
 
 // AC1/AC9: Demo wallet happy path (connect, fund, trade) runs in `make e2e` with NEXT_PUBLIC_CLUSTER=devnet.
 // AC6 registration guard (absence on non-devnet) is verified by unit tests in storage.test.ts.
@@ -24,11 +31,8 @@ test.describe("Demo wallet (M4-07)", () => {
     await expect(page.getByText(/[1-9].*test-USDC/i)).toBeVisible({ timeout: 10000 });
 
     // AC9: Navigate to a market and place a trade
-    // Follow the first strike's Trade link (a session market, see global-setup) to its trade page
-    await page
-      .getByRole("link", { name: /^\$[\d,]+ Trade$/ })
-      .first()
-      .click();
+    // Open the first session strike on the board and follow its Trade link (see global-setup)
+    await (await openTradeLink(page)).click();
     await expect(page).toHaveURL(/\/trade\//);
 
     // Place a Buy YES trade (AC9)

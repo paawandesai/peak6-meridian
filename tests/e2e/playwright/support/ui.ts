@@ -10,6 +10,18 @@ export type IntentLabel = "Buy YES" | "Buy NO" | "Sell YES" | "Sell NO";
 
 export const tradePath = (marketAddress: string): string => `/trade/${marketAddress}`;
 
+/**
+ * From the Trade board on `/`: opens the first open strike's detail view and returns its
+ * "Trade this strike" link (docs/redesign-spec.md §2.2–2.3; the board itself has no trade links).
+ */
+export async function openTradeLink(page: Page): Promise<Locator> {
+  await page
+    .getByRole("button", { name: /: open details$/ })
+    .first()
+    .click();
+  return page.getByTestId("detail-view").getByRole("link", { name: /Trade this strike/ });
+}
+
 export const intentButton = (page: Page, intent: IntentLabel): Locator =>
   page.getByRole("radio", { name: new RegExp(`^${intent}`) });
 
