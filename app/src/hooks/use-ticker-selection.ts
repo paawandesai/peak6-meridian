@@ -11,11 +11,18 @@ type UseTickerSelectionOptions = {
   readonly defaultTicker?: TickerOrAll;
 };
 
+function parseTicker(value: string | null): TickerOrAll | null {
+  return value !== null && (TICKERS as readonly string[]).includes(value)
+    ? (value as TickerOrAll)
+    : null;
+}
+
 /**
  * Hook for ticker selection state with URL sync (?t=) and localStorage persistence (P0-3).
- * - Reads ?t= query param on mount
- * - Syncs selection to URL on change (with back/forward support)
- * - Persists last selected ticker to localStorage
+ * - The ?t= query param is the source of truth and is read on every render, so a selection made
+ *   anywhere (the tab bar rewrites ?t= itself) shows at once, without a reload
+ * - Without ?t=, restores the last ticker from localStorage after mount and writes it to the URL
+ * - Persists every selection, from the URL or the setter, to localStorage
  * - Returns current ticker and setter
  */
 export function useTickerSelection(
@@ -25,20 +32,18 @@ export function useTickerSelection(
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const [ticker, setTickerState] = useState<TickerOrAll>(defaultTicker);
+  const fromUrl = parseTicker(searchParams.get("t"));
+  // Used only while the URL carries no valid ?t= (first paint, or before the restore lands).
+  const [fallback, setFallback] = useState<TickerOrAll>(defaultTicker);
 
-  // Initialize from URL param or localStorage
+  // Without ?t=, restore the last ticker from localStorage (after mount: no hydration mismatch).
   useEffect(() => {
-    const paramTicker = searchParams.get("t");
-    if (paramTicker && TICKERS.includes(paramTicker as TickerOrAll)) {
-      setTickerState(paramTicker as TickerOrAll);
+    if (fromUrl !== null) {
       return;
     }
-
-    // Fallback to localStorage
-    const storedTicker = localStorage.getItem(STORAGE_KEY);
-    if (storedTicker && TICKERS.includes(storedTicker as TickerOrAll)) {
-      setTickerState(storedTicker as TickerOrAll);
+    const storedTicker = parseTicker(localStorage.getItem(STORAGE_KEY));
+    if (storedTicker !== null) {
+      setFallback(storedTicker);
       // Update URL to match localStorage
       const params = new URLSearchParams(searchParams.toString());
       params.set("t", storedTicker);
@@ -46,8 +51,15 @@ export function useTickerSelection(
     }
   }, []); // Run once on mount
 
+  // Remember a selection made through the URL (the tab bar) as well as through the setter.
+  useEffect(() => {
+    if (fromUrl !== null) {
+      localStorage.setItem(STORAGE_KEY, fromUrl);
+    }
+  }, [fromUrl]);
+
   const setTicker = (newTicker: TickerOrAll) => {
-    setTickerState(newTicker);
+    setFallback(newTicker);
 
     // Update URL
     const params = new URLSearchParams(searchParams.toString());
@@ -58,5 +70,5 @@ export function useTickerSelection(
     localStorage.setItem(STORAGE_KEY, newTicker);
   };
 
-  return [ticker, setTicker];
+  return [fromUrl ?? fallback, setTicker];
 }

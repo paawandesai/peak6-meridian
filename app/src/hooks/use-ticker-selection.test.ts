@@ -127,4 +127,45 @@ describe("useTickerSelection", () => {
 
     expect(ticker).toBe("All"); // Falls back to default
   });
+
+  // Regression: the tab bar rewrites ?t= itself; the list (markets-view) read it only on mount,
+  // so the URL changed but the markets shown did not until a reload.
+  it("follows ?t= when it changes after mount, without a remount", () => {
+    mockSearchParams.set("t", "AMZN");
+    const { result, rerender } = renderHook(() => useTickerSelection());
+    expect(result.current[0]).toBe("AMZN");
+
+    for (const next of ["GOOGL", "All", "TSLA"] as const) {
+      mockSearchParams.set("t", next);
+      rerender();
+      expect(result.current[0]).toBe(next);
+    }
+  });
+
+  it("follows ?t= that appears after mounting with no param", () => {
+    const { result, rerender } = renderHook(() => useTickerSelection());
+    expect(result.current[0]).toBe("All");
+
+    mockSearchParams.set("t", "META");
+    rerender();
+    expect(result.current[0]).toBe("META");
+  });
+
+  it("remembers a ticker chosen through the URL, so a fresh load restores it", () => {
+    localStorage.setItem("meridian-last-ticker", "AMZN");
+    const { rerender } = renderHook(() => useTickerSelection());
+
+    mockSearchParams.set("t", "NVDA");
+    rerender();
+    expect(localStorage.getItem("meridian-last-ticker")).toBe("NVDA");
+  });
+
+  it("an invalid ?t= arriving later falls back instead of breaking", () => {
+    mockSearchParams.set("t", "MSFT");
+    const { result, rerender } = renderHook(() => useTickerSelection());
+
+    mockSearchParams.set("t", "NOPE");
+    rerender();
+    expect(result.current[0]).toBe("All");
+  });
 });
