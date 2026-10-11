@@ -3,6 +3,8 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import {
+  extendBytesNeeded,
+  MIN_EXTEND_BYTES,
   onChainElfMatches,
   PROGRAM_DATA_HEADER_LEN,
   programDataAddress,
@@ -121,5 +123,39 @@ describe("onChainElfMatches (the exact comparison rule)", () => {
     expect(
       onChainElfMatches(programDataAccount(1n, null, elf, 4), Uint8Array.from([1, 2, 9, 4])),
     ).toBe(false);
+  });
+});
+
+describe("extendBytesNeeded", () => {
+  it("is 0 when the build fits the ProgramData account", () => {
+    expect(extendBytesNeeded(PROGRAM_DATA_HEADER_LEN + 1_000, 1_000)).toBe(0);
+    expect(extendBytesNeeded(PROGRAM_DATA_HEADER_LEN + 1_000, 900)).toBe(0);
+  });
+
+  it("extends by at least MIN_EXTEND_BYTES for a small shortfall", () => {
+    expect(extendBytesNeeded(PROGRAM_DATA_HEADER_LEN + 1_000, 1_001)).toBe(MIN_EXTEND_BYTES);
+  });
+
+  it("extends by exactly the shortfall when it is larger than the minimum", () => {
+    expect(extendBytesNeeded(PROGRAM_DATA_HEADER_LEN + 1_000, 1_000 + 50_000)).toBe(50_000);
+  });
+
+  it("treats an account shorter than the header as holding nothing", () => {
+    expect(extendBytesNeeded(10, 20_000)).toBe(20_000);
+  });
+
+  it("after extending, the build always fits, and 0 means it already did (property)", () => {
+    fc.assert(
+      fc.property(fc.nat(2_000_000), fc.nat(2_000_000), (capacity, built) => {
+        const extend = extendBytesNeeded(PROGRAM_DATA_HEADER_LEN + capacity, built);
+        if (built <= capacity) {
+          expect(extend).toBe(0);
+        } else {
+          expect(extend).toBeGreaterThanOrEqual(MIN_EXTEND_BYTES);
+          expect(capacity + extend).toBeGreaterThanOrEqual(built);
+          expect(extend).toBe(Math.max(built - capacity, MIN_EXTEND_BYTES));
+        }
+      }),
+    );
   });
 });

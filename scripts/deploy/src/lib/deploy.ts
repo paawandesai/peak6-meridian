@@ -37,6 +37,7 @@ import { assertProgramIds, declaredIdFromLibRs, idlAddress } from "./program-id"
 import { feedAccountHash, isSwitchboardOwner } from "./switchboard";
 import {
   BPF_LOADER_UPGRADEABLE,
+  extendBytesNeeded,
   onChainElfMatches,
   onChainWindow,
   programDataAddress,
@@ -217,6 +218,24 @@ async function ensureProgram(
           `built ${soSha(elf)}). Nothing was sent. Pass --allow-upgrade to upgrade it.`,
       );
     } else {
+      // `solana program deploy` cannot grow ProgramData: a build larger than it fails mid-upgrade.
+      const extend = extendBytesNeeded(data.bytes.length, elf.length);
+      if (extend > 0) {
+        log(`extending ProgramData of ${programId.toBase58()} by ${extend} bytes`);
+        await runSolana([
+          "program",
+          "extend",
+          programId.toBase58(),
+          extend.toString(),
+          "--keypair",
+          options.adminKeypairPath,
+          "--url",
+          options.rpcUrl,
+          "--commitment",
+          "confirmed",
+        ]);
+        actions.push("extend-program");
+      }
       log(`upgrading program ${programId.toBase58()} (${elf.length} bytes)`);
       await runSolana(["program", "deploy", soPath, ...common]);
       actions.push("upgrade-program");

@@ -75,3 +75,19 @@ export function onChainElfMatches(programData: Uint8Array, built: Uint8Array): b
 export function onChainWindow(programData: Uint8Array, builtLength: number): Uint8Array {
   return programData.slice(PROGRAM_DATA_HEADER_LEN, PROGRAM_DATA_HEADER_LEN + builtLength);
 }
+
+/** The smallest extension sent: a few bytes of growth still leaves room for the next upgrade. */
+export const MIN_EXTEND_BYTES = 10_240;
+
+/**
+ * Bytes to add to a ProgramData account of `programDataLength` bytes (header included) so an ELF
+ * of `builtLength` bytes fits: 0 when it already fits, otherwise the shortfall, at least
+ * `MIN_EXTEND_BYTES`.
+ */
+export function extendBytesNeeded(programDataLength: number, builtLength: number): number {
+  const capacity = Math.max(0, programDataLength - PROGRAM_DATA_HEADER_LEN);
+  if (builtLength <= capacity) {
+    return 0;
+  }
+  return Math.max(builtLength - capacity, MIN_EXTEND_BYTES);
+}
