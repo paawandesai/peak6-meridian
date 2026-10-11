@@ -1,10 +1,19 @@
 // @vitest-environment node
 import { DEVNET_GENESIS_HASH, MAINNET_BETA_GENESIS_HASH } from "@meridian/client";
-import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { Keypair, PublicKey, SystemInstruction, SystemProgram } from "@solana/web3.js";
+import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import { FakeFaucetChain } from "./fake-chain";
-import { ALREADY_CLAIMED_MESSAGE, createFaucet, isMarkerConflict } from "./faucet";
+import {
+  ALREADY_CLAIMED_MESSAGE,
+  buildClaim,
+  createFaucet,
+  isMarkerConflict,
+  planFeeSol,
+} from "./faucet";
+import { FEE_SOL_LAMPORTS, FEE_SOL_THRESHOLD_LAMPORTS } from "./response";
 import { SECONDS_PER_DAY } from "./seed";
 
 const AMOUNT = 5_000_000n;
@@ -36,7 +45,7 @@ function setup(extra: { alertThrows?: boolean } = {}) {
     now: () => now,
     log: (entry) => logs.push(entry),
   });
-  return { faucet, chain, logs, alerts, advance: (ms: number) => (now += ms) };
+  return { faucet, chain, keypair, logs, alerts, advance: (ms: number) => (now += ms) };
 }
 
 const wallet = () => Keypair.generate().publicKey.toBase58();
@@ -145,5 +154,174 @@ describe("isMarkerConflict", () => {
     expect(isMarkerConflict(err(1, "GenericError"), [1, 3])).toBe(false);
     expect(isMarkerConflict({ InstructionError: "bad" }, [1])).toBe(false);
     expect(isMarkerConflict(undefined, [1])).toBe(false);
+  });
+});
+
+/** The system transfers of a transaction, decoded, with their instruction index. */
+function transfers(tx: { instructions: readonly { programId: PublicKey; data: Buffer }[] }) {
+  return tx.instructions.flatMap((ix, index) => {
+    if (!ix.programId.equals(SystemProgram.programId)) return [];
+    const typed = ix as Parameters<typeof SystemInstruction.decodeInstructionType>[0];
+    if (SystemInstruction.decodeInstructionType(typed) !== "Transfer") return [];
+    return [{ index, ...SystemInstruction.decodeTransfer(typed) }];
+  });
+}
+
+const mintIndex = (tx: { instructions: readonly { programId: PublicKey; data: Buffer }[] }) =>
+  tx.instructions.findIndex((ix) => ix.programId.equals(TOKEN_PROGRAM_ID) && ix.data[0] === 7);
+
+describe("buildClaim fee SOL", () => {
+  const blockhash = {
+    blockhash: new PublicKey(new Uint8Array(32).fill(3)).toBase58(),
+    lastValidBlockHeight: 9,
+  };
+
+  async function build(feeSolLamports: bigint) {
+    const keypair = Keypair.generate();
+    const claimant = Keypair.generate().publicKey;
+    const built = await buildClaim(
+      {
+        chain: new FakeFaucetChain(),
+        keypair,
+        mint: Keypair.generate().publicKey,
+        amountBaseUnits: AMOUNT,
+      },
+      claimant,
+      20_000n,
+      blockhash,
+      feeSolLamports,
+    );
+    return { ...built, keypair, claimant };
+  }
+
+  it("adds exactly one faucet-to-claimant transfer of the exact lamports, after the mint, in the same transaction", async () => {
+    const { tx, keypair, claimant, markerIndexes } = await build(FEE_SOL_LAMPORTS);
+    const toClaimant = transfers(tx).filter((t) => t.toPubkey.equals(claimant));
+    expect(toClaimant).toHaveLength(1);
+    const [fee] = toClaimant;
+    expect(fee?.fromPubkey.equals(keypair.publicKey)).toBe(true);
+    expect(fee?.lamports).toBe(FEE_SOL_LAMPORTS);
+    expect(mintIndex(tx)).toBeGreaterThan(-1);
+    expect(fee?.index).toBeGreaterThan(mintIndex(tx));
+    // The markers keep their positions, so a repeat claim is still recognised as one.
+    expect(markerIndexes).toEqual([1, 3]);
+    expect(tx.feePayer?.equals(keypair.publicKey)).toBe(true);
+  });
+
+  it("adds no transfer to the claimant when no fee SOL is planned", async () => {
+    const { tx, claimant } = await build(0n);
+    expect(transfers(tx).filter((t) => t.toPubkey.equals(claimant))).toHaveLength(0);
+    // Only the two marker rent transfers remain.
+    expect(transfers(tx)).toHaveLength(2);
+  });
+});
+
+describe("planFeeSol", () => {
+  it("sends the fixed amount iff the wallet is below the threshold and the faucet stays at its floor (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.bigInt({ min: 0n, max: 10n ** 12n }),
+        fc.bigInt({ min: 0n, max: 10n ** 12n }),
+        fc.bigInt({ min: 0n, max: 10n ** 12n }),
+        (walletLamports, faucetLamports, minLamports) => {
+          const plan = planFeeSol(walletLamports, faucetLamports, minLamports);
+          if (walletLamports >= FEE_SOL_THRESHOLD_LAMPORTS) {
+            expect(plan).toEqual({ status: "not_needed" });
+          } else if (faucetLamports - FEE_SOL_LAMPORTS >= minLamports) {
+            expect(plan).toEqual({ status: "sent", lamports: FEE_SOL_LAMPORTS });
+          } else {
+            expect(plan).toEqual({ status: "faucet_low" });
+          }
+        },
+      ),
+    );
+  });
+
+  it("is exact at both edges", () => {
+    expect(planFeeSol(FEE_SOL_THRESHOLD_LAMPORTS - 1n, 10n ** 10n, 0n).status).toBe("sent");
+    expect(planFeeSol(FEE_SOL_THRESHOLD_LAMPORTS, 10n ** 10n, 0n).status).toBe("not_needed");
+    expect(planFeeSol(0n, 100n + FEE_SOL_LAMPORTS, 100n).status).toBe("sent");
+    expect(planFeeSol(0n, 99n + FEE_SOL_LAMPORTS, 100n).status).toBe("faucet_low");
+  });
+});
+
+describe("createFaucet.claim fee SOL", () => {
+  it("a fresh wallet gets the test-USDC and 0.01 SOL in the one claim transaction", async () => {
+    const { faucet, chain, keypair } = setup();
+    const w = Keypair.generate().publicKey;
+    const before = chain.balance;
+    expect(await faucet.claim(w.toBase58())).toMatchObject({
+      status: 200,
+      feeSol: { status: "sent", lamports: FEE_SOL_LAMPORTS },
+    });
+    expect(await chain.getBalance(w)).toBe(Number(FEE_SOL_LAMPORTS));
+    expect(chain.mints).toHaveLength(1);
+    expect(chain.sentTransactions).toHaveLength(1);
+    const [tx] = chain.sentTransactions;
+    const fee = transfers(tx ?? { instructions: [] }).find((t) => t.toPubkey.equals(w));
+    expect(fee?.fromPubkey.equals(keypair.publicKey)).toBe(true);
+    // The faucet paid the fee SOL plus the two marker rents.
+    expect(before - chain.balance).toBe(Number(FEE_SOL_LAMPORTS) + 2 * chain.rent);
+  });
+
+  it("a wallet that already holds the threshold gets test-USDC and no SOL", async () => {
+    const { faucet, chain } = setup();
+    const w = Keypair.generate().publicKey;
+    chain.accounts.set(w.toBase58(), { lamports: Number(FEE_SOL_THRESHOLD_LAMPORTS), dataLen: 0 });
+    expect(await faucet.claim(w.toBase58())).toMatchObject({
+      status: 200,
+      feeSol: { status: "not_needed" },
+    });
+    expect(await chain.getBalance(w)).toBe(Number(FEE_SOL_THRESHOLD_LAMPORTS));
+  });
+
+  it("a repeat claim inside 24 h is refused and sends no more SOL", async () => {
+    const { faucet, chain } = setup();
+    const w = Keypair.generate().publicKey;
+    expect((await faucet.claim(w.toBase58())).status).toBe(200);
+    // Spend the fee SOL so the wallet is below the threshold again: still one claim per 24 h.
+    chain.accounts.set(w.toBase58(), { lamports: 0, dataLen: 0 });
+    expect(await faucet.claim(w.toBase58())).toEqual({
+      status: 429,
+      error: ALREADY_CLAIMED_MESSAGE,
+    });
+    expect(await chain.getBalance(w)).toBe(0);
+    expect(chain.mints).toHaveLength(1);
+  });
+
+  it("too low on SOL to send fees: mints test-USDC, sends no SOL, logs and alerts once", async () => {
+    const { faucet, chain, logs, alerts } = setup();
+    chain.balance = 100 + Number(FEE_SOL_LAMPORTS) - 1; // the floor is 100 lamports
+    const w = Keypair.generate().publicKey;
+    expect(await faucet.claim(w.toBase58())).toMatchObject({
+      status: 200,
+      feeSol: { status: "faucet_low" },
+    });
+    expect(chain.mints).toHaveLength(1);
+    expect(await chain.getBalance(w)).toBe(0);
+    expect(logs).toContainEqual(expect.objectContaining({ event: "faucet_fee_sol_low" }));
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toContain("fee SOL");
+    await faucet.claim(wallet());
+    expect(alerts).toHaveLength(1); // same cooldown as the out-of-funds alert
+  });
+
+  it("a claim that fails at the token account sends no SOL either (one transaction)", async () => {
+    const { faucet, chain } = setup();
+    chain.ataFailsWith = 5;
+    const w = Keypair.generate().publicKey;
+    const before = chain.balance;
+    expect((await faucet.claim(w.toBase58())).status).toBe(502);
+    expect(await chain.getBalance(w)).toBe(0);
+    expect(chain.balance).toBe(before);
+  });
+
+  it("an unreadable claimant balance is a 502 before anything is sent", async () => {
+    const { faucet, chain, keypair } = setup();
+    const real = chain.getBalance.bind(chain);
+    chain.getBalance = (address) =>
+      address.equals(keypair.publicKey) ? real(address) : Promise.reject(new TypeError("rpc"));
+    expect((await faucet.claim(wallet())).status).toBe(502);
+    expect(chain.sentTransactions).toHaveLength(0);
   });
 });

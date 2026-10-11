@@ -1,9 +1,13 @@
-/** POST /api/faucet {wallet}: mints a fixed amount of test-USDC, once per wallet per 24 h (M2-09). */
+/**
+ * POST /api/faucet {wallet}: mints a fixed amount of test-USDC, once per wallet per 24 h (M2-09),
+ * plus a little fee SOL for a wallet that has almost none (`fee_sol_*` in the reply).
+ */
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createFaucetFromEnv } from "@/lib/faucet/instance";
 import type { Faucet } from "@/lib/faucet/faucet";
+import { FEE_SOL_UNAVAILABLE_MESSAGE, type FaucetSuccess } from "@/lib/faucet/response";
 
 export const dynamic = "force-dynamic";
 
@@ -50,10 +54,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const result = await active.claim(wallet);
   if (result.status === 200) {
-    return NextResponse.json(
-      { signature: result.signature, amount_base_units: result.amountBaseUnits.toString() },
-      { headers: { "Cache-Control": "no-store" } },
-    );
+    const { feeSol } = result;
+    const reply: FaucetSuccess = {
+      signature: result.signature,
+      amount_base_units: result.amountBaseUnits.toString(),
+      fee_sol_status: feeSol.status,
+      fee_sol_lamports: feeSol.status === "sent" ? feeSol.lamports.toString() : "0",
+      ...(feeSol.status === "faucet_low" ? { fee_sol_message: FEE_SOL_UNAVAILABLE_MESSAGE } : {}),
+    };
+    return NextResponse.json(reply, { headers: { "Cache-Control": "no-store" } });
   }
   return NextResponse.json(
     { error: result.error },

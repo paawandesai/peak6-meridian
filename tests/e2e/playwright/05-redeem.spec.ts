@@ -2,7 +2,6 @@
  * Redeem after local settlement: a META strike that closes ~40 s after creation is minted by the
  * wallet, settled YES with the local oracle ($2,000 against a strike of about $1,360), and the
  * winner redeemed from Portfolio with one signature. Pays $1.00 per YES token (M2-07 AC2).
- * TODO(!43 M2-07): remove `fixme` once !43 /portfolio merges to main, check support/ui.ts.
  */
 import {
   createShortMarket,
@@ -39,6 +38,12 @@ test("a settled winner redeems at $1.00 each with one signature", async ({
   const before = await usdcBalance(connection, state, wallet.keypair.publicKey);
   await page.goto("/portfolio");
   await connectWallet(page, wallet.keypair.publicKey.toBase58());
+  // A 40 s market's close is not a session close, so Portfolio files it as a test market (P0-1)
+  // and lists it once the user reveals test markets, as a tester would.
+  await page.getByTestId("test-market-toggle").click();
+  await expect(page.getByTestId("test-market-toggle")).toHaveText(/^Hide test markets/);
+  // Settled positions (won, lost, exited) live under the "Closed" tab; "Open" is the default.
+  await page.getByRole("tab", { name: "Closed" }).click();
   await expect(page.getByText(/Settled YES/).first()).toBeVisible();
 
   wallet.reset();

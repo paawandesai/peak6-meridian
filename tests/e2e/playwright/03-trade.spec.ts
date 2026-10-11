@@ -1,7 +1,6 @@
 /**
- * The four intents from the UI, one signature request each (AC2). Written against design.md v2 and
- * M2-06 (!49); fixme until the Trade page (/trade/[market]) merges.
- * TODO(!49 M2-06): remove `fixme` once !49 merges to main, check support/ui.ts locators.
+ * The four intents from the UI, one signature request each (AC2), on the META $680 session market
+ * global-setup creates (the Trade page only opens session markets, P0-1 AC4).
  */
 import {
   type Chain,

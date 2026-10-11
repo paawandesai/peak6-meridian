@@ -1,7 +1,8 @@
 /**
  * The faucet claim (M2-09): mints a fixed amount of test-USDC, at most once per wallet per
  * 24 h, enforced on chain by two day-bucket marker accounts created in the same transaction as the
- * mint (see `seed.ts`). Cluster time, never an instance wall clock, picks the buckets. This module
+ * mint (see `seed.ts`). A claimant with almost no SOL also gets a small fixed amount of fee SOL in
+ * that same transaction (`planFeeSol`), so a fresh wallet (the demo wallet) can pay for a trade. Cluster time, never an instance wall clock, picks the buckets. This module
  * takes its configuration and a `FaucetChain` as parameters, reads no environment, and never puts
  * a key, the RPC URL or the webhook URL into a result, an error or a log entry.
  */
@@ -20,6 +21,7 @@ import {
 import { assertCluster, ClusterError, redactRpcUrl } from "@meridian/client";
 
 import type { FaucetChain } from "./chain";
+import { FEE_SOL_LAMPORTS, FEE_SOL_THRESHOLD_LAMPORTS } from "./response";
 import { dayBucket, markerSeed } from "./seed";
 
 /** System-program error code for "account already in use" (`SystemError::AccountAlreadyInUse`). */
@@ -44,8 +46,38 @@ export type FaucetDeps = {
   readonly log: LogFn;
 };
 
+/**
+ * The fee SOL decision for one claim: `sent` (the claim transfers `lamports` to the claimant),
+ * `not_needed` (the claimant already holds at least the threshold) or `faucet_low` (sending it
+ * would take the faucet below its floor, so the claim mints test-USDC only).
+ */
+export type FeeSol =
+  | { readonly status: "sent"; readonly lamports: bigint }
+  | { readonly status: "not_needed" }
+  | { readonly status: "faucet_low" };
+
+/**
+ * Decides the fee SOL for a claim. The faucet only sends it when the claimant is below
+ * `FEE_SOL_THRESHOLD_LAMPORTS` and the faucet stays at or above its floor afterwards, so fee SOL
+ * can never drain the faucet below the balance it needs to keep serving claims.
+ */
+export function planFeeSol(
+  walletLamports: bigint,
+  faucetLamports: bigint,
+  minLamports: bigint,
+): FeeSol {
+  if (walletLamports >= FEE_SOL_THRESHOLD_LAMPORTS) return { status: "not_needed" };
+  if (faucetLamports - FEE_SOL_LAMPORTS < minLamports) return { status: "faucet_low" };
+  return { status: "sent", lamports: FEE_SOL_LAMPORTS };
+}
+
 export type ClaimResult =
-  | { readonly status: 200; readonly signature: string; readonly amountBaseUnits: bigint }
+  | {
+      readonly status: 200;
+      readonly signature: string;
+      readonly amountBaseUnits: bigint;
+      readonly feeSol: FeeSol;
+    }
   | { readonly status: 400; readonly error: string }
   | { readonly status: 429; readonly error: string }
   | { readonly status: 500; readonly error: string }
@@ -81,16 +113,22 @@ export function isMarkerConflict(err: unknown, markerIndexes: readonly number[])
   );
 }
 
-type Built = {
+export type Built = {
   readonly tx: Transaction;
   readonly markerIndexes: readonly number[];
 };
 
-async function buildClaim(
-  deps: FaucetDeps,
+/**
+ * The claim transaction: both day-bucket markers, the claimant's test-USDC account and the mint,
+ * then (when `feeSolLamports > 0`) a transfer of fee SOL from the faucet to the claimant. One
+ * transaction, so a repeat claim that hits a marker sends neither test-USDC nor SOL.
+ */
+export async function buildClaim(
+  deps: Pick<FaucetDeps, "chain" | "keypair" | "mint" | "amountBaseUnits">,
   wallet: PublicKey,
   bucket: bigint,
   blockhash: { blockhash: string; lastValidBlockHeight: number },
+  feeSolLamports: bigint,
 ): Promise<Built> {
   const payer = deps.keypair.publicKey;
   const rent = await deps.chain.getMinimumBalanceForRentExemption(MARKER_SPACE);
@@ -118,6 +156,11 @@ async function buildClaim(
     createAssociatedTokenAccountIdempotentInstruction(payer, ata, wallet, deps.mint),
   );
   instructions.push(createMintToInstruction(deps.mint, ata, payer, deps.amountBaseUnits));
+  if (feeSolLamports > 0n) {
+    instructions.push(
+      SystemProgram.transfer({ fromPubkey: payer, toPubkey: wallet, lamports: feeSolLamports }),
+    );
+  }
   const tx = new Transaction({ feePayer: payer, ...blockhash }).add(...instructions);
   tx.sign(deps.keypair);
   return { tx, markerIndexes };
@@ -131,15 +174,13 @@ export function createFaucet(deps: FaucetDeps): Faucet {
   let verifiedConfig = false;
   let lastAlertAt: number | undefined;
 
-  async function maybeAlert(balance: number): Promise<void> {
+  /** One low-balance alert per cooldown, whichever of the two low states triggered it. */
+  async function maybeAlert(text: string): Promise<void> {
     const now = deps.now();
     if (lastAlertAt !== undefined && now - lastAlertAt < deps.alertCooldownMs) return;
     lastAlertAt = now;
     try {
-      await deps.alert(
-        `Meridian faucet balance is below its floor (${balance} lamports < ${deps.minLamports}). ` +
-          "Claims return 503 until the faucet key is topped up.",
-      );
+      await deps.alert(text);
     } catch (error) {
       deps.log({ event: "faucet_alert_failed", reason: (error as Error).name });
     }
@@ -169,11 +210,12 @@ export function createFaucet(deps: FaucetDeps): Faucet {
     return null;
   }
 
-  async function attempt(wallet: PublicKey): Promise<ClaimResult> {
+  async function attempt(wallet: PublicKey, feeSol: FeeSol): Promise<ClaimResult> {
     // A fresh blockhash and fresh cluster time on every attempt; a signed transaction is never reused.
     const blockhash = await deps.chain.getLatestBlockhash();
     const bucket = dayBucket(await deps.chain.clusterUnixTime());
-    const { tx, markerIndexes } = await buildClaim(deps, wallet, bucket, blockhash);
+    const feeSolLamports = feeSol.status === "sent" ? feeSol.lamports : 0n;
+    const { tx, markerIndexes } = await buildClaim(deps, wallet, bucket, blockhash, feeSolLamports);
 
     const simulation = await deps.chain.simulate(tx);
     if (simulation.err !== null && simulation.err !== undefined) {
@@ -198,7 +240,7 @@ export function createFaucet(deps: FaucetDeps): Faucet {
       deps.log({ event: "faucet_claim_failed", reason: "unexpected transaction error" });
       return { status: 502, error: "The faucet could not complete the claim; try again shortly." };
     }
-    return { status: 200, signature, amountBaseUnits: deps.amountBaseUnits };
+    return { status: 200, signature, amountBaseUnits: deps.amountBaseUnits, feeSol };
   }
 
   return {
@@ -233,13 +275,27 @@ export function createFaucet(deps: FaucetDeps): Faucet {
 
         const balance = await deps.chain.getBalance(deps.keypair.publicKey);
         if (BigInt(balance) < deps.minLamports) {
-          await maybeAlert(balance);
+          await maybeAlert(
+            `Meridian faucet balance is below its floor (${balance} lamports < ${deps.minLamports}). ` +
+              "Claims return 503 until the faucet key is topped up.",
+          );
           return {
             status: 503,
             error: "The faucet is out of funds right now; please try again later.",
           };
         }
-        return await attempt(wallet);
+        const walletLamports = BigInt(await deps.chain.getBalance(wallet));
+        const feeSol = planFeeSol(walletLamports, BigInt(balance), deps.minLamports);
+        if (feeSol.status === "faucet_low") {
+          // Still mint: test-USDC alone is useful (and the reply says no fee SOL was sent).
+          deps.log({ event: "faucet_fee_sol_low", balance });
+          await maybeAlert(
+            `Meridian faucet SOL is too low to send fee SOL (${balance} lamports; needs ` +
+              `${deps.minLamports + FEE_SOL_LAMPORTS}). Claims mint test-USDC without fee SOL ` +
+              "until the faucet key is topped up.",
+          );
+        }
+        return await attempt(wallet, feeSol);
       } catch (error) {
         // Only the error class: messages from the RPC client can echo the URL.
         deps.log({ event: "faucet_error", reason: (error as Error).name });

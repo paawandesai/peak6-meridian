@@ -28,13 +28,49 @@ describe("FaucetButton", () => {
 
   it("requests test-USDC for the connected wallet and shows the amount", async () => {
     wallet.publicKey = KEY;
-    const fetchMock = stubFetch(200, { signature: "sig", amount_base_units: "1000000000" });
+    const fetchMock = stubFetch(200, {
+      signature: "sig",
+      amount_base_units: "1000000000",
+      fee_sol_status: "not_needed",
+      fee_sol_lamports: "0",
+    });
     render(<FaucetButton />);
     fireEvent.click(screen.getByRole("button", { name: "Get test-USDC" }));
     expect(await screen.findByText("Received 1,000.00 test-USDC.")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/faucet");
     expect(JSON.parse(String(init.body))).toEqual({ wallet: KEY.toBase58() });
+  });
+
+  it("names the fee SOL when the faucet sent some", async () => {
+    wallet.publicKey = KEY;
+    stubFetch(200, {
+      signature: "sig",
+      amount_base_units: "1000000000",
+      fee_sol_status: "sent",
+      fee_sol_lamports: "10000000",
+    });
+    render(<FaucetButton />);
+    fireEvent.click(screen.getByRole("button", { name: "Get test-USDC" }));
+    expect(
+      await screen.findByText("Received 1,000.00 test-USDC and 0.01 SOL for network fees."),
+    ).toBeInTheDocument();
+  });
+
+  it("warns when the claim minted test-USDC but the faucet could not send fee SOL", async () => {
+    wallet.publicKey = KEY;
+    stubFetch(200, {
+      signature: "sig",
+      amount_base_units: "1000000000",
+      fee_sol_status: "faucet_low",
+      fee_sol_lamports: "0",
+      fee_sol_message: "The faucet is low on SOL, so it sent no SOL for network fees.",
+    });
+    render(<FaucetButton />);
+    fireEvent.click(screen.getByRole("button", { name: "Get test-USDC" }));
+    expect(await screen.findByText("Received 1,000.00 test-USDC.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("sent no SOL for network fees");
   });
 
   it("shows the server's message for a refused claim (the 24 h rule)", async () => {

@@ -25,7 +25,7 @@
 | `FAUCET_KEYPAIR` | app (server), scripts (lifecycle fallback signing only) | Test-USDC mint authority for the faucet (JSON array) | M2 | `[1,2,3,...]` |
 | `AUTOMATION_PUBKEY` | scripts (deploy) | Automation authority public key written to Config (no secret needed by deploy) | M2 | `<base58 pubkey>` |
 | `FAUCET_PUBKEY` | scripts (deploy) | Faucet public key used as test-USDC mint authority (no secret needed by deploy) | M2 | `<base58 pubkey>` |
-| `FAUCET_MIN_LAMPORTS` | app (server) | Faucet key balance floor in integer lamports; below it the faucet returns 503 and alerts | no (default 100000000) | `100000000` |
+| `FAUCET_MIN_LAMPORTS` | app (server) | Faucet key balance floor in integer lamports; below it the faucet returns 503 and alerts. A claimant with under 0.005 SOL also gets 0.01 SOL for fees in the claim transaction, only while the faucet stays at or above this floor afterwards (otherwise test-USDC only, with `fee_sol_status: "faucet_low"` and an alert) | no (default 100000000) | `100000000` |
 | `FAUCET_ALERT_COOLDOWN_SEC` | app (server) | Per-instance cooldown between low-balance alerts | no (default 3600) | `3600` |
 | `FAUCET_AMOUNT_USDC` | app (server) | Faucet amount per claim | no (default 1000) | `1000` |
 | `MERIDIAN_DEVNET_IDL` | tests | Path to the `make build-devnet` IDL (`target/idl/meridian.json`) for the AB-22 check; the M2-01 test sets it itself and fails if the file is missing | tests only | `target/idl/meridian.json` |
