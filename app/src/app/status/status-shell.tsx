@@ -14,7 +14,16 @@ import { useAsync } from "@/components/use-async";
 import { useNow } from "@/components/use-now";
 import { partitionMarkets } from "@/lib/markets";
 import { etTradingDate } from "@/lib/time";
-import type { StatusResponse } from "@/app/api/status/route";
+import type { MarketInvariant, StatusResponse } from "@/app/api/status/route";
+
+/**
+ * Vault balance from an /api/status row; `null` means the vault could not be read. The API sends
+ * "0" both for an empty vault and for an unreadable one, so "0" is unreadable only when the API
+ * also failed the invariant: a market with 0 pairs and an empty vault is a Pass, not unavailable.
+ */
+export function vaultOf(m: Pick<MarketInvariant, "vaultBase" | "invariantPass">): bigint | null {
+  return m.vaultBase === "0" && !m.invariantPass ? null : BigInt(m.vaultBase);
+}
 
 /** YYYY-MM-DD format from YYYYMMDD */
 function formatDate(yyyymmdd: number): string {
@@ -134,12 +143,7 @@ function Page() {
                 settlePriceScaled: 0n,
                 settledAt: BigInt(m.settledAt),
               })),
-              vaults: new Map(
-                statusData.value.markets.map((m) => [
-                  m.address,
-                  m.vaultBase === "0" ? null : BigInt(m.vaultBase),
-                ]),
-              ),
+              vaults: new Map(statusData.value.markets.map((m) => [m.address, vaultOf(m)])),
               facts: new Map(
                 statusData.value.markets.map((m) => [
                   m.address,
