@@ -131,31 +131,37 @@ describe("TileLadder", () => {
 
   it("draws the live line as a decorative edge of a row, never as a row", () => {
     renderLadder([cell(170), cell(180), cell(190)], { markerAfter: 1 });
-    const markers = screen.getAllByTestId("live-marker");
-    expect(markers).toHaveLength(1);
-    const marker = markers[0];
-    expect(marker).toHaveAttribute("aria-hidden", "true");
-    expect(marker?.closest("tr")).toBe(row(180));
-    expect(marker).toHaveClass("bottom-0");
+    expect(document.querySelectorAll("[data-live-marker]")).toHaveLength(1);
+    expect(row(180)).toHaveAttribute("data-live-marker", "bottom");
+    expect(row(180)).toHaveClass("border-b-2", "border-dashed");
     expect(screen.getAllByRole("row")).toHaveLength(4);
   });
 
   it("draws the live line above the first row when live is below every shown strike", () => {
     renderLadder([cell(170), cell(180)], { markerAfter: -1 });
-    const marker = screen.getByTestId("live-marker");
-    expect(marker.closest("tr")).toBe(row(170));
-    expect(marker).toHaveClass("top-0");
+    expect(document.querySelectorAll("[data-live-marker]")).toHaveLength(1);
+    expect(row(170)).toHaveAttribute("data-live-marker", "top");
+    expect(row(170)).toHaveClass("border-t-2", "border-dashed");
   });
 
   it("draws no live line without a live price", () => {
     renderLadder([cell(170)], { markerAfter: null });
-    expect(screen.queryByTestId("live-marker")).toBeNull();
+    expect(document.querySelector("[data-live-marker]")).toBeNull();
   });
 
   it("opens a strike's detail from its row", () => {
     const { onSelectMarket } = renderLadder([cell(170), cell(180)]);
     fireEvent.click(screen.getByRole("button", { name: "NVDA $180: open details" }));
     expect(onSelectMarket).toHaveBeenCalledWith(cell(180).market.address);
+  });
+
+  it("opens a strike's detail once from the button and from anywhere else on its row", () => {
+    const { onSelectMarket } = renderLadder([cell(170), cell(180)]);
+    fireEvent.click(screen.getByRole("button", { name: "NVDA $180: open details" }));
+    expect(onSelectMarket).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(row(170)).getAllByRole("cell")[1] as HTMLElement);
+    expect(onSelectMarket).toHaveBeenCalledTimes(2);
+    expect(onSelectMarket).toHaveBeenLastCalledWith(cell(170).market.address);
   });
 
   it("offers the hidden strikes as +N more, singular for one, nothing for none", () => {

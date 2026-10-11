@@ -86,15 +86,15 @@ function FairAndEdgeCells({
   );
 }
 
-/** The live-price line on a row's top or bottom edge: decorative, never a table row. */
-function LiveMarker({ edge }: { readonly edge: "top" | "bottom" }) {
-  return (
-    <span
-      aria-hidden="true"
-      data-testid="live-marker"
-      className={`pointer-events-none absolute inset-x-0 border-dashed border-mer-warn ${edge === "top" ? "top-0 border-t-2" : "bottom-0 border-b-2"}`}
-    />
-  );
+/**
+ * The live-price line is a dashed border on the row's top or bottom edge: no absolutely positioned
+ * child, because Safari does not reliably make a `<tr>` the containing block (the line then spans
+ * the page and, with a stretched button, covers the controls).
+ */
+function markerClass(edge: "top" | "bottom" | null): string {
+  if (edge === "top") return "border-t-2 border-dashed border-mer-warn";
+  if (edge === "bottom") return "border-b-2 border-dashed border-mer-warn";
+  return "";
 }
 
 /**
@@ -150,22 +150,27 @@ export function TileLadder({
           {rows.map((cell, i) => {
             const view = yesView(cell.quotes);
             const strike = formatStrike(cell.market.strikeCents);
+            const marker: "top" | "bottom" | null =
+              markerAfter === -1 && i === 0 ? "top" : markerAfter === i ? "bottom" : null;
             return (
               <tr
                 key={cell.market.address}
-                className="relative border-t border-mer-rule hover:bg-mer-surface"
+                data-live-marker={marker ?? undefined}
+                onClick={() => onSelectMarket(cell.market.address)}
+                className={`cursor-pointer border-t border-mer-rule hover:bg-mer-surface ${markerClass(marker)}`}
               >
                 <td className="py-mer-1 pr-mer-2">
                   <button
                     type="button"
-                    onClick={() => onSelectMarket(cell.market.address)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectMarket(cell.market.address);
+                    }}
                     aria-label={`${ticker} ${strike}: open details`}
-                    className="mer-num font-medium after:absolute after:inset-0"
+                    className="mer-num font-medium"
                   >
                     {strike}
                   </button>
-                  {markerAfter === -1 && i === 0 ? <LiveMarker edge="top" /> : null}
-                  {markerAfter === i ? <LiveMarker edge="bottom" /> : null}
                 </td>
                 <td className="py-mer-1 pr-mer-2">
                   <YesCell view={view} />
