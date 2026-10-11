@@ -109,6 +109,8 @@ const TEXT_PAIRS: readonly (readonly [string, string, number])[] = [
   ["--mer-loss", "--mer-surface", 4.5],
   ["--mer-warn", "--mer-paper", 4.5],
   ["--mer-warn", "--mer-surface", 4.5],
+  ["--mer-primary", "--mer-paper", 4.5],
+  ["--mer-primary", "--mer-surface", 4.5],
   // solid fills (the Settled badges) take their text from the on-* tokens
   ["--mer-on-yes", "--mer-yes", 4.5],
   ["--mer-on-no", "--mer-no", 4.5],
