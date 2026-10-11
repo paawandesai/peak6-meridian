@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { vaultOf } from "./status-shell";
 import { EMPTY_TEXT, StatusView } from "./status-view";
 import { decodeEvents } from "@/lib/events";
 import fixture from "@/lib/fixtures/events.json";
@@ -155,5 +156,29 @@ describe("StatusView (UI-07 AC1/AC2)", () => {
   it("has an empty state", () => {
     render(<StatusView data={{ markets: [], vaults: new Map(), facts: new Map() }} />);
     expect(screen.getByText(EMPTY_TEXT)).toBeInTheDocument();
+  });
+});
+
+describe("vault from /api/status rows", () => {
+  it("an empty vault the API passed is 0, not unavailable", () => {
+    expect(vaultOf({ vaultBase: "0", invariantPass: true })).toBe(0n);
+    expect(vaultOf({ vaultBase: "0", invariantPass: false })).toBeNull();
+    expect(vaultOf({ vaultBase: "5000000", invariantPass: true })).toBe(5_000_000n);
+    expect(vaultOf({ vaultBase: "2000000", invariantPass: false })).toBe(2_000_000n);
+  });
+
+  it("renders a 0-pair market with an empty vault as Pass (Friday's 45 rows)", () => {
+    const empty = market({ address: "Empty", tradingDate: DATE, pairsOutstanding: 0n });
+    const vault = vaultOf({ vaultBase: "0", invariantPass: true });
+    render(
+      <StatusView
+        data={{ markets: [empty], vaults: new Map([["Empty", vault]]), facts: new Map() }}
+      />,
+    );
+    const invariant = screen.getByRole("table", { name: /vault balance/i });
+    const row = within(invariant).getAllByRole("row")[1] as HTMLElement;
+    expect(within(row).getByText("Pass")).toBeInTheDocument();
+    expect(within(row).queryByText("unavailable")).not.toBeInTheDocument();
+    expect(within(row).getAllByText("0.00 test-USDC")).toHaveLength(2);
   });
 });
